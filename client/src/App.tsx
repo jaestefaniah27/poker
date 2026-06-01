@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const socket: Socket = io('http://localhost:3001');
 
 // Componente para una carta individual
-const PlayingCard = ({ rank, suit, hidden = false, className = '' }: { rank?: string, suit?: string, hidden?: boolean, className?: string }) => {
+const PlayingCard = ({ rank, suit, hidden = false, className = '', layoutId }: { rank?: string, suit?: string, hidden?: boolean, className?: string, layoutId?: string }) => {
   const isMini = className.includes('w-10');
   const isSmall = className.includes('w-16');
   
@@ -15,11 +16,11 @@ const PlayingCard = ({ rank, suit, hidden = false, className = '' }: { rank?: st
 
   if (hidden) {
     return (
-      <div className={`bg-white ${roundedClass} shadow-md relative overflow-hidden ${className}`}>
+      <motion.div layoutId={layoutId} className={`bg-white ${roundedClass} shadow-md relative overflow-hidden ${className}`}>
         <div className="absolute inset-1 rounded-lg border-2 border-gray-200">
            <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, #000000 5px, #000000 7px)' }}></div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -30,11 +31,11 @@ const PlayingCard = ({ rank, suit, hidden = false, className = '' }: { rank?: st
   const displayRank = rank === 'T' ? '10' : rank;
 
   return (
-    <div className={`bg-white ${roundedClass} shadow-md flex flex-col justify-between ${pClass} ${colorClass} ${className}`}>
+    <motion.div layoutId={layoutId} className={`bg-white ${roundedClass} shadow-md flex flex-col justify-between ${pClass} ${colorClass} ${className}`}>
       <div className={`text-left font-bold leading-none ${rankClass}`}>{displayRank}</div>
       <div className={`text-center flex-1 flex items-center justify-center ${suitClass}`}>{suitSymbol}</div>
       <div className={`text-left font-bold leading-none rotate-180 ${rankClass}`}>{displayRank}</div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -98,6 +99,7 @@ function App() {
   const [showBetMenu, setShowBetMenu] = useState(false);
   const [betAmount, setBetAmount] = useState(2); 
   const [showRankingsModal, setShowRankingsModal] = useState(false);
+  const [isPressingShowdown, setIsPressingShowdown] = useState(false);
 
   useEffect(() => {
     socket.on('roomsUpdated', (updatedRooms) => {
@@ -150,10 +152,9 @@ function App() {
     }
   };
 
-  const handleAction = (type: string, amount?: number) => {
-    if (!currentRoom) return;
-    socket.emit('playerAction', { roomId: currentRoom.id, action: type, amount });
-    if (type === 'Raise') {
+  const handleAction = (action: string, amount?: number) => {
+    socket.emit('playerAction', { roomId: currentRoom.id, userId: user?.id, action, amount });
+    if (action === 'Raise') {
       setShowBetMenu(false);
     }
   };
@@ -254,9 +255,9 @@ function App() {
   }
 
   // --- Pantalla de Mesa de Juego ---
-  const myPlayerIndex = currentRoom.players.findIndex((p: any) => p.id === socket.id);
-  const myPlayer = currentRoom.players[myPlayerIndex];
-  const opponents = currentRoom.players.filter((p: any) => p.id !== socket.id);
+  const myPlayerIndex = currentRoom.players.findIndex((p: any) => p.userId === user?.id);
+  const myPlayer = myPlayerIndex !== -1 ? currentRoom.players[myPlayerIndex] : null;
+  const opponents = currentRoom.players.filter((p: any) => p.userId !== user?.id);
   
   const isDealer = (index: number) => currentRoom.dealerIndex === index;
   const isMyTurn = currentRoom.currentTurnIndex === myPlayerIndex;
@@ -276,7 +277,15 @@ function App() {
           </button>
         </header>
 
-        <div className="pt-2 px-4 flex justify-center gap-4">
+        <div 
+          className="pt-2 px-4 flex justify-center gap-4 cursor-pointer select-none touch-none"
+          onPointerDown={() => {
+            if (currentRoom.phase === 'showdown') setIsPressingShowdown(true);
+          }}
+          onPointerUp={() => setIsPressingShowdown(false)}
+          onPointerLeave={() => setIsPressingShowdown(false)}
+          onPointerCancel={() => setIsPressingShowdown(false)}
+        >
           {opponents.map((p: any) => {
             const indexInRoom = currentRoom.players.findIndex((player: any) => player.id === p.id);
             const hasFolded = p.hasFolded;
@@ -297,13 +306,26 @@ function App() {
                 
                 {/* Cartas del rival en Showdown */}
                 {currentRoom.phase === 'showdown' && p.cards?.length > 0 && !hasFolded && currentRoom.winners?.[0]?.handName !== 'Won by fold' && (
-                  <div className="flex gap-1 mt-2">
+                  <div className="flex gap-1 mt-2 relative z-10">
                      {p.cards.map((c: any, i: number) => {
                        const cardStr = `${c.rank}${c.suit}`;
                        const isWinning = currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr));
+                       const isWinnerPlayer = currentRoom.winners?.some((w:any) => w.id === p.id);
+
+                       if (isPressingShowdown && isWinnerPlayer) {
+                          return (
+                            <PlayingCard 
+                              key={`placeholder-${i}`} 
+                              rank={c.rank} suit={c.suit} 
+                              className="w-10 aspect-[2/3] opacity-0" 
+                            />
+                          );
+                       }
+
                        return (
                          <PlayingCard 
                            key={i} 
+                           layoutId={`card-${p.id}-${i}`}
                            rank={c.rank} suit={c.suit} 
                            className={`w-10 aspect-[2/3] shadow-sm ${!isWinning ? 'brightness-[0.4]' : ''}`} 
                          />
@@ -342,6 +364,32 @@ function App() {
                  {currentRoom.winners[0].handName}
                </div>
             )}
+
+            <AnimatePresence>
+              {isPressingShowdown && currentRoom.phase === 'showdown' && currentRoom.winners?.[0]?.handName !== 'Won by fold' && (
+                 <motion.div 
+                   exit={{ opacity: 1, transition: { duration: 0.3 } }}
+                   className="absolute top-0 -translate-y-[120%] left-1/2 -translate-x-1/2 flex gap-1 scale-[1.6] pointer-events-none z-50 origin-bottom"
+                 >
+                   {currentRoom.winners?.map((winner: any) => {
+                      const p = currentRoom.players.find((pl: any) => pl.id === winner.id);
+                      if (!p || !p.cards) return null;
+                      return p.cards.map((c: any, i: number) => {
+                        const cardStr = `${c.rank}${c.suit}`;
+                        const isWinning = currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr));
+                        return (
+                          <PlayingCard 
+                            key={`${p.id}-${i}`}
+                            layoutId={`card-${p.id}-${i}`}
+                            rank={c.rank} suit={c.suit}
+                            className={`w-10 aspect-[2/3] shadow-sm ${!isWinning ? 'brightness-[0.4]' : ''}`} 
+                          />
+                        );
+                      });
+                   })}
+                 </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -438,7 +486,7 @@ function App() {
               </div>
             )
           ) : (
-             currentRoom.players[0]?.id === socket.id && currentRoom.phase === 'waiting' && (
+             currentRoom.players[0]?.userId === user?.id && currentRoom.phase === 'waiting' && (
                <div className="flex justify-center mb-6">
                  <button 
                   onClick={startGame}
@@ -451,7 +499,7 @@ function App() {
           )}
 
           <div className="flex justify-between items-end pb-4">
-            <div className="flex gap-2 ml-2">
+            <div className="flex gap-2 ml-2 relative z-10">
               {myPlayer?.cards?.length > 0 ? (
                 <>
                   {myPlayer.cards.map((c: any, i: number) => {
@@ -459,9 +507,22 @@ function App() {
                     const isWinning = currentRoom.phase === 'showdown' 
                        ? currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr))
                        : true;
+                    const isWinnerPlayer = currentRoom.phase === 'showdown' && currentRoom.winners?.some((w:any) => w.id === myPlayer.id);
+
+                    if (isPressingShowdown && isWinnerPlayer && currentRoom.winners?.[0]?.handName !== 'Won by fold') {
+                       return (
+                         <PlayingCard 
+                           key={`placeholder-${i}`} 
+                           rank={c.rank} suit={c.suit}
+                           className="w-20 aspect-[2/3] opacity-0" 
+                         />
+                       );
+                    }
+
                     return (
                       <PlayingCard 
                         key={i} 
+                        layoutId={`card-${myPlayer.id}-${i}`}
                         rank={c.rank} 
                         suit={c.suit} 
                         className={`w-20 aspect-[2/3] shadow-xl transform hover:-translate-y-4 transition-transform ${!isWinning ? 'brightness-[0.4]' : ''}`} 

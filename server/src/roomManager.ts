@@ -124,11 +124,11 @@ export const startGame = (roomId: string) => {
   return true;
 };
 
-export const handlePlayerAction = (roomId: string, socketId: string, actionType: string, amount?: number) => {
+export const handlePlayerAction = (roomId: string, userId: string, actionType: string, amount?: number) => {
   const room = rooms.get(roomId);
   if (!room || room.phase === 'waiting' || room.phase === 'showdown') return false;
 
-  const playerIndex = room.players.findIndex(p => p.id === socketId);
+  const playerIndex = room.players.findIndex(p => p.userId === userId);
   if (playerIndex === -1 || playerIndex !== room.currentTurnIndex) return false;
 
   const player = room.players[playerIndex];

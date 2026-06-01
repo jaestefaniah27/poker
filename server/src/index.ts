@@ -81,8 +81,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('playerAction', ({ roomId, action, amount }) => {
-    if (handlePlayerAction(roomId, socket.id, action, amount)) {
+  socket.on('playerAction', ({ roomId, userId, action, amount }) => {
+    if (handlePlayerAction(roomId, userId, action, amount)) {
       io.to(roomId).emit('roomUpdated', getRoom(roomId));
     }
   });
