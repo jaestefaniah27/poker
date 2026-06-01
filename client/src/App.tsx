@@ -5,9 +5,17 @@ const socket: Socket = io('http://localhost:3001');
 
 // Componente para una carta individual
 const PlayingCard = ({ rank, suit, hidden = false, className = '' }: { rank?: string, suit?: string, hidden?: boolean, className?: string }) => {
+  const isMini = className.includes('w-10');
+  const isSmall = className.includes('w-16');
+  
+  const pClass = isMini ? 'p-0.5' : isSmall ? 'p-1.5' : 'p-2';
+  const rankClass = isMini ? 'text-[9px]' : isSmall ? 'text-lg' : 'text-xl';
+  const suitClass = isMini ? 'text-xl' : isSmall ? 'text-3xl' : 'text-4xl';
+  const roundedClass = isMini ? 'rounded-md' : isSmall ? 'rounded-lg' : 'rounded-xl';
+
   if (hidden) {
     return (
-      <div className={`bg-white rounded-xl shadow-md relative overflow-hidden ${className}`}>
+      <div className={`bg-white ${roundedClass} shadow-md relative overflow-hidden ${className}`}>
         <div className="absolute inset-1 rounded-lg border-2 border-gray-200">
            <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, #000000 5px, #000000 7px)' }}></div>
         </div>
@@ -22,10 +30,10 @@ const PlayingCard = ({ rank, suit, hidden = false, className = '' }: { rank?: st
   const displayRank = rank === 'T' ? '10' : rank;
 
   return (
-    <div className={`bg-white rounded-xl shadow-md flex flex-col justify-between p-2 ${colorClass} ${className}`}>
-      <div className="text-left font-bold text-xl leading-none">{displayRank}</div>
-      <div className="text-center text-4xl">{suitSymbol}</div>
-      <div className="text-right font-bold text-xl leading-none rotate-180">{displayRank}</div>
+    <div className={`bg-white ${roundedClass} shadow-md flex flex-col justify-between ${pClass} ${colorClass} ${className}`}>
+      <div className={`text-left font-bold leading-none ${rankClass}`}>{displayRank}</div>
+      <div className={`text-center flex-1 flex items-center justify-center ${suitClass}`}>{suitSymbol}</div>
+      <div className={`text-left font-bold leading-none rotate-180 ${rankClass}`}>{displayRank}</div>
     </div>
   );
 };
@@ -288,8 +296,8 @@ function App() {
                 {p.currentBet > 0 && <BetChip amount={p.currentBet} />}
                 
                 {/* Cartas del rival en Showdown */}
-                {currentRoom.phase === 'showdown' && p.cards?.length > 0 && !hasFolded && (
-                  <div className="flex -space-x-2 mt-2">
+                {currentRoom.phase === 'showdown' && p.cards?.length > 0 && !hasFolded && currentRoom.winners?.[0]?.handName !== 'Won by fold' && (
+                  <div className="flex gap-1 mt-2">
                      {p.cards.map((c: any, i: number) => {
                        const cardStr = `${c.rank}${c.suit}`;
                        const isWinning = currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr));
@@ -297,7 +305,7 @@ function App() {
                          <PlayingCard 
                            key={i} 
                            rank={c.rank} suit={c.suit} 
-                           className={`w-10 h-14 shadow-sm ${!isWinning ? 'opacity-40 brightness-75' : ''}`} 
+                           className={`w-10 aspect-[2/3] shadow-sm ${!isWinning ? 'brightness-[0.4]' : ''}`} 
                          />
                        );
                      })}
@@ -312,10 +320,6 @@ function App() {
           className="flex-1 flex flex-col justify-center items-center py-6 cursor-pointer"
           onClick={() => setShowRankingsModal(true)}
         >
-          <div className="bg-black/40 px-6 py-2 rounded-full mb-6 border border-gray-800 shadow-xl">
-            <span className="text-gray-400 font-bold text-xs uppercase tracking-wider mr-2">Pot</span>
-            <span className="text-white font-bold text-lg">${currentRoom.pot}</span>
-          </div>
           <div className="flex gap-1.5 mb-2 relative">
             {[0, 1, 2, 3, 4].map(index => {
               const card = currentRoom.communityCards?.[index];
@@ -324,11 +328,15 @@ function App() {
                 const isWinning = currentRoom.phase === 'showdown' 
                    ? currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr))
                    : true;
-                return <PlayingCard key={index} rank={card.rank} suit={card.suit} className={`w-16 h-24 ${!isWinning ? 'opacity-40 brightness-75' : ''}`} />;
+                return <PlayingCard key={index} rank={card.rank} suit={card.suit} className={`w-16 aspect-[2/3] ${!isWinning ? 'brightness-[0.4]' : ''}`} />;
               }
-              return <PlayingCard key={index} hidden className="w-16 h-24" />;
+              return <PlayingCard key={index} hidden className="w-16 aspect-[2/3]" />;
             })}
             
+            <div className="absolute -bottom-8 right-0 text-white font-medium text-2xl">
+              {currentRoom.pot}
+            </div>
+
             {currentRoom.phase === 'showdown' && currentRoom.winners && currentRoom.winners.length > 0 && (
                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-white text-black px-4 py-1 rounded-full text-xs font-bold whitespace-nowrap shadow-md z-10">
                  {currentRoom.winners[0].handName}
@@ -443,7 +451,7 @@ function App() {
           )}
 
           <div className="flex justify-between items-end pb-4">
-            <div className="flex -space-x-4 ml-2">
+            <div className="flex gap-2 ml-2">
               {myPlayer?.cards?.length > 0 ? (
                 <>
                   {myPlayer.cards.map((c: any, i: number) => {
@@ -456,15 +464,15 @@ function App() {
                         key={i} 
                         rank={c.rank} 
                         suit={c.suit} 
-                        className={`w-20 h-28 shadow-xl -rotate-6 transform hover:-translate-y-4 transition-transform ${!isWinning ? 'opacity-40 brightness-75' : ''} ${i === 1 ? 'rotate-6 z-10 mt-4' : 'z-0'}`} 
+                        className={`w-20 aspect-[2/3] shadow-xl transform hover:-translate-y-4 transition-transform ${!isWinning ? 'brightness-[0.4]' : ''}`} 
                       />
                     );
                   })}
                 </>
               ) : (
                 <>
-                   <PlayingCard hidden className="w-24 h-36 -rotate-3 z-10" />
-                   <PlayingCard hidden className="w-24 h-36 rotate-6 z-20 mt-4" />
+                   <PlayingCard hidden className="w-24 aspect-[2/3]" />
+                   <PlayingCard hidden className="w-24 aspect-[2/3]" />
                 </>
               )}
             </div>
