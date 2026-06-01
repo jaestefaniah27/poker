@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -56,8 +56,11 @@ const DealerBadge = () => (
 );
 
 // Chip Badge (Yellow circle for bets)
-const BetChip = ({ amount }: { amount: number }) => (
-  <div className="bg-[#2A2A2A] text-[#FDE047] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-gray-700 shadow-md">
+const BetChip = ({ amount, animateIn = false }: { amount: number, animateIn?: boolean }) => (
+  <div
+    className="bg-[#2A2A2A] text-[#FDE047] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-gray-700 shadow-md"
+    style={animateIn ? { animation: 'chipPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both' } : {}}
+  >
     {amount}
   </div>
 );
@@ -100,8 +103,80 @@ function App() {
   const [betAmount, setBetAmount] = useState(2); 
   const [showRankingsModal, setShowRankingsModal] = useState(false);
   const [isPressingShowdown, setIsPressingShowdown] = useState(false);
+  const [flyingChips, setFlyingChips] = useState<{id: number, x: number, y: number, tx: number, ty: number, amount: number}[]>([]);
+  const [animateBetIn, setAnimateBetIn] = useState(false);
+  const flyIdRef = useRef(0);
   const communityCardsRef = useRef<HTMLDivElement>(null);
   const winnerCardsRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const potRef = useRef<HTMLDivElement>(null);
+  const myChipsRef = useRef<HTMLDivElement>(null);
+  const myBetRef = useRef<HTMLDivElement>(null);
+  const opponentBetRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const prevRoomRef = useRef<any>(null);
+  // Persistent snapshot of bet chip positions captured after every render
+  const lastBetPositionsRef = useRef<Map<string, {x: number, y: number}>>(new Map());
+
+  // After every render, record current bet chip positions into the persistent snapshot
+  useLayoutEffect(() => {
+    opponentBetRefs.current.forEach((el, playerId) => {
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0) {
+        lastBetPositionsRef.current.set(playerId, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      }
+    });
+    if (myBetRef.current && user?.id) {
+      const rect = myBetRef.current.getBoundingClientRect();
+      if (rect.width > 0) {
+        lastBetPositionsRef.current.set('myPlayer', { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      }
+    }
+  }); // no deps — runs after every render
+
+  // Detect bet changes and trigger chip animations
+  useEffect(() => {
+    const prev = prevRoomRef.current;
+    const curr = currentRoom;
+    if (!prev || !curr) { prevRoomRef.current = curr; return; }
+
+    const potEl = potRef.current;
+
+    // Detect bets being collected to pot (currentBet resets to 0 while pot grows)
+    const potGrew = curr.pot > prev.pot && curr.phase !== 'waiting';
+    if (potGrew && potEl) {
+      const potRect = potEl.getBoundingClientRect();
+      prev.players.forEach((prevP: any) => {
+        if (prevP.currentBet > 0) {
+          // Use the stored position snapshot (captured before this render removed the chip)
+          const isMe = prevP.userId === user?.id;
+          const storedPos = isMe
+            ? lastBetPositionsRef.current.get('myPlayer')
+            : lastBetPositionsRef.current.get(prevP.id);
+          if (!storedPos) return;
+          const id = ++flyIdRef.current;
+          setFlyingChips(fc => [...fc, {
+            id,
+            x: storedPos.x,
+            y: storedPos.y,
+            tx: potRect.left + potRect.width / 2,
+            ty: potRect.top + potRect.height / 2,
+            amount: prevP.currentBet,
+          }]);
+          setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), 600);
+        }
+      });
+    }
+
+    // Detect local player placing a bet (currentBet increases)
+    const prevMyPlayer = prev.players.find((p: any) => p.userId === user?.id);
+    const currMyPlayer = curr.players.find((p: any) => p.userId === user?.id);
+    if (prevMyPlayer && currMyPlayer && currMyPlayer.currentBet > prevMyPlayer.currentBet) {
+      setAnimateBetIn(true);
+      setTimeout(() => setAnimateBetIn(false), 400);
+    }
+
+    prevRoomRef.current = curr;
+  }, [currentRoom]);
 
   // Calculate transform for winner cards to fly to community cards area
   const getWinnerCardTransform = useCallback((playerId: string) => {
@@ -293,6 +368,26 @@ function App() {
   return (
     <div className="min-h-screen bg-background text-primary font-sans flex justify-center">
       <div className="w-full max-w-md h-screen relative flex flex-col justify-between overflow-hidden">
+
+        {/* Flying chips overlay */}
+        {flyingChips.map(chip => (
+          <div
+            key={chip.id}
+            className="fixed pointer-events-none z-[200]"
+            style={{
+              left: chip.x,
+              top: chip.y,
+              transform: 'translate(-50%, -50%)',
+              animation: 'flyChip 0.55s cubic-bezier(0.4, 0, 0.2, 1) both',
+              '--tx': `${chip.tx - chip.x}px`,
+              '--ty': `${chip.ty - chip.y}px`,
+            } as React.CSSProperties}
+          >
+            <div className="bg-[#2A2A2A] text-[#FDE047] text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-700 shadow-md">
+              {chip.amount}
+            </div>
+          </div>
+        ))}
         
         <header className="px-6 py-4 flex justify-between items-center mt-2">
           <button onClick={leaveRoom} className="text-white opacity-80 hover:opacity-100">
@@ -327,7 +422,13 @@ function App() {
                 </div>
                 <span className="text-[11px] text-gray-400 mt-2 font-medium truncate w-14 text-center">{p.name}</span>
                 <span className="text-[12px] text-gray-500 font-medium mb-1">{p.chips}</span>
-                {p.currentBet > 0 && <BetChip amount={p.currentBet} />}
+                <div className="h-5 flex items-center justify-center">
+                  {p.currentBet > 0 && (
+                    <div ref={(el) => { if (el) opponentBetRefs.current.set(p.id, el); }}>
+                      <BetChip amount={p.currentBet} />
+                    </div>
+                  )}
+                </div>
                 
                 {/* Cartas del rival en Showdown */}
                 {currentRoom.phase === 'showdown' && p.cards?.length > 0 && !hasFolded && currentRoom.winners?.[0]?.handName !== 'Won by fold' && (
@@ -379,7 +480,7 @@ function App() {
               return <PlayingCard key={index} hidden className="w-16 aspect-[2/3]" />;
             })}
             
-            <div className="absolute -bottom-8 right-0 text-white font-medium text-2xl">
+            <div className="absolute -bottom-8 right-0 text-white font-medium text-2xl" ref={potRef}>
               {currentRoom.pot}
             </div>
 
@@ -394,8 +495,8 @@ function App() {
         <div className="p-4 flex flex-col justify-end relative">
           
           {myPlayer?.currentBet > 0 && !showBetMenu && (
-             <div className="absolute top-0 left-6 -mt-8">
-               <BetChip amount={myPlayer.currentBet} />
+             <div className="absolute top-0 left-6 -mt-8" ref={myBetRef}>
+               <BetChip amount={myPlayer.currentBet} animateIn={animateBetIn} />
              </div>
           )}
 
@@ -533,7 +634,7 @@ function App() {
                  {isDealer(myPlayerIndex) && <DealerBadge />}
               </div>
               <div className="text-[11px] text-gray-400 font-bold mb-1">{user.name}</div>
-              <div className="text-white font-medium text-lg">{myPlayer?.chips || user.balance}</div>
+              <div className="text-white font-medium text-lg" ref={myChipsRef}>{myPlayer?.chips || user.balance}</div>
             </div>
           </div>
         </div>

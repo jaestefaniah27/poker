@@ -9,3 +9,15 @@
     @apply bg-background text-white font-sans antialiased;
   }
 }
+
+@keyframes flyChip {
+  0%   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.5); opacity: 0; }
+}
+
+@keyframes chipPop {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}

@@ -3,7 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { createUser, getUser } from './db';
-import { getRooms, createRoom, getRoom, joinRoom, leaveRoom, startGame, handlePlayerAction, nextHand } from './roomManager';
+import { getRooms, createRoom, getRoom, joinRoom, leaveRoom, startGame, handlePlayerAction, applyPhaseAdvance, nextHand } from './roomManager';
 import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
@@ -82,8 +82,22 @@ io.on('connection', (socket) => {
   });
 
   socket.on('playerAction', ({ roomId, userId, action, amount }) => {
-    if (handlePlayerAction(roomId, userId, action, amount)) {
-      io.to(roomId).emit('roomUpdated', getRoom(roomId));
+    const signal = handlePlayerAction(roomId, userId, action, amount);
+    if (!signal) return;
+
+    const room = getRoom(roomId);
+    if (!room) return;
+
+    if (signal === 'continue') {
+      // Normal turn advance — emit immediately
+      io.to(roomId).emit('roomUpdated', { ...room, deck: [] });
+    } else {
+      // Round is ending: emit current state first (bets visible for 1.1s), then advance
+      io.to(roomId).emit('roomUpdated', { ...room, deck: [] });
+      setTimeout(() => {
+        applyPhaseAdvance(room, signal);
+        io.to(roomId).emit('roomUpdated', { ...room, deck: [] });
+      }, 1100);
     }
   });
 

@@ -178,24 +178,24 @@ export const handlePlayerAction = (roomId: string, userId: string, actionType: s
   }
 
   player.hasActed = true;
-  checkRoundEnd(room);
-  return true;
+  const signal = checkRoundEnd(room);
+  return signal; // 'advancePhase' | 'endRound' | 'continue'
 };
 
-const checkRoundEnd = (room: Room) => {
+const checkRoundEnd = (room: Room): 'advancePhase' | 'endRound' | 'continue' => {
   const activePlayers = room.players.filter(p => p.isActive && !p.hasFolded);
   
   if (activePlayers.length <= 1) {
-    endRound(room);
-    return;
+    return 'endRound';
   }
 
   const allActedAndMatched = activePlayers.every(p => p.hasActed && p.currentBet === room.highestBet || p.chips === 0);
 
   if (allActedAndMatched) {
-    advancePhase(room);
+    return 'advancePhase';
   } else {
     advanceTurn(room);
+    return 'continue';
   }
 };
 
@@ -218,6 +218,14 @@ const gatherBetsToPot = (room: Room) => {
     room.pot += p.currentBet;
     p.currentBet = 0;
   });
+};
+
+export const applyPhaseAdvance = (room: Room, signal: 'advancePhase' | 'endRound') => {
+  if (signal === 'endRound') {
+    endRound(room);
+  } else {
+    advancePhase(room);
+  }
 };
 
 const advancePhase = (room: Room) => {
