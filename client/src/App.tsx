@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const socket: Socket = io('http://localhost:3001');
 
 // Componente para una carta individual
-const PlayingCard = ({ rank, suit, hidden = false, className = '', layoutId }: { rank?: string, suit?: string, hidden?: boolean, className?: string, layoutId?: string }) => {
+const PlayingCard = ({ rank, suit, hidden = false, className = '' }: { rank?: string, suit?: string, hidden?: boolean, className?: string }) => {
   const isMini = className.includes('w-10');
   const isSmall = className.includes('w-16');
   
@@ -16,11 +16,11 @@ const PlayingCard = ({ rank, suit, hidden = false, className = '', layoutId }: {
 
   if (hidden) {
     return (
-      <motion.div layoutId={layoutId} className={`bg-white ${roundedClass} shadow-md relative overflow-hidden ${className}`}>
+      <div className={`bg-white ${roundedClass} shadow-md relative overflow-hidden ${className}`}>
         <div className="absolute inset-1 rounded-lg border-2 border-gray-200">
            <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, #000000 5px, #000000 7px)' }}></div>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
@@ -31,11 +31,11 @@ const PlayingCard = ({ rank, suit, hidden = false, className = '', layoutId }: {
   const displayRank = rank === 'T' ? '10' : rank;
 
   return (
-    <motion.div layoutId={layoutId} className={`bg-white ${roundedClass} shadow-md flex flex-col justify-between ${pClass} ${colorClass} ${className}`}>
+    <div className={`bg-white ${roundedClass} shadow-md flex flex-col justify-between ${pClass} ${colorClass} ${className}`}>
       <div className={`text-left font-bold leading-none ${rankClass}`}>{displayRank}</div>
       <div className={`text-center flex-1 flex items-center justify-center ${suitClass}`}>{suitSymbol}</div>
       <div className={`text-left font-bold leading-none rotate-180 ${rankClass}`}>{displayRank}</div>
-    </motion.div>
+    </div>
   );
 };
 
@@ -100,6 +100,31 @@ function App() {
   const [betAmount, setBetAmount] = useState(2); 
   const [showRankingsModal, setShowRankingsModal] = useState(false);
   const [isPressingShowdown, setIsPressingShowdown] = useState(false);
+  const communityCardsRef = useRef<HTMLDivElement>(null);
+  const winnerCardsRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Calculate transform for winner cards to fly to community cards area
+  const getWinnerCardTransform = useCallback((playerId: string) => {
+    if (!isPressingShowdown || !communityCardsRef.current) return {};
+    const winnerEl = winnerCardsRefs.current.get(playerId);
+    if (!winnerEl) return {};
+
+    const communityRect = communityCardsRef.current.getBoundingClientRect();
+    const winnerRect = winnerEl.getBoundingClientRect();
+
+    // Target: just above community cards, centered. Gap = 6px (matches gap-1.5)
+    // Scale is center-origin, so bottom of scaled = (center + deltaY) + height*0.8
+    // We want that bottom = communityRect.top - 6
+    const targetX = communityRect.left + communityRect.width / 2 - winnerRect.left - winnerRect.width / 2;
+    const targetY = communityRect.top - 6 - winnerRect.top - winnerRect.height * 1.3;
+    const scaleRatio = 1.6; // w-10 (40px) -> w-16 (64px) = 1.6x
+
+    return {
+      transform: `translate(${targetX}px, ${targetY}px) scale(${scaleRatio})`,
+      transition: 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+      zIndex: 50,
+    };
+  }, [isPressingShowdown]);
 
   useEffect(() => {
     socket.on('roomsUpdated', (updatedRooms) => {
@@ -306,26 +331,25 @@ function App() {
                 
                 {/* Cartas del rival en Showdown */}
                 {currentRoom.phase === 'showdown' && p.cards?.length > 0 && !hasFolded && currentRoom.winners?.[0]?.handName !== 'Won by fold' && (
-                  <div className="flex gap-1 mt-2 relative z-10">
+                  <div 
+                    className="flex gap-1 mt-2 relative"
+                    ref={(el) => { if (el) winnerCardsRefs.current.set(p.id, el); }}
+                    style={{
+                      ...( currentRoom.winners?.some((w:any) => w.id === p.id)
+                        ? getWinnerCardTransform(p.id)
+                        : {}
+                      ),
+                      transition: 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+                      zIndex: currentRoom.winners?.some((w:any) => w.id === p.id) ? 50 : undefined,
+                    }}
+                  >
                      {p.cards.map((c: any, i: number) => {
                        const cardStr = `${c.rank}${c.suit}`;
                        const isWinning = currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr));
-                       const isWinnerPlayer = currentRoom.winners?.some((w:any) => w.id === p.id);
-
-                       if (isPressingShowdown && isWinnerPlayer) {
-                          return (
-                            <PlayingCard 
-                              key={`placeholder-${i}`} 
-                              rank={c.rank} suit={c.suit} 
-                              className="w-10 aspect-[2/3] opacity-0" 
-                            />
-                          );
-                       }
 
                        return (
                          <PlayingCard 
                            key={i} 
-                           layoutId={`card-${p.id}-${i}`}
                            rank={c.rank} suit={c.suit} 
                            className={`w-10 aspect-[2/3] shadow-sm ${!isWinning ? 'brightness-[0.4]' : ''}`} 
                          />
@@ -342,7 +366,7 @@ function App() {
           className="flex-1 flex flex-col justify-center items-center py-6 cursor-pointer"
           onClick={() => setShowRankingsModal(true)}
         >
-          <div className="flex gap-1.5 mb-2 relative">
+          <div className="flex gap-1.5 mb-2 relative" ref={communityCardsRef}>
             {[0, 1, 2, 3, 4].map(index => {
               const card = currentRoom.communityCards?.[index];
               if (card) {
@@ -364,32 +388,6 @@ function App() {
                  {currentRoom.winners[0].handName}
                </div>
             )}
-
-            <AnimatePresence>
-              {isPressingShowdown && currentRoom.phase === 'showdown' && currentRoom.winners?.[0]?.handName !== 'Won by fold' && (
-                 <motion.div 
-                   exit={{ opacity: 1, transition: { duration: 0.3 } }}
-                   className="absolute top-0 -translate-y-[120%] left-1/2 -translate-x-1/2 flex gap-1 scale-[1.6] pointer-events-none z-50 origin-bottom"
-                 >
-                   {currentRoom.winners?.map((winner: any) => {
-                      const p = currentRoom.players.find((pl: any) => pl.id === winner.id);
-                      if (!p || !p.cards) return null;
-                      return p.cards.map((c: any, i: number) => {
-                        const cardStr = `${c.rank}${c.suit}`;
-                        const isWinning = currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr));
-                        return (
-                          <PlayingCard 
-                            key={`${p.id}-${i}`}
-                            layoutId={`card-${p.id}-${i}`}
-                            rank={c.rank} suit={c.suit}
-                            className={`w-10 aspect-[2/3] shadow-sm ${!isWinning ? 'brightness-[0.4]' : ''}`} 
-                          />
-                        );
-                      });
-                   })}
-                 </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
 
@@ -507,22 +505,10 @@ function App() {
                     const isWinning = currentRoom.phase === 'showdown' 
                        ? currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr))
                        : true;
-                    const isWinnerPlayer = currentRoom.phase === 'showdown' && currentRoom.winners?.some((w:any) => w.id === myPlayer.id);
-
-                    if (isPressingShowdown && isWinnerPlayer && currentRoom.winners?.[0]?.handName !== 'Won by fold') {
-                       return (
-                         <PlayingCard 
-                           key={`placeholder-${i}`} 
-                           rank={c.rank} suit={c.suit}
-                           className="w-20 aspect-[2/3] opacity-0" 
-                         />
-                       );
-                    }
 
                     return (
                       <PlayingCard 
                         key={i} 
-                        layoutId={`card-${myPlayer.id}-${i}`}
                         rank={c.rank} 
                         suit={c.suit} 
                         className={`w-20 aspect-[2/3] shadow-xl transform hover:-translate-y-4 transition-transform ${!isWinning ? 'brightness-[0.4]' : ''}`} 
