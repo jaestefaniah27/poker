@@ -3,7 +3,11 @@ import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor } from '.
 
 export { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor };
 
-export const socket: Socket = io(`http://${window.location.hostname}:3001`);
+export const socket: Socket = io(
+  import.meta.env.PROD 
+    ? '/' // En producción asume que está servido a través del mismo Nginx Proxy
+    : `http://${window.location.hostname}:3001`
+);
 
 export const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Normal', 5: 'Rápida', 4: 'Express' };
 
