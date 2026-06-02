@@ -567,7 +567,7 @@ function App() {
               <div>
                 <Slider
                   min={minRaise}
-                  max={Math.max(minRaise, myPlayer?.chips || 1000)}
+                  max={Math.max(minRaise, (myPlayer?.chips || 0) + (myPlayer?.currentBet || 0))}
                   step={currentRoom.bigBlind || 2}
                   value={betAmount}
                   onChange={setBetAmount}
@@ -575,10 +575,10 @@ function App() {
                   formatLabel={fmtChips}
                 />
                 <div className="flex gap-1.5 mt-1">
-                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min((myPlayer?.chips || 0), prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">+1 BB</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min((myPlayer?.chips || 0), Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">1/2 Pot</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min((myPlayer?.chips || 0), currentRoom.pot)))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">Pot</button>
-                  <button onClick={() => setBetAmount((myPlayer?.chips || 0))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">All-in</button>
+                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0), prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">+1 BB</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0), Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">1/2 Pot</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0), currentRoom.pot)))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">Pot</button>
+                  <button onClick={() => setBetAmount((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">All-in</button>
                 </div>
                 <div className="flex rounded-2xl overflow-hidden bg-surfaceLight shadow-sm mt-2">
                   <button className="text-gray-300 px-4 py-2 font-semibold text-base flex-1" onClick={() => handleAction('Raise', betAmount)}>
