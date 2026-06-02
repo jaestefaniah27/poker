@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
+import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips } from '../utils';
 
 interface LobbyProps {
@@ -156,13 +157,16 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 </div>
 
                 <p className="text-[11px] text-gray-500 mb-1 px-1">Entrada</p>
-                <input
-                  type="range" min={0} max={STAKE_TIERS.length - 1} step={1}
+                <Slider
+                  min={0}
+                  max={STAKE_TIERS.length - 1}
+                  step={1}
                   value={createTierIndex}
-                  onChange={e => setCreateTierIndex(parseInt(e.target.value))}
-                  className="w-full accent-rose-400 mb-2"
+                  onChange={v => setCreateTierIndex(v)}
+                  accent="rose"
+                  formatLabel={v => fmtChips(STAKE_TIERS[v])}
                 />
-                <div className="flex justify-between px-1 mb-5">
+                <div className="flex justify-between px-1 mb-5 mt-1">
                   {STAKE_TIERS.map((b, i) => (
                     <button key={i} onClick={() => setCreateTierIndex(i)} className={`text-[9px] ${i === createTierIndex ? 'text-white font-bold' : 'text-gray-600'}`}>{fmtChips(b)}</button>
                   ))}

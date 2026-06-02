@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 @layer base {
-  html, body {
+  html, body, #root {
     @apply bg-background text-white font-sans antialiased;
     overscroll-behavior: none;
     overflow: hidden;
@@ -15,6 +15,10 @@
     margin: 0;
     padding: 0;
     touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
   }
 }
 

@@ -8,6 +8,7 @@ import TurnPie from './components/TurnPie';
 import DealerBadge from './components/DealerBadge';
 import BetChip from './components/BetChip';
 import HandRankingsModal from './components/HandRankingsModal';
+import Slider from './components/Slider';
 
 function App() {
   const [user, setUser] = useState<{ id: string, name: string, balance: number, avatar: string, hasPassword: boolean } | null>(null);
@@ -532,13 +533,14 @@ function App() {
 
           {showBetMenu && (
              <div className="mb-4">
-                <input
-                  type="range"
+                <Slider
                   min={minRaise}
                   max={Math.max(minRaise, myPlayer?.chips || 1000)}
+                  step={currentRoom.bigBlind || 2}
                   value={betAmount}
-                  onChange={(e) => setBetAmount(parseInt(e.target.value))}
-                  className="w-full accent-white"
+                  onChange={setBetAmount}
+                  accent="white"
+                  formatLabel={fmtChips}
                 />
                 <div className="flex mt-2 gap-2">
                   <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min(myPlayer.chips, prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">+1 BB</button>
