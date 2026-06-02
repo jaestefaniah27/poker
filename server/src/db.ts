@@ -26,6 +26,13 @@ const db = new sqlite3.Database(dbPath, (err) => {
         if (err && !err.message.includes('duplicate column')) console.error('Migration avatar:', err.message);
       });
     });
+    
+    db.run(`CREATE TABLE IF NOT EXISTS rooms (
+      id TEXT PRIMARY KEY,
+      data TEXT NOT NULL
+    )`, (err) => {
+      if (err) console.error('Error creating rooms table:', err.message);
+    });
   }
 });
 
@@ -66,14 +73,7 @@ export interface UserRow {
   avatar: string | null;
 }
 
-// Vista pública del usuario que se envía al cliente (sin el hash de la contraseña)
-export interface PublicUser {
-  id: string;
-  name: string;
-  balance: number;
-  avatar: string;
-  hasPassword: boolean;
-}
+import { PublicUser } from '../../shared/types';
 
 export const toPublicUser = (row: UserRow): PublicUser => ({
   id: row.id,
@@ -128,4 +128,27 @@ export const applyBalanceDelta = async (id: string, delta: number): Promise<numb
   await dbRun('UPDATE users SET balance = balance + ? WHERE id = ?', [delta, id]);
   const row = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   return row?.balance ?? 0;
+};
+
+// --- Persistencia de Salas (Reconexión Robusta) ---
+import { Room } from '../../shared/types';
+
+export const loadRoomsFromDB = async (): Promise<Room[]> => {
+  const rows = await dbAll<{ id: string; data: string }>('SELECT * FROM rooms');
+  return rows.map(r => {
+    try {
+      return JSON.parse(r.data) as Room;
+    } catch (e) {
+      console.error(`Error parsing room ${r.id}:`, e);
+      return null;
+    }
+  }).filter((r): r is Room => r !== null);
+};
+
+export const saveRoomToDB = async (room: Room): Promise<void> => {
+  await dbRun('INSERT OR REPLACE INTO rooms (id, data) VALUES (?, ?)', [room.id, JSON.stringify(room)]);
+};
+
+export const deleteRoomFromDB = async (id: string): Promise<void> => {
+  await dbRun('DELETE FROM rooms WHERE id = ?', [id]);
 };

@@ -1,16 +1,11 @@
 import { io, Socket } from 'socket.io-client';
+import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor } from '../../shared/types';
+
+export { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor };
 
 export const socket: Socket = io(`http://${window.location.hostname}:3001`);
 
-export const STAKE_TIERS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000];
-export const BLIND_DIVISORS = [20, 10, 5, 4];
-export const DEFAULT_BLIND_DIVISOR = 10;
 export const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Normal', 5: 'Rápida', 4: 'Express' };
-
-export const blindsFor = (buyIn: number, divisor: number) => {
-  const bb = Math.round(buyIn / divisor);
-  return { smallBlind: Math.round(bb / 2), bigBlind: bb };
-};
 
 export const fmtChips = (n: number | null | undefined): string => {
   if (n == null) return '0';

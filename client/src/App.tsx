@@ -9,13 +9,14 @@ import DealerBadge from './components/DealerBadge';
 import BetChip from './components/BetChip';
 import HandRankingsModal from './components/HandRankingsModal';
 import Slider from './components/Slider';
+import type { Room, Player, PublicUser } from '../../shared/types';
 
 function App() {
-  const [user, setUser] = useState<{ id: string, name: string, balance: number, avatar: string, hasPassword: boolean } | null>(null);
+  const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(() => !!sessionStorage.getItem('pokerToken'));
-  const [rooms, setRooms] = useState<any[]>([]);
-  const [currentRoom, setCurrentRoom] = useState<any | null>(null);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [showBetMenu, setShowBetMenu] = useState(false);
   const [betAmount, setBetAmount] = useState(2);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
@@ -23,7 +24,7 @@ function App() {
   const [flyingChips, setFlyingChips] = useState<{id: number, x: number, y: number, tx: number, ty: number, amount: number}[]>([]);
   const [animateBetIn, setAnimateBetIn] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const [viewPlayer, setViewPlayer] = useState<any>(null);
+  const [viewPlayer, setViewPlayer] = useState<Player | null>(null);
   const [newCommunityIdx, setNewCommunityIdx] = useState<number[]>([]);
   const [nowMs, setNowMs] = useState(Date.now());
   const playerAnchorRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -36,7 +37,7 @@ function App() {
   const myChipsRef = useRef<HTMLDivElement>(null);
   const myBetRef = useRef<HTMLDivElement>(null);
   const opponentBetRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const prevRoomRef = useRef<any>(null);
+  const prevRoomRef = useRef<Room | null>(null);
   const lastBetPositionsRef = useRef<Map<string, {x: number, y: number}>>(new Map());
 
   useLayoutEffect(() => {
@@ -111,7 +112,7 @@ function App() {
         const potEl = potRef.current;
         if (!potEl) return;
         const potRect = potEl.getBoundingClientRect();
-        curr.winners.forEach((w: any) => {
+        curr.winners?.forEach((w: any) => {
           const targetEl = w.id === myId ? myChipsRef.current : playerAnchorRefs.current.get(w.id);
           if (!targetEl) return;
           const r = targetEl.getBoundingClientRect();
@@ -233,16 +234,16 @@ function App() {
   };
 
   const startGame = () => {
-    if (currentRoom) socket.emit('startGame', { roomId: currentRoom.id });
+    if (currentRoom) socket.emit('startGame', { roomId: currentRoom?.id });
   };
 
   const handleAction = (action: string, amount?: number) => {
-    socket.emit('playerAction', { roomId: currentRoom.id, userId: user?.id, action, amount });
+    socket.emit('playerAction', { roomId: currentRoom?.id, userId: user?.id, action, amount });
     if (action === 'Raise') setShowBetMenu(false);
   };
 
   const handleRebuy = () => {
-    if (currentRoom) socket.emit('rebuy', { roomId: currentRoom.id });
+    if (currentRoom) socket.emit('rebuy', { roomId: currentRoom?.id });
   };
 
   if (!user && initializing) {
@@ -529,9 +530,9 @@ function App() {
             </div>
           )}
 
-          {myPlayer?.currentBet > 0 && (
+          {(myPlayer?.currentBet || 0) > 0 && (
              <div className="absolute -top-12 left-4 z-20" ref={myBetRef}>
-               <BetChip amount={myPlayer.currentBet} animateIn={animateBetIn} />
+               <BetChip amount={(myPlayer?.currentBet || 0)} animateIn={animateBetIn} />
              </div>
           )}
 
@@ -549,10 +550,10 @@ function App() {
                   formatLabel={fmtChips}
                 />
                 <div className="flex gap-1.5 mt-1">
-                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min(myPlayer.chips, prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">+1 BB</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">1/2 Pot</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, currentRoom.pot)))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">Pot</button>
-                  <button onClick={() => setBetAmount(myPlayer.chips)} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">All-in</button>
+                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min((myPlayer?.chips || 0), prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">+1 BB</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min((myPlayer?.chips || 0), Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">1/2 Pot</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min((myPlayer?.chips || 0), currentRoom.pot)))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">Pot</button>
+                  <button onClick={() => setBetAmount((myPlayer?.chips || 0))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">All-in</button>
                 </div>
                 <div className="flex rounded-2xl overflow-hidden bg-surfaceLight shadow-sm mt-2">
                   <button className="text-gray-300 px-4 py-2 font-semibold text-base flex-1" onClick={() => handleAction('Raise', betAmount)}>
@@ -582,7 +583,7 @@ function App() {
                        return (
                          <button
                            disabled={locked}
-                           onClick={() => { if (!locked) socket.emit('nextHand', { roomId: currentRoom.id }); }}
+                           onClick={() => { if (!locked) socket.emit('nextHand', { roomId: currentRoom?.id }); }}
                            className={`flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg ${locked ? 'bg-surface text-gray-500 cursor-not-allowed' : 'bg-surfaceLight hover:bg-gray-700 text-white'}`}
                          >
                            {locked ? `Next hand (${remaining})` : 'Next hand'}
@@ -614,12 +615,12 @@ function App() {
                         Fold
                       </button>
 
-                      {myPlayer.chips <= toCallAmount ? (
+                      {((myPlayer?.chips || 0) <= toCallAmount) ? (
                         <button
                           onClick={() => handleAction('Call')}
                           className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1"
                         >
-                          All-in {fmtChips(myPlayer.chips)}
+                          All-in {fmtChips((myPlayer?.chips || 0))}
                         </button>
                       ) : (
                         <>
@@ -630,8 +631,8 @@ function App() {
                             {toCallAmount === 0 ? 'Check' : `Call ${fmtChips(toCallAmount)}`}
                           </button>
 
-                          {(myPlayer.chips + myPlayer.currentBet) > currentRoom.highestBet && (() => {
-                            const quickRaise = Math.min(minRaise, myPlayer.chips + myPlayer.currentBet);
+                          {((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0)) > currentRoom.highestBet && (() => {
+                            const quickRaise = Math.min(minRaise, (myPlayer?.chips || 0) + (myPlayer?.currentBet || 0));
                             return (
                               <>
                                 <button
@@ -643,7 +644,7 @@ function App() {
 
                                 <button
                                   onClick={() => {
-                                    setBetAmount(Math.min(minRaise, myPlayer.chips + myPlayer.currentBet));
+                                    setBetAmount(Math.min(minRaise, (myPlayer?.chips || 0) + (myPlayer?.currentBet || 0)));
                                     setShowBetMenu(true);
                                   }}
                                   className="bg-surfaceLight hover:bg-gray-700 text-gray-200 w-10 rounded-full text-base font-semibold flex items-center justify-center"
@@ -682,14 +683,14 @@ function App() {
           {/* My cards + profile — always at the very bottom */}
           <div className="flex justify-between items-end pb-1 mt-1">
             <div className="flex gap-1.5 ml-1 relative z-10">
-              {myPlayer?.cards?.length > 0 ? (
+              {((myPlayer?.cards?.length || 0) > 0) ? (
                 <>
-                  {myPlayer.cards.map((c: any, i: number) => {
+                  {myPlayer?.cards?.map((c: any, i: number) => {
                     const cardStr = `${c.rank}${c.suit}`;
                     const isWinning = currentRoom.phase === 'showdown'
                        ? currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr))
                        : true;
-                    const dimmed = myPlayer.hasFolded || !isWinning;
+                    const dimmed = myPlayer?.hasFolded || !isWinning;
 
                     return (
                       <PlayingCard
@@ -715,7 +716,7 @@ function App() {
               </div>
               <div
                 className="relative mb-0.5 cursor-pointer"
-                onClick={() => setViewPlayer(myPlayer || { name: user.name, avatar: user.avatar, userId: user.id, balance: user.balance, chips: 0 })}
+                onClick={() => setViewPlayer(myPlayer || { id: 'preview', userId: user.id, name: user.name, balance: user.balance, chips: 0, currentBet: 0, hasFolded: false, hasActed: false, isActive: true, totalContribution: 0, cards: [] } as any)}
               >
                  {isMyTurn && turnTimer && (
                    <div className="absolute -right-6 top-1/2 -translate-y-1/2 z-20">
@@ -726,7 +727,7 @@ function App() {
                  {isDealer(myPlayerIndex) && <DealerBadge />}
               </div>
               <div className="text-[10px] text-gray-400 font-bold">{user.name}</div>
-              <div className="text-white font-medium text-base" ref={myChipsRef}>{fmtChips(myPlayer ? myPlayer.chips : user.balance)}</div>
+              <div className="text-white font-medium text-base" ref={myChipsRef}>{fmtChips(myPlayer ? (myPlayer?.chips || 0) : user.balance)}</div>
             </div>
           </div>
         </div>

@@ -1,0 +1,83 @@
+import { Socket } from 'socket.io';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser } from '../db';
+import { issueToken, authUser } from '../socketHelpers';
+
+const BCRYPT_ROUNDS = 10;
+
+export const authHandlers = (socket: Socket) => {
+  socket.on('login', async ({ name, password }, callback) => {
+    const cleanName = (name || '').trim();
+    if (!cleanName) { callback({ error: 'Nombre vacío' }); return; }
+
+    let user = await getUserByName(cleanName);
+
+    if (!user) {
+      const id = uuidv4();
+      await createUser(id, cleanName);
+      user = await getUser(id);
+    } else if (user.password_hash) {
+      if (!password) { callback({ needPassword: true }); return; }
+      const ok = await bcrypt.compare(String(password), user.password_hash);
+      if (!ok) { callback({ error: 'Contraseña incorrecta' }); return; }
+    }
+
+    if (!user) { callback({ error: 'No se pudo crear el usuario' }); return; }
+    const token = issueToken(user.id);
+    console.log(`Login: ${user.name} -> ${user.id} (balance ${user.balance})`);
+    callback({ user: toPublicUser(user), token });
+  });
+
+  socket.on('resumeSession', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'sesión no válida' }); return; }
+    callback({ user: toPublicUser(user), token });
+  });
+
+  socket.on('setPassword', async ({ token, currentPassword, newPassword }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    const pwd = String(newPassword || '');
+    if (pwd.length < 4) { callback({ error: 'La contraseña debe tener al menos 4 caracteres' }); return; }
+    if (user.password_hash) {
+      const ok = await bcrypt.compare(String(currentPassword || ''), user.password_hash);
+      if (!ok) { callback({ error: 'Contraseña actual incorrecta' }); return; }
+    }
+    const hash = await bcrypt.hash(pwd, BCRYPT_ROUNDS);
+    await setPasswordHash(user.id, hash);
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('removePassword', async ({ token, currentPassword }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    if (!user.password_hash) { callback({ error: 'La cuenta no tiene contraseña' }); return; }
+    const ok = await bcrypt.compare(String(currentPassword || ''), user.password_hash);
+    if (!ok) { callback({ error: 'Contraseña incorrecta' }); return; }
+    await setPasswordHash(user.id, null);
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('changeName', async ({ token, newName }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    const clean = (newName || '').trim();
+    if (clean.length < 2) { callback({ error: 'Nombre demasiado corto' }); return; }
+    if (await isNameTaken(clean, user.id)) { callback({ error: 'Ese nombre ya está en uso' }); return; }
+    await updateUserName(user.id, clean);
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('changeAvatar', async ({ token, avatar }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    const seed = String(avatar || '').trim().slice(0, 64) || user.id;
+    await updateUserAvatar(user.id, seed);
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+};

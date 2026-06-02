@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useState } from 'react';
 
 interface SliderProps {
   min: number;
@@ -20,7 +20,7 @@ const accentColors: Record<string, { track: string; thumb: string; bubble: strin
   rose:    { track: 'linear-gradient(90deg,#9f1239,#fb7185)', thumb: '#fb7185', bubble: 'rgba(251,113,133,0.95)' },
 };
 
-const Slider = ({ min, max, step = 1, value, onChange, accent = 'white', showBubble = true, formatLabel }: SliderProps) => {
+const Slider = ({ min, max, step = 1, value, onChange, accent = 'white' }: SliderProps) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const colors = accentColors[accent] || accentColors.white;
@@ -62,7 +62,6 @@ const Slider = ({ min, max, step = 1, value, onChange, accent = 'white', showBub
     setDragging(false);
   }, []);
 
-  const label = formatLabel ? formatLabel(value) : String(value);
 
   return (
     <div

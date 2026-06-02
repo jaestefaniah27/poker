@@ -1,4 +1,6 @@
-import { Room, Player, createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, STAKE_TIERS, blindsFor, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
+import { Player, Room, STAKE_TIERS, blindsFor } from '../../shared/types';
+import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
+import { deleteRoomFromDB } from './db';
 
 const rooms: Map<string, Room> = new Map();
 
@@ -41,6 +43,10 @@ export const createRoom = (id: string, name: string, persistent = false, tierInd
   return newRoom;
 };
 
+export const restoreRoom = (room: Room) => {
+  rooms.set(room.id, room);
+};
+
 // Marca actividad real en la sala (acción de jugador, join, nueva mano). Resetea el contador de inactividad.
 export const touchRoom = (roomId: string) => {
   const room = rooms.get(roomId);
@@ -58,11 +64,13 @@ export const evictAll = (roomId: string): { userId: string; chips: number }[] =>
 
   if (!room.persistent) {
     rooms.delete(roomId);
+    deleteRoomFromDB(roomId).catch(e => console.error('DB delete error', e));
     return cashOuts;
   }
 
   // Sala persistente: la vaciamos y reseteamos a estado inicial.
   room.players = [];
+  room.lastActivityAt = Date.now();
   room.communityCards = [];
   room.pot = 0;
   room.phase = 'waiting';
@@ -143,7 +151,10 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
   const player = room.players.find(p => p.id === socketId);
   if (!player || player.hasCashedOut) {
     // Ya estaba retirado: solo comprobamos si la sala quedó vacía (las persistentes nunca se borran)
-    if (!room.persistent && room.players.every(p => !p.isActive)) rooms.delete(roomId);
+    if (!room.persistent && room.players.every(p => !p.isActive)) {
+        rooms.delete(roomId);
+        deleteRoomFromDB(roomId).catch(e => console.error('DB delete error', e));
+    }
     return null;
   }
 
@@ -167,8 +178,10 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
     }
   }
 
-  if (!room.persistent && room.players.every(p => !p.isActive)) {
+  // Clean up empty non-persistent room
+  if (room.players.every(p => !p.isActive) && !room.persistent) {
     rooms.delete(roomId);
+    deleteRoomFromDB(roomId).catch(e => console.error('DB delete error', e));
   }
   return cashOut;
 };
