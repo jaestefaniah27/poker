@@ -23,10 +23,9 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
       if (response.error) {
         setLoginError(response.error);
         return;
-      }
-      if (response.user && response.token) {
+      } else if (response.user && response.token) {
         sessionStorage.setItem('pokerToken', response.token);
-        onLogin(response.user, response.token);
+        onLogin(response.user, response.token, response.activeRoomId);
       }
     });
   };

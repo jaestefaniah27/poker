@@ -669,3 +669,13 @@ export const restartTournament = (roomId: string): { userId: string; socketId: s
   room.winners = [];
   return deltas;
 };
+
+export const findActiveRoomForUser = (userId: string): string | undefined => {
+  for (const room of rooms.values()) {
+    const player = room.players.find(p => p.userId === userId);
+    if (player && player.isActive && !player.hasCashedOut) {
+      return room.id;
+    }
+  }
+  return undefined;
+};

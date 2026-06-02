@@ -215,8 +215,11 @@ function App() {
       if (response?.user) {
         setUser(response.user);
         setToken(saved);
-        const roomId = sessionStorage.getItem('pokerRoomId');
-        if (roomId) socket.emit('joinRoom', { roomId, token: saved });
+        const roomId = response.activeRoomId || sessionStorage.getItem('pokerRoomId');
+        if (roomId) {
+          sessionStorage.setItem('pokerRoomId', roomId);
+          socket.emit('joinRoom', { roomId, token: saved });
+        }
       } else {
         sessionStorage.removeItem('pokerToken');
         sessionStorage.removeItem('pokerRoomId');
@@ -226,9 +229,12 @@ function App() {
     return () => clearTimeout(fallback);
   }, []);
 
-  const handleLogin = (u: any, t: string) => {
+  const handleLogin = (u: any, t: string, activeRoomId?: string) => {
     setToken(t);
     setUser(u);
+    if (activeRoomId) {
+      joinRoom(activeRoomId);
+    }
   };
 
   const handleLogout = () => {

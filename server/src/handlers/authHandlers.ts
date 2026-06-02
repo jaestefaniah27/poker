@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
 import { sanitizeInput } from '../security';
+import { findActiveRoomForUser } from '../roomManager';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -27,13 +28,15 @@ export const authHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No se pudo crear el usuario' }); return; }
     const token = issueToken(user.id);
     console.log(`Login: ${user.name} -> ${user.id} (balance ${user.balance})`);
-    callback({ user: toPublicUser(user), token });
+    const activeRoomId = findActiveRoomForUser(user.id);
+    callback({ user: toPublicUser(user), token, activeRoomId });
   });
 
   socket.on('resumeSession', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'sesión no válida' }); return; }
-    callback({ user: toPublicUser(user), token });
+    const activeRoomId = findActiveRoomForUser(user.id);
+    callback({ user: toPublicUser(user), token, activeRoomId });
   });
 
   socket.on('setPassword', async ({ token, currentPassword, newPassword }, callback) => {
