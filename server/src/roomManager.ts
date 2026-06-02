@@ -11,7 +11,7 @@ export const getRooms = () => {
   }));
 };
 
-export const createRoom = (id: string, name: string): Room => {
+export const createRoom = (id: string, name: string, persistent = false): Room => {
   const newRoom: Room = {
     id,
     name,
@@ -23,7 +23,8 @@ export const createRoom = (id: string, name: string): Room => {
     dealerIndex: 0,
     deck: [],
     highestBet: 0,
-    winners: []
+    winners: [],
+    persistent
   };
   rooms.set(id, newRoom);
   return newRoom;
@@ -31,48 +32,112 @@ export const createRoom = (id: string, name: string): Room => {
 
 export const getRoom = (id: string): Room | undefined => rooms.get(id);
 
-export const joinRoom = (roomId: string, player: Player) => {
+// 'joined' = nuevo asiento (hay que cobrar buy-in) | 'reconnected' = vuelve sin cobrar | false = error
+export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnected' | false => {
   const room = rooms.get(roomId);
   if (!room) return false;
-  
+
+  const isGameActive = room.phase !== 'waiting' && room.phase !== 'showdown';
   const existing = room.players.find(p => p.userId === player.userId);
-  if (existing) {
+
+  if (existing && !existing.hasCashedOut) {
+    // Reconexión a un asiento todavía vivo: NO se cobra buy-in, conserva sus fichas
     existing.isActive = true;
-    existing.id = player.id; // Update socket id
-  } else {
-    // Add missing defaults for new players
-    const newPlayer = {
-      ...player,
-      hasFolded: false,
-      hasActed: false,
-      currentBet: 0,
-      totalContribution: 0
-    };
-    room.players.push(newPlayer);
+    existing.isOnline = true;
+    existing.reducedTime = false; // al reconectar recupera sus tiempos normales
+    existing.id = player.id;
+    existing.name = player.name;
+    existing.avatar = player.avatar;
+    return 'reconnected';
   }
-  return true;
+
+  if (existing && existing.hasCashedOut) {
+    // Se había levantado de la mesa; vuelve a sentarse => nuevo buy-in
+    existing.isActive = true;
+    existing.id = player.id;
+    existing.name = player.name;
+    existing.avatar = player.avatar;
+    existing.chips = player.chips;
+    existing.balance = player.balance;
+    existing.hasCashedOut = false;
+    existing.hasFolded = false;
+    existing.hasActed = false;
+    existing.currentBet = 0;
+    existing.totalContribution = 0;
+    existing.isSpectating = isGameActive;
+    existing.isOnline = true;
+    existing.reducedTime = false;
+    return 'joined';
+  }
+
+  room.players.push({
+    ...player,
+    hasFolded: false,
+    hasActed: false,
+    currentBet: 0,
+    totalContribution: 0,
+    hasCashedOut: false,
+    isOnline: true,
+    reducedTime: false,
+    isSpectating: isGameActive // Wait for next hand if joining mid-game
+  });
+  return 'joined';
 };
 
-export const leaveRoom = (roomId: string, socketId: string) => {
+// Devuelve la info para hacer cash-out del saldo en la capa de BD, o null si no hay nada que retirar
+export const leaveRoom = (roomId: string, socketId: string): { userId: string; chips: number } | null => {
   const room = rooms.get(roomId);
-  if (!room) return;
+  if (!room) return null;
   const player = room.players.find(p => p.id === socketId);
-  if (player) {
-    player.isActive = false;
-    if (room.phase !== 'waiting') {
-      player.hasFolded = true;
-      checkRoundEnd(room); // User leaving might trigger round end
-    }
-    // Si la sala se queda vacía, la borramos
-    if (room.players.every(p => !p.isActive)) {
-      rooms.delete(roomId);
+  if (!player || player.hasCashedOut) {
+    // Ya estaba retirado: solo comprobamos si la sala quedó vacía (las persistentes nunca se borran)
+    if (!room.persistent && room.players.every(p => !p.isActive)) rooms.delete(roomId);
+    return null;
+  }
+
+  const cashOut = { userId: player.userId, chips: player.chips };
+
+  const isInHand = room.phase !== 'waiting' && room.phase !== 'showdown' && !player.isSpectating;
+  if (isInHand) {
+    player.hasFolded = true;
+  }
+
+  // Retiramos sus fichas (se devuelven al saldo) y marcamos el asiento como liberado
+  player.chips = 0;
+  player.isActive = false;
+  player.hasCashedOut = true;
+
+  if (isInHand) {
+    const signal = checkRoundEnd(room);
+    // 'continue' ya avanzó el turno dentro de checkRoundEnd; si la ronda se cerró, resolvemos en síncrono
+    if (signal !== 'continue') {
+      resolveRoundSync(room);
     }
   }
+
+  if (!room.persistent && room.players.every(p => !p.isActive)) {
+    rooms.delete(roomId);
+  }
+  return cashOut;
+};
+
+// Recompra: el jugador arruinado vuelve a comprar fichas (el cobro del saldo se hace en la capa de BD)
+export const rebuy = (roomId: string, userId: string, buyIn: number): boolean => {
+  const room = rooms.get(roomId);
+  if (!room) return false;
+  const player = room.players.find(p => p.userId === userId);
+  if (!player || player.chips > 0) return false; // Solo se recompra estando a 0
+  player.chips = buyIn;
+  player.balance -= buyIn;
+  player.hasCashedOut = false;
+  player.isSpectating = true; // Se incorpora en la siguiente mano
+  return true;
 };
 
 export const startGame = (roomId: string) => {
   const room = rooms.get(roomId);
-  if (!room || room.players.filter(p => p.isActive).length < 2) return false;
+  // Se necesitan al menos 2 jugadores activos CON fichas para repartir
+  if (!room || room.players.filter(p => p.isActive && p.chips > 0).length < 2) return false;
 
   room.deck = createDeck();
   shuffleDeck(room.deck);
@@ -80,18 +145,27 @@ export const startGame = (roomId: string) => {
   room.pot = 0;
   room.highestBet = 0;
   room.winners = [];
-  
+  room.inGrace = false;
+
+  // Los activos con fichas entran en la mano; los arruinados (chips 0) quedan como espectadores hasta que recompren
+  room.players.filter(p => p.isActive).forEach(p => {
+    p.isSpectating = p.chips <= 0;
+    if (p.isSpectating) { p.cards = []; p.hasFolded = false; p.currentBet = 0; p.handName = ''; }
+    // Si sigue offline al EMPEZAR esta mano, su turno se reduce a 8s sin gracia
+    p.reducedTime = p.isOnline === false;
+  });
+
   dealCards(room); // This also resets hasFolded, hasActed, currentBet
   updateHandNames(room);
   
   room.phase = 'preflop';
   
-  // Avanzar el dealer al siguiente jugador activo
+  // Avanzar el dealer al siguiente jugador que entra en la mano (activo y no espectador)
   do {
     room.dealerIndex = (room.dealerIndex + 1) % room.players.length;
-  } while (!room.players[room.dealerIndex].isActive);
+  } while (!room.players[room.dealerIndex].isActive || room.players[room.dealerIndex].isSpectating);
 
-  const activePlayers = room.players.filter(p => p.isActive);
+  const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating);
   const numActive = activePlayers.length;
 
   const dealerActiveIndex = activePlayers.findIndex(p => p.id === room.players[room.dealerIndex].id);
@@ -183,7 +257,7 @@ export const handlePlayerAction = (roomId: string, userId: string, actionType: s
 };
 
 const checkRoundEnd = (room: Room): 'advancePhase' | 'endRound' | 'continue' => {
-  const activePlayers = room.players.filter(p => p.isActive && !p.hasFolded);
+  const activePlayers = room.players.filter(p => p.isActive && !p.hasFolded && !p.isSpectating);
   
   if (activePlayers.length <= 1) {
     return 'endRound';
@@ -203,8 +277,8 @@ const advanceTurn = (room: Room) => {
   const numPlayers = room.players.length;
   let nextIndex = (room.currentTurnIndex + 1) % numPlayers;
   
-  // Find next active and not folded player
-  while (!room.players[nextIndex].isActive || room.players[nextIndex].hasFolded || room.players[nextIndex].chips === 0) {
+  // Find next active, non-folded, non-spectating player
+  while (!room.players[nextIndex].isActive || room.players[nextIndex].hasFolded || room.players[nextIndex].chips === 0 || room.players[nextIndex].isSpectating) {
     nextIndex = (nextIndex + 1) % numPlayers;
     // Evitar loop infinito si algo va mal
     if (nextIndex === room.currentTurnIndex) break;
@@ -220,15 +294,35 @@ const gatherBetsToPot = (room: Room) => {
   });
 };
 
-export const applyPhaseAdvance = (room: Room, signal: 'advancePhase' | 'endRound') => {
-  if (signal === 'endRound') {
-    endRound(room);
-  } else {
-    advancePhase(room);
-  }
+// Jugadores que siguen vivos en la mano (no foldeados ni espectadores)
+export const contenders = (room: Room): Player[] =>
+  room.players.filter(p => p.isActive && !p.hasFolded && !p.isSpectating);
+
+// ¿Se acabó toda decisión de apuesta en lo que queda de mano? (como mucho 1 jugador con fichas)
+export const bettingClosed = (room: Room): boolean => {
+  const withChips = room.players.filter(p => p.isActive && !p.hasFolded && !p.isSpectating && p.chips > 0);
+  return withChips.length <= 1;
 };
 
-const advancePhase = (room: Room) => {
+// Coloca el turno en el primer jugador que PUEDE actuar tras el dealer. Si no hay nadie, deja -1.
+const setTurnToFirstActor = (room: Room) => {
+  const len = room.players.length;
+  let nextTurn = (room.dealerIndex + 1) % len;
+  let guard = 0;
+  while (guard < len && (
+    !room.players[nextTurn].isActive ||
+    room.players[nextTurn].hasFolded ||
+    room.players[nextTurn].chips === 0 ||
+    room.players[nextTurn].isSpectating
+  )) {
+    nextTurn = (nextTurn + 1) % len;
+    guard++;
+  }
+  room.currentTurnIndex = guard < len ? nextTurn : -1;
+};
+
+// Reparte la siguiente calle (flop/turn/river) o pasa a showdown desde river. NO calcula ganadores.
+export const advanceStreet = (room: Room) => {
   gatherBetsToPot(room);
   room.players.forEach(p => { p.hasActed = false; });
   room.highestBet = 0;
@@ -244,31 +338,38 @@ const advancePhase = (room: Room) => {
     room.communityCards.push(room.deck.pop()!);
   } else if (room.phase === 'river') {
     room.phase = 'showdown';
-    endRound(room);
-    return; // Ya terminamos
   }
 
   updateHandNames(room);
 
-  // Setear el turno al primer jugador activo después del dealer
-  let nextTurn = (room.dealerIndex + 1) % room.players.length;
-  while (!room.players[nextTurn].isActive || room.players[nextTurn].hasFolded || room.players[nextTurn].chips === 0) {
-    nextTurn = (nextTurn + 1) % room.players.length;
-  }
-  room.currentTurnIndex = nextTurn;
+  if (room.phase !== 'showdown') setTurnToFirstActor(room);
 };
 
-const endRound = (room: Room) => {
+// Resolución SÍNCRONA: se usa cuando un jugador abandona y hay que cerrar la mano sin animación.
+// (El flujo normal con animaciones lo orquesta index.ts calle a calle con retardos.)
+export const resolveRoundSync = (room: Room) => {
+  for (let guard = 0; guard < 8; guard++) {
+    if (contenders(room).length <= 1) { endRound(room); return; }
+    if (room.phase === 'showdown') { endRound(room); return; }
+    if (room.phase === 'river') { advanceStreet(room); endRound(room); return; }
+    advanceStreet(room);
+    if (!bettingClosed(room)) return; // aún se puede apostar con normalidad
+  }
+};
+
+export const endRound = (room: Room) => {
   gatherBetsToPot(room);
   room.phase = 'showdown';
-  const activePlayers = room.players.filter(p => p.isActive && !p.hasFolded);
+  room.currentTurnIndex = -1; // En showdown ya no hay turno de nadie
+  const activePlayers = room.players.filter(p => p.isActive && !p.hasFolded && !p.isSpectating);
 
   if (activePlayers.length === 1) {
     // Solo queda uno, se lo lleva todo
     const winner = activePlayers[0];
-    winner.chips += room.pot;
+    const won = room.pot;
+    winner.chips += won;
     room.pot = 0;
-    room.winners = [{ id: winner.id, amount: room.pot, handName: 'Won by fold', winningCards: [] }];
+    room.winners = [{ id: winner.id, amount: won, handName: 'Won by fold', winningCards: [] }];
   } else if (activePlayers.length > 1) {
     // Showdown con múltiples jugadores, calculamos side pots
     let remainingPot = room.pot;

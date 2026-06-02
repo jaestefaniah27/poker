@@ -13,12 +13,18 @@ export interface Player {
   id: string; // Socket ID
   userId: string; // DB ID
   name: string;
+  avatar?: string; // Semilla del avatar (dicebear). Por defecto el userId.
   cards: Card[];
   chips: number;
   currentBet: number;
   hasFolded: boolean;
   hasActed: boolean; // True si ya ha actuado en la ronda actual
   isActive: boolean; // false if left the room
+  isSpectating?: boolean; // true if joined mid-hand, waiting for next hand
+  balance: number; // Saldo persistente FUERA de la mesa (patrimonio neto = balance + chips)
+  hasCashedOut?: boolean; // true si ya retiró sus fichas al saldo (evita doble cobro)
+  isOnline?: boolean; // false si el socket se desconectó pero conserva el asiento
+  reducedTime?: boolean; // true si lleva offline desde el inicio de la mano (turno de 8s sin gracia)
   handName?: string; // Ej: "Pair", "Two Pair"
   totalContribution: number;
 }
@@ -37,6 +43,13 @@ export interface Room {
   deck: Card[];
   highestBet: number;
   winners?: { id: string; amount: number; handName: string; winningCards: string[] }[];
+  persistent?: boolean; // true = sala fija que nunca se borra (p.ej. la Sala Presidencial)
+  // --- Temporizador de turno (lo gestiona el servidor; el cliente solo pinta) ---
+  turnStartedAt?: number;   // timestamp (ms) en que empezó el turno actual
+  turnDuration?: number;    // ms de tiempo base del turno (15s normal / 8s offline reducido)
+  inGrace?: boolean;        // true si el jugador agotó el tiempo base y está en periodo de gracia
+  graceStartedAt?: number;  // timestamp (ms) en que empezó la gracia
+  graceDuration?: number;   // ms de gracia (5s online / 0 offline)
 }
 
 export const createDeck = (): Card[] => {
@@ -59,7 +72,7 @@ export const shuffleDeck = (deck: Card[]) => {
 };
 
 export const dealCards = (room: Room) => {
-  const activePlayers = room.players.filter(p => p.isActive);
+  const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating);
   activePlayers.forEach(p => {
     p.cards = [room.deck.pop()!, room.deck.pop()!];
     p.hasFolded = false;
