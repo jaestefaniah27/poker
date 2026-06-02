@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { socket } from '../utils';
 
 interface LoginScreenProps {
-  onLogin: (user: any, token: string) => void;
+  onLogin: (user: any, token: string, activeRoomId?: string) => void;
 }
 
 const LoginScreen = ({ onLogin }: LoginScreenProps) => {
