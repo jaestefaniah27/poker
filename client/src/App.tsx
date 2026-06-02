@@ -4,6 +4,26 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const socket: Socket = io('http://localhost:3001');
 
+// Entradas y divisores de ciegas — deben coincidir con el servidor (pokerEngine.ts).
+const STAKE_TIERS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000];
+// BB = buyIn/divisor, SB = BB/2. Divisor menor = ciegas más altas = partida más corta.
+const BLIND_DIVISORS = [20, 10, 5, 4];
+const DEFAULT_BLIND_DIVISOR = 10;
+const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Normal', 5: 'Rápida', 4: 'Express' };
+const blindsFor = (buyIn: number, divisor: number) => {
+  const bb = Math.round(buyIn / divisor);
+  return { smallBlind: Math.round(bb / 2), bigBlind: bb };
+};
+
+// Formato compacto de fichas: <1000 tal cual; >=1000 en miles con 'k' (1k, 2.5k, 100k).
+const fmtChips = (n: number | null | undefined): string => {
+  if (n == null) return '0';
+  if (Math.abs(n) < 1000) return String(n);
+  const v = n / 1000;
+  const s = Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/, '');
+  return s + 'k';
+};
+
 // Componente para una carta individual
 const PlayingCard = ({ rank, suit, hidden = false, className = '', style }: { rank?: string, suit?: string, hidden?: boolean, className?: string, style?: React.CSSProperties }) => {
   const isMini = className.includes('w-10');
@@ -161,7 +181,7 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: {
 
 // Temporizador "quesito" para el rival en turno: sector verde claro = tiempo restante, verde oscuro = gastado
 const TurnPie = ({ fraction, danger }: { fraction: number, danger?: boolean }) => {
-  const r = 15, cx = 17, cy = 17;
+  const r = 10, cx = 12, cy = 12;
   const bright = danger ? '#ef4444' : '#22c55e';
   const dark = danger ? '#7f1d1d' : '#14532d';
   const f = Math.max(0, Math.min(0.9999, fraction));
@@ -172,31 +192,10 @@ const TurnPie = ({ fraction, danger }: { fraction: number, danger?: boolean }) =
   const large = f > 0.5 ? 1 : 0;
   const sector = fraction <= 0 ? '' : `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
   return (
-    <svg width="34" height="34" viewBox="0 0 34 34" className="drop-shadow-md">
+    <svg width="24" height="24" viewBox="0 0 24 24" className="drop-shadow-md">
       <circle cx={cx} cy={cy} r={r} fill={dark} />
       {sector && <path d={sector} fill={bright} />}
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="1.5" />
-    </svg>
-  );
-};
-
-// Perímetro verde que rodea mi cuadro y se va consumiendo según el tiempo restante.
-// Usa el tamaño real (px) del cuadro para que el dash recorra el perímetro de verdad.
-const TurnPerimeter = ({ fraction, danger, w, h }: { fraction: number, danger?: boolean, w: number, h: number }) => {
-  if (!w || !h) return null;
-  const sw = 3, inset = sw / 2 + 0.5;
-  const rw = w - inset * 2, rh = h - inset * 2;
-  const rr = Math.min(22, rw / 2, rh / 2);
-  const perim = 2 * (rw - 2 * rr) + 2 * (rh - 2 * rr) + 2 * Math.PI * rr;
-  const f = Math.max(0, Math.min(1, fraction));
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="absolute inset-0 pointer-events-none z-20">
-      <rect
-        x={inset} y={inset} width={rw} height={rh} rx={rr} ry={rr} fill="none"
-        stroke={danger ? '#ef4444' : '#22c55e'} strokeWidth={sw} strokeLinecap="round"
-        strokeDasharray={perim} strokeDashoffset={perim * (1 - f)}
-        style={{ transition: 'stroke-dashoffset 0.12s linear' }}
-      />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="1" />
     </svg>
   );
 };
@@ -214,7 +213,7 @@ const BetChip = ({ amount, animateIn = false }: { amount: number, animateIn?: bo
     className="bg-[#2A2A2A] text-[#FDE047] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 border border-gray-700 shadow-md"
     style={animateIn ? { animation: 'chipPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both' } : {}}
   >
-    {amount}
+    {fmtChips(amount)}
   </div>
 );
 
@@ -260,6 +259,9 @@ function App() {
   const [rooms, setRooms] = useState<any[]>([]);
   const [currentRoom, setCurrentRoom] = useState<any | null>(null);
   const [newRoomName, setNewRoomName] = useState('');
+  const [showStakeSlider, setShowStakeSlider] = useState(false);
+  const [createTierIndex, setCreateTierIndex] = useState(STAKE_TIERS.length - 1);
+  const [createBlindDivisor, setCreateBlindDivisor] = useState(DEFAULT_BLIND_DIVISOR);
   const [showBetMenu, setShowBetMenu] = useState(false);
   const [betAmount, setBetAmount] = useState(2); 
   const [showRankingsModal, setShowRankingsModal] = useState(false);
@@ -274,6 +276,8 @@ function App() {
   const flyIdRef = useRef(0);
   const communityCardsRef = useRef<HTMLDivElement>(null);
   const winnerCardsRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const winnerNaturalRects = useRef<Map<string, DOMRect>>(new Map());
+  const communityNaturalRect = useRef<DOMRect | null>(null);
   const potRef = useRef<HTMLDivElement>(null);
   const myChipsRef = useRef<HTMLDivElement>(null);
   const myBetRef = useRef<HTMLDivElement>(null);
@@ -392,21 +396,18 @@ function App() {
     return () => clearInterval(id);
   }, [currentRoom?.id]);
 
-  // Calculate transform for winner cards to fly to community cards area
+  // Calculate transform for winner cards to fly to community cards area.
+  // Uses rects captured at press-start (winnerNaturalRects/communityNaturalRect) so that
+  // mid-transition re-renders don't recalculate from the already-moved position.
   const getWinnerCardTransform = useCallback((playerId: string) => {
-    if (!isPressingShowdown || !communityCardsRef.current) return {};
-    const winnerEl = winnerCardsRefs.current.get(playerId);
-    if (!winnerEl) return {};
+    if (!isPressingShowdown) return {};
+    const winnerRect = winnerNaturalRects.current.get(playerId);
+    const communityRect = communityNaturalRect.current;
+    if (!winnerRect || !communityRect) return {};
 
-    const communityRect = communityCardsRef.current.getBoundingClientRect();
-    const winnerRect = winnerEl.getBoundingClientRect();
-
-    // Target: just above community cards, centered. Gap = 6px (matches gap-1.5)
-    // Scale is center-origin, so bottom of scaled = (center + deltaY) + height*0.8
-    // We want that bottom = communityRect.top - 6
     const targetX = communityRect.left + communityRect.width / 2 - winnerRect.left - winnerRect.width / 2;
     const targetY = communityRect.top - 6 - winnerRect.top - winnerRect.height * 1.3;
-    const scaleRatio = 1.6; // w-10 (40px) -> w-16 (64px) = 1.6x
+    const scaleRatio = 1.6;
 
     return {
       transform: `translate(${targetX}px, ${targetY}px) scale(${scaleRatio})`,
@@ -502,10 +503,20 @@ function App() {
     setShowProfile(false);
   };
 
-  const createRoom = () => {
+  // Paso 1: validar nombre y desplegar el deslizador de entrada.
+  const openStakeSlider = () => {
     if (!newRoomName.trim()) return;
-    socket.emit('createRoom', { roomName: newRoomName }, (res: any) => {
+    setCreateTierIndex(STAKE_TIERS.length - 1);
+    setCreateBlindDivisor(DEFAULT_BLIND_DIVISOR);
+    setShowStakeSlider(true);
+  };
+
+  // Paso 2: crear la sala con la entrada y ciegas elegidas y entrar.
+  const confirmCreateRoom = () => {
+    if (!newRoomName.trim()) return;
+    socket.emit('createRoom', { roomName: newRoomName, tierIndex: createTierIndex, blindDivisor: createBlindDivisor }, (res: any) => {
       if (!res?.roomId) return;
+      setShowStakeSlider(false);
       sessionStorage.setItem('pokerRoomId', res.roomId);
       socket.emit('joinRoom', { roomId: res.roomId, token });
     });
@@ -625,7 +636,7 @@ function App() {
               <div className="flex flex-col items-end leading-tight">
                 <span className="text-xs text-gray-400 font-medium">{user.name}</span>
                 <span className={`font-mono text-sm ${user.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {user.balance < 0 ? `-$${Math.abs(user.balance)}` : `$${user.balance}`}
+                  {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
                 </span>
               </div>
               <button
@@ -665,8 +676,8 @@ function App() {
                   placeholder="Room name..."
                   className="flex-1 bg-background border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:border-gray-400 text-sm"
                 />
-                <button 
-                  onClick={createRoom}
+                <button
+                  onClick={openStakeSlider}
                   className="bg-white text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform"
                 >
                   Create
@@ -689,6 +700,13 @@ function App() {
                       <div>
                         <h3 className="font-semibold text-lg">{room.name}</h3>
                         <p className="text-xs text-gray-500">{room.playerCount} Players • {room.phase}</p>
+                        {room.bigBlind != null && (
+                          <p className="text-xs mt-0.5">
+                            <span className="text-emerald-300/80 font-semibold">{fmtChips(room.smallBlind)}/{fmtChips(room.bigBlind)}</span>
+                            <span className="text-gray-600"> • </span>
+                            <span className="text-rose-300/80 font-semibold">Buy-in {fmtChips(room.buyIn)}</span>
+                          </p>
+                        )}
                       </div>
                       <div className="bg-surfaceLight w-8 h-8 rounded-full flex items-center justify-center">
                         <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -701,6 +719,62 @@ function App() {
               )}
             </div>
           </div>
+
+          {/* Deslizador de entrada + switch de ciegas al crear sala */}
+          {showStakeSlider && (() => {
+            const buyIn = STAKE_TIERS[createTierIndex];
+            const { smallBlind, bigBlind } = blindsFor(buyIn, createBlindDivisor);
+            return (
+              <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setShowStakeSlider(false)}>
+                <div className="w-full max-w-md bg-surface rounded-3xl p-6 border border-surfaceLight" onClick={e => e.stopPropagation()}>
+                  <h2 className="text-center text-lg font-bold mb-1 truncate">{newRoomName}</h2>
+                  <p className="text-center text-xs text-gray-500 mb-6 uppercase tracking-wider">Elige la entrada</p>
+
+                  <div className="text-center mb-4">
+                    <p className="text-sm text-emerald-300/80 font-semibold">Ciegas</p>
+                    <p className="text-4xl font-extrabold text-emerald-200">{fmtChips(smallBlind)} / {fmtChips(bigBlind)}</p>
+                  </div>
+                  <div className="text-center mb-6">
+                    <p className="text-sm text-rose-300/80 font-semibold">Buy-in</p>
+                    <p className="text-4xl font-extrabold text-rose-300">{fmtChips(buyIn)}</p>
+                  </div>
+
+                  <p className="text-[11px] text-gray-500 mb-1 px-1">Entrada</p>
+                  <input
+                    type="range" min={0} max={STAKE_TIERS.length - 1} step={1}
+                    value={createTierIndex}
+                    onChange={e => setCreateTierIndex(parseInt(e.target.value))}
+                    className="w-full accent-rose-400 mb-2"
+                  />
+                  <div className="flex justify-between px-1 mb-5">
+                    {STAKE_TIERS.map((b, i) => (
+                      <button key={i} onClick={() => setCreateTierIndex(i)} className={`text-[9px] ${i === createTierIndex ? 'text-white font-bold' : 'text-gray-600'}`}>{fmtChips(b)}</button>
+                    ))}
+                  </div>
+
+                  {/* Switch de ciegas: profunda (BB=buyIn/20) -> express (BB=buyIn/4) */}
+                  <p className="text-[11px] text-gray-500 mb-1 px-1">Ciegas</p>
+                  <div className="flex gap-1.5 mb-6">
+                    {BLIND_DIVISORS.map(d => (
+                      <button
+                        key={d}
+                        onClick={() => setCreateBlindDivisor(d)}
+                        className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${d === createBlindDivisor ? 'bg-emerald-500 text-black' : 'bg-background border border-gray-700 text-gray-400'}`}
+                      >
+                        {BLIND_LABELS[d]}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowStakeSlider(false)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
+                    <button onClick={confirmCreateRoom} className="flex-1 bg-white text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Start Game</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
         </div>
       </div>
     );
@@ -720,7 +794,7 @@ function App() {
   const amBusted = myPlayer?.chips === 0 && !isAllInLive;
   const currentTurnPlayer = currentRoom.players[currentRoom.currentTurnIndex];
   const toCallAmount = currentRoom.highestBet - (myPlayer?.currentBet || 0);
-  const minRaise = currentRoom.highestBet > 0 ? currentRoom.highestBet * 2 : 2;
+  const minRaise = currentRoom.highestBet > 0 ? currentRoom.highestBet * 2 : (currentRoom.bigBlind || 2);
 
   // --- Fracción restante del temporizador del turno actual (la pinta el cliente con el reloj nowMs) ---
   const turnTimer = (() => {
@@ -735,6 +809,7 @@ function App() {
     return null;
   })();
   const showGraceWarning = isMyTurn && currentRoom.inGrace;
+  if (!isMyTurn && showBetMenu) setShowBetMenu(false);
 
   return (
     <div className="min-h-screen bg-background text-primary font-sans flex justify-center">
@@ -800,11 +875,11 @@ function App() {
                   const net = (viewPlayer.balance || 0) + (viewPlayer.chips || 0);
                   return (
                     <span className={`font-mono text-2xl font-bold ${net < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {net < 0 ? `-$${Math.abs(net)}` : `$${net}`}
+                      {net < 0 ? `-$${fmtChips(Math.abs(net))}` : `$${fmtChips(net)}`}
                     </span>
                   );
                 })()}
-                <span className="text-gray-500 text-xs">{viewPlayer.chips} fichas en mesa</span>
+                <span className="text-gray-500 text-xs">{fmtChips(viewPlayer.chips)} fichas en mesa</span>
               </div>
               <button
                 onClick={() => setViewPlayer(null)}
@@ -822,12 +897,27 @@ function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
+          <div className="flex flex-col items-center leading-tight">
+            <span className="text-sm font-semibold text-white truncate max-w-[160px]">{currentRoom.name}</span>
+            {currentRoom.bigBlind != null && (
+              <span className="text-[11px] text-emerald-300/80 font-semibold">{fmtChips(currentRoom.smallBlind)}/{fmtChips(currentRoom.bigBlind)}</span>
+            )}
+          </div>
+          <div className="w-6" />
         </header>
 
         <div 
           className="pt-2 px-4 flex justify-center gap-4 cursor-pointer select-none touch-none"
           onPointerDown={() => {
-            if (currentRoom.phase === 'showdown') setIsPressingShowdown(true);
+            if (currentRoom.phase === 'showdown') {
+              winnerCardsRefs.current.forEach((el, playerId) => {
+                winnerNaturalRects.current.set(playerId, el.getBoundingClientRect());
+              });
+              if (communityCardsRef.current) {
+                communityNaturalRect.current = communityCardsRef.current.getBoundingClientRect();
+              }
+              setIsPressingShowdown(true);
+            }
           }}
           onPointerUp={() => setIsPressingShowdown(false)}
           onPointerLeave={() => setIsPressingShowdown(false)}
@@ -869,7 +959,7 @@ function App() {
                 <span
                   className="text-[12px] text-gray-500 font-medium mb-1"
                   ref={(el) => { if (el) playerAnchorRefs.current.set(p.id, el); }}
-                >{p.chips}</span>
+                >{fmtChips(p.chips)}</span>
                 <div className="h-5 flex items-center justify-center">
                   {p.currentBet > 0 && (
                     <div ref={(el) => { if (el) opponentBetRefs.current.set(p.id, el); }}>
@@ -931,7 +1021,7 @@ function App() {
             })}
             
             <div className="absolute -bottom-8 right-0 text-white font-medium text-2xl" ref={potRef}>
-              {currentRoom.pot}
+              {fmtChips(currentRoom.pot)}
             </div>
 
             {currentRoom.phase === 'showdown' && currentRoom.winners && currentRoom.winners.length > 0 && (
@@ -945,7 +1035,7 @@ function App() {
         <div className="p-4 flex flex-col justify-end relative">
 
           {showGraceWarning && (
-            <div className="mb-3 mx-auto bg-red-600/90 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-lg animate-pulse">
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-red-600/90 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-lg animate-pulse z-30 whitespace-nowrap pointer-events-none">
               ¡Se te acaba el tiempo! Haz algo ya
             </div>
           )}
@@ -966,15 +1056,15 @@ function App() {
                   onChange={(e) => setBetAmount(parseInt(e.target.value))}
                   className="w-full accent-white"
                 />
-                <div className="flex justify-between mt-2 gap-2">
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, 2)))} className="flex-1 bg-gray-800 text-gray-400 text-xs py-1.5 rounded-full hover:text-white transition-colors">1 BB</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-gray-800 text-gray-400 text-xs py-1.5 rounded-full hover:text-white transition-colors">1/2 Pot</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, currentRoom.pot)))} className="flex-1 bg-gray-800 text-gray-400 text-xs py-1.5 rounded-full hover:text-white transition-colors">Pot</button>
-                  <button onClick={() => setBetAmount(myPlayer.chips)} className="flex-1 bg-gray-800 text-gray-400 text-xs py-1.5 rounded-full hover:text-white transition-colors">All-in</button>
+                <div className="flex mt-2 gap-2">
+                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min(myPlayer.chips, prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">+1 BB</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">1/2 Pot</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, currentRoom.pot)))} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">Pot</button>
+                  <button onClick={() => setBetAmount(myPlayer.chips)} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">All-in</button>
                 </div>
                 <div className="flex flex-1 rounded-2xl overflow-hidden bg-surfaceLight transition-colors shadow-sm mt-4">
                   <button className="hover:bg-gray-700 text-gray-300 px-4 py-3 font-semibold text-lg flex-1" onClick={() => handleAction('Raise', betAmount)}>
-                    Raise {betAmount}
+                    Raise {fmtChips(betAmount)}
                   </button>
                   <button onClick={() => setShowBetMenu(false)} className="px-4 text-gray-400">✕</button>
                 </div>
@@ -991,12 +1081,21 @@ function App() {
                     Recomprar 1000
                   </button>
                 )}
-                <button
-                  onClick={() => socket.emit('nextHand', { roomId: currentRoom.id })}
-                  className="bg-surfaceLight hover:bg-gray-700 text-white flex-1 max-w-[200px] py-3 rounded-full text-lg font-semibold transition-colors shadow-lg"
-                >
-                  Next hand
-                </button>
+                {(() => {
+                  const remaining = currentRoom.showdownAt
+                    ? Math.max(0, Math.ceil((5000 - (nowMs - currentRoom.showdownAt)) / 1000))
+                    : 0;
+                  const locked = remaining > 0;
+                  return (
+                    <button
+                      disabled={locked}
+                      onClick={() => { if (!locked) socket.emit('nextHand', { roomId: currentRoom.id }); }}
+                      className={`flex-1 max-w-[200px] py-3 rounded-full text-lg font-semibold transition-colors shadow-lg ${locked ? 'bg-surface text-gray-500 cursor-not-allowed' : 'bg-surfaceLight hover:bg-gray-700 text-white'}`}
+                    >
+                      {locked ? `Next hand (${remaining})` : 'Next hand'}
+                    </button>
+                  );
+                })()}
              </div>
           ) : amBusted ? (
             <div className="mb-6 flex flex-col items-center gap-2">
@@ -1027,7 +1126,7 @@ function App() {
                     onClick={() => handleAction('Call')}
                     className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1 transition-colors"
                   >
-                    All-in {myPlayer.chips}
+                    All-in {fmtChips(myPlayer.chips)}
                   </button>
                 ) : (
                   <>
@@ -1035,7 +1134,7 @@ function App() {
                       onClick={() => handleAction(toCallAmount === 0 ? 'Check' : 'Call')}
                       className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1 transition-colors"
                     >
-                      {toCallAmount === 0 ? 'Check' : `Call ${toCallAmount}`}
+                      {toCallAmount === 0 ? 'Check' : `Call ${fmtChips(toCallAmount)}`}
                     </button>
 
                     {/* Solo mostrar raise si el jugador puede subir por encima del highestBet actual */}
@@ -1047,7 +1146,7 @@ function App() {
                             onClick={() => handleAction('Raise', quickRaise)}
                             className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1 transition-colors"
                           >
-                            Raise {quickRaise}
+                            Raise {fmtChips(quickRaise)}
                           </button>
 
                           <button
@@ -1115,10 +1214,6 @@ function App() {
             </div>
 
             <div className="bg-surfaceLight rounded-3xl p-4 min-w-[140px] flex flex-col items-center shadow-2xl relative">
-              {/* Perímetro verde de mi tiempo de turno */}
-              {isMyTurn && turnTimer && (
-                <TurnPerimeter fraction={turnTimer.fraction} danger={turnTimer.danger} />
-              )}
               <div className="text-[10px] text-gray-400 mb-2 font-semibold">
                 {currentRoom.phase === 'waiting' ? 'Waiting' : (myPlayer?.handName || 'High Card')}
               </div>
@@ -1126,11 +1221,17 @@ function App() {
                 className="relative mb-1 cursor-pointer"
                 onClick={() => setViewPlayer(myPlayer || { name: user.name, avatar: user.avatar, userId: user.id, balance: user.balance, chips: 0 })}
               >
+                 {/* Temporizador "quesito" de mi propio turno — al lado para no tapar la jugada */}
+                 {isMyTurn && turnTimer && (
+                   <div className="absolute -right-7 top-1/2 -translate-y-1/2 z-20">
+                     <TurnPie fraction={turnTimer.fraction} danger={turnTimer.danger} />
+                   </div>
+                 )}
                  <Avatar seed={user.avatar} />
                  {isDealer(myPlayerIndex) && <DealerBadge />}
               </div>
               <div className="text-[11px] text-gray-400 font-bold mb-1">{user.name}</div>
-              <div className="text-white font-medium text-lg" ref={myChipsRef}>{myPlayer ? myPlayer.chips : user.balance}</div>
+              <div className="text-white font-medium text-lg" ref={myChipsRef}>{fmtChips(myPlayer ? myPlayer.chips : user.balance)}</div>
             </div>
           </div>
         </div>

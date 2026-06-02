@@ -8,7 +8,8 @@ import {
   createUser, getUser, getUserByName, isNameTaken, applyBalanceDelta,
   setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, UserRow
 } from './db';
-import { getRooms, createRoom, getRoom, joinRoom, leaveRoom, rebuy, startGame, handlePlayerAction, nextHand, endRound, advanceStreet, bettingClosed, contenders } from './roomManager';
+import { getRooms, createRoom, getRoom, joinRoom, leaveRoom, rebuy, startGame, handlePlayerAction, nextHand, endRound, advanceStreet, bettingClosed, contenders, touchRoom, evictAll, gatherBetsToPot } from './roomManager';
+import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 import { Room } from './pokerEngine';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -25,18 +26,23 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3001;
-const BUY_IN = 1000; // Fichas que se compran al sentarse o recomprar
 const REVEAL_DELAY = 1100; // ms entre revelado de calles para que se vea el progreso
+const COLLECT_DELAY = 700; // ms para que la animación de fichas al pot se complete antes de revelar cartas
+const SHOWDOWN_LOCK_MS = 5000; // ms mínimos en showdown antes de permitir "next hand"
 const BCRYPT_ROUNDS = 10;
 
 // Temporizador de turno
 const TURN_TIME = 15000;          // tiempo base normal
 const GRACE_TIME = 5000;          // gracia para jugadores conectados
 const OFFLINE_REDUCED_TIME = 8000; // turno reducido para offline persistente (sin gracia)
+const INACTIVITY_LIMIT = 5 * 60 * 1000; // 5 min sin nadie conectado -> se echa a todos y la sala queda vacía
+const SWEEP_INTERVAL = 30 * 1000;       // cada cuánto el barrido revisa salas inactivas
 
-// Sala fija que siempre está disponible para unirse
-const PRESIDENTIAL_ID = 'presidential';
-createRoom(PRESIDENTIAL_ID, 'Sala Presidencial', true);
+// Salas fijas siempre disponibles, una por nivel: mínima, intermedia y máxima.
+// tierIndex 0 = entrada mínima (1K), 4 = intermedia (50K), 7 = máxima (500K).
+createRoom('sala-taberna', 'La Taberna', true, 0);
+createRoom('sala-casino', 'Casino Real', true, 4);
+createRoom('sala-presidencial', 'Sala Presidencial', true, STAKE_TIERS.length - 1);
 
 // --- Sesiones: token opaco -> userId (en memoria; al reiniciar el server se piden credenciales de nuevo) ---
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -105,6 +111,9 @@ const clearTurnTimer = (roomId: string) => {
 
 const isBettingPhase = (room: Room) => ['preflop', 'flop', 'turn', 'river'].includes(room.phase);
 
+// ¿Queda algún jugador realmente conectado y sentado? Si no, el juego se pausa (no malgastar CPU/timers).
+const hasOnlinePlayers = (room: Room) => room.players.some(p => p.isActive && !p.hasCashedOut && p.isOnline !== false);
+
 // Arranca (o re-arranca) el cronómetro del jugador en turno. No reinicia si ya estaba armado para el mismo jugador,
 // salvo force=true (p.ej. al cambiar su estado online/offline).
 const armTurnTimer = (roomId: string, force = false) => {
@@ -121,6 +130,17 @@ const armTurnTimer = (roomId: string, force = false) => {
     room.turnDuration = undefined;
     return;
   }
+
+  // Nadie conectado: pausamos el juego (congelamos el turno) en vez de auto-jugar contra sillas vacías.
+  if (!hasOnlinePlayers(room)) {
+    clearTurnTimer(roomId);
+    room.inGrace = false;
+    room.turnStartedAt = undefined;
+    room.turnDuration = undefined;
+    room.paused = true;
+    return;
+  }
+  room.paused = false;
 
   const existing = turnTimers.get(roomId);
   if (!force && existing && existing.userId === p.userId && existing.turnIndex === idx) {
@@ -185,12 +205,16 @@ const processAction = (roomId: string, userId: string, action: string, amount?: 
   if (!signal) return false;
   const room = getRoom(roomId);
   if (!room) return false;
+  room.lastActivityAt = Date.now();
 
   if (signal === 'continue') {
     armTurnTimer(roomId, true); // turno del siguiente jugador
     broadcastRoom(roomId);
   } else {
     clearTurnTimer(roomId);
+    // Ronda cerrada: nadie está en turno durante el intervalo de revelado.
+    // Evita que el último en actuar siga viendo botones (confunde, parece que aún juega).
+    room.currentTurnIndex = -1;
     broadcastRoom(roomId); // mostramos apuestas yendo al bote
     setTimeout(() => resolveRound(roomId), REVEAL_DELAY);
   }
@@ -198,13 +222,13 @@ const processAction = (roomId: string, userId: string, action: string, amount?: 
 };
 
 // Resuelve una ronda tras cerrarse la apuesta. Recursivo con retardos para animar el revelado.
+// Secuencia: fichas vuelan al pot (COLLECT_DELAY) → cartas reveladas (REVEAL_DELAY) → siguiente calle o showdown.
 // Cubre TODOS los casos: fold-out, river->showdown y run-out automático cuando todos van all-in.
 const resolveRound = (roomId: string) => {
   const room = getRoom(roomId);
   if (!room) return;
 
   // Ya resuelto (p.ej. un abandono cerró la mano en síncrono mientras corría el run-out):
-  // no repetimos endRound para no borrar/duplicar ganadores ni el bote.
   if (room.phase === 'showdown') {
     clearTurnTimer(roomId);
     broadcastRoom(roomId);
@@ -219,29 +243,38 @@ const resolveRound = (roomId: string) => {
     return;
   }
 
-  // River cerrado: no quedan más calles que repartir -> showdown
-  if (room.phase === 'river') {
-    clearTurnTimer(roomId);
-    advanceStreet(room); // river -> showdown
-    endRound(room);
-    broadcastRoom(roomId);
-    return;
-  }
+  // Paso 1: juntar apuestas al pot → broadcast (el cliente anima fichas volando al pot)
+  gatherBetsToPot(room);
+  broadcastRoom(roomId);
 
-  // Repartir la siguiente calle (el cliente anima el revelado de las cartas nuevas)
-  advanceStreet(room);
+  // Paso 2: tras COLLECT_DELAY, revelar cartas (nueva calle o showdown)
+  setTimeout(() => {
+    const room2 = getRoom(roomId);
+    if (!room2 || room2.phase === 'showdown') { broadcastRoom(roomId); return; }
 
-  if (bettingClosed(room)) {
-    // Run-out: nadie puede ya decidir nada; encadenamos calles hasta el showdown
-    clearTurnTimer(roomId);
-    room.currentTurnIndex = -1;
-    broadcastRoom(roomId);
-    setTimeout(() => resolveRound(roomId), REVEAL_DELAY);
-  } else {
-    // Juego normal: los jugadores actúan en la nueva calle -> arrancamos su cronómetro
-    armTurnTimer(roomId, true);
-    broadcastRoom(roomId);
-  }
+    if (room2.phase === 'river') {
+      clearTurnTimer(roomId);
+      advanceStreet(room2); // river -> showdown
+      endRound(room2);
+      broadcastRoom(roomId);
+      return;
+    }
+
+    // Repartir la siguiente calle
+    advanceStreet(room2);
+
+    if (bettingClosed(room2)) {
+      // Run-out: nadie puede decidir nada; encadenamos calles
+      clearTurnTimer(roomId);
+      room2.currentTurnIndex = -1;
+      broadcastRoom(roomId);
+      setTimeout(() => resolveRound(roomId), REVEAL_DELAY);
+    } else {
+      // Juego normal: arrancamos cronómetro de la nueva calle
+      armTurnTimer(roomId, true);
+      broadcastRoom(roomId);
+    }
+  }, COLLECT_DELAY);
 };
 
 io.on('connection', (socket) => {
@@ -361,23 +394,27 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('createRoom', ({ roomName }, callback) => {
+  socket.on('createRoom', ({ roomName, tierIndex, blindDivisor }, callback) => {
+    const idx = Number.isInteger(tierIndex) && tierIndex >= 0 && tierIndex < STAKE_TIERS.length ? tierIndex : 0;
+    const div = BLIND_DIVISORS.includes(blindDivisor) ? blindDivisor : DEFAULT_BLIND_DIVISOR;
     const roomId = uuidv4();
-    createRoom(roomId, roomName);
+    createRoom(roomId, roomName, false, idx, div);
     callback({ roomId });
     io.emit('roomsUpdated', getRooms()); // Actualizamos lista global
   });
 
   socket.on('joinRoom', async ({ roomId, token }) => {
     try {
-      if (!getRoom(roomId)) return;
+      const room = getRoom(roomId);
+      if (!room) return;
 
       // Identidad autenticada por token (no confiamos en ningún id que mande el cliente)
       const dbUser = await authUser(token);
       if (!dbUser) return;
 
-      // Buy-in: el saldo persistente baja en BUY_IN; ese dinero pasa a ser fichas en la mesa
-      const offTableBalance = dbUser.balance - BUY_IN;
+      const buyIn = room.buyIn;
+      // El saldo NO bloquea: es solo un indicador de buen/mal jugador. Se permite entrar en negativo.
+      const offTableBalance = dbUser.balance - buyIn;
 
       const result = joinRoom(roomId, {
         id: socket.id,
@@ -385,7 +422,7 @@ io.on('connection', (socket) => {
         name: dbUser.name,
         avatar: dbUser.avatar || dbUser.id,
         cards: [],
-        chips: BUY_IN,
+        chips: buyIn,
         balance: offTableBalance,
         currentBet: 0,
         hasFolded: false,
@@ -399,14 +436,15 @@ io.on('connection', (socket) => {
 
       if (result === 'joined') {
         // Cobramos el buy-in de forma persistente y avisamos al cliente del nuevo saldo
-        const newBalance = await applyBalanceDelta(dbUser.id, -BUY_IN);
+        const newBalance = await applyBalanceDelta(dbUser.id, -buyIn);
         socket.emit('balanceUpdated', { balance: newBalance });
       } else {
         // Reconexión: no se cobra, devolvemos el saldo actual
         socket.emit('balanceUpdated', { balance: dbUser.balance });
-        // Si vuelve y es justo su turno, le restauramos sus tiempos normales (15s + gracia)
+        // Al volver, reanudamos el cronómetro del turno actual. Esto despausa el juego si estaba
+        // congelado por estar todos desconectados, y restaura tiempos normales si es su propio turno.
         const room2 = getRoom(roomId);
-        if (room2 && room2.currentTurnIndex >= 0 && room2.players[room2.currentTurnIndex]?.userId === dbUser.id) {
+        if (room2 && room2.currentTurnIndex >= 0) {
           armTurnTimer(roomId, true);
         }
       }
@@ -425,11 +463,12 @@ io.on('connection', (socket) => {
       if (!room) return;
       const player = room.players.find(p => p.id === socket.id);
       if (!player) return;
+      // Sin comprobación de saldo: se puede recomprar siempre, aunque deje el saldo en negativo.
 
-      const ok = rebuy(roomId, player.userId, BUY_IN);
+      const ok = rebuy(roomId, player.userId, room.buyIn);
       if (!ok) return;
 
-      const newBalance = await applyBalanceDelta(player.userId, -BUY_IN);
+      const newBalance = await applyBalanceDelta(player.userId, -room.buyIn);
       socket.emit('balanceUpdated', { balance: newBalance });
       broadcastRoom(roomId);
       io.emit('roomsUpdated', getRooms());
@@ -474,7 +513,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('nextHand', ({ roomId }) => {
+    const r = getRoom(roomId);
+    // Bloqueo de 5s desde el showdown: todos deben tener tiempo de ver el resultado.
+    if (r && r.phase === 'showdown' && Date.now() - (r.showdownAt || 0) < SHOWDOWN_LOCK_MS) {
+      broadcastRoom(roomId);
+      return;
+    }
     clearTurnTimer(roomId);
+    touchRoom(roomId); // empezar nueva mano cuenta como actividad
     if (nextHand(roomId)) {
       startGame(roomId); // Enlazamos iniciar la partida justo después de limpiar la mesa
       armTurnTimer(roomId, true);
@@ -495,13 +541,41 @@ io.on('connection', (socket) => {
       const p = room.players.find(pl => pl.id === socket.id && pl.isActive && !pl.hasCashedOut);
       if (!p) continue;
       p.isOnline = false;
-      // No re-armamos el cronómetro: si era su turno, onBaseExpire ya detecta que está offline
-      // (sin gracia) al dispararse. Solo avisamos a los demás de que está desconectado.
+      // Si era el último conectado, pausamos ya: paramos el cronómetro para no auto-jugar a solas.
+      if (!hasOnlinePlayers(room)) {
+        clearTurnTimer(r.id);
+        room.paused = true;
+        room.turnStartedAt = undefined;
+        room.turnDuration = undefined;
+        room.inGrace = false;
+      }
+      // Si quedan otros conectados y era su turno, onBaseExpire detectará que está offline (sin gracia).
       broadcastRoom(r.id);
     }
     io.emit('roomsUpdated', getRooms());
   });
 });
+
+// --- Barrido de inactividad: salas sin NADIE conectado durante INACTIVITY_LIMIT se vacían por completo ---
+// Devuelve las fichas de cada jugador a su saldo persistente y borra la sala (las persistentes solo se vacían).
+setInterval(async () => {
+  for (const r of getRooms()) {
+    const room = getRoom(r.id);
+    if (!room || room.players.length === 0) continue;
+    if (hasOnlinePlayers(room)) continue; // alguien conectado: no se toca
+    if (Date.now() - (room.lastActivityAt || 0) < INACTIVITY_LIMIT) continue;
+
+    clearTurnTimer(r.id);
+    const cashOuts = evictAll(r.id);
+    for (const c of cashOuts) {
+      try { await applyBalanceDelta(c.userId, c.chips); }
+      catch (e) { console.error('Error reintegrando fichas en limpieza por inactividad:', e); }
+    }
+    console.log(`Sala ${r.id} vaciada por inactividad: ${cashOuts.length} jugador(es) expulsado(s)`);
+    broadcastRoom(r.id); // por si quedara algún socket a la escucha
+    io.emit('roomsUpdated', getRooms());
+  }
+}, SWEEP_INTERVAL);
 
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);

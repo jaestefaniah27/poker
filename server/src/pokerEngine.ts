@@ -31,6 +31,23 @@ export interface Player {
 
 export type GamePhase = 'waiting' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
 
+// Entradas predefinidas (cada punto del deslizador al crear sala). Fuente de verdad del servidor;
+// el cliente duplica estos valores para pintar el deslizador.
+export const STAKE_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000];
+
+// Las ciegas se derivan de la entrada: BB = buyIn / divisor, SB = BB/2.
+// Divisor menor => ciegas más altas => menos fichas por ciega => partida más corta/agresiva.
+// Divisor mayor => ciegas más bajas => más juego ("jugosa"). Default 10.
+export const BLIND_DIVISORS: number[] = [20, 10, 5, 4]; // de "profunda" a "express"
+export const DEFAULT_BLIND_DIVISOR = 10;
+
+export const blindsFor = (buyIn: number, divisor: number): { smallBlind: number; bigBlind: number } => {
+  const d = BLIND_DIVISORS.includes(divisor) ? divisor : DEFAULT_BLIND_DIVISOR;
+  const bigBlind = Math.round(buyIn / d);
+  const smallBlind = Math.round(bigBlind / 2);
+  return { smallBlind, bigBlind };
+};
+
 export interface Room {
   id: string;
   name: string;
@@ -38,6 +55,9 @@ export interface Room {
   communityCards: Card[];
   pot: number;
   phase: GamePhase;
+  buyIn: number;          // fichas que cuesta sentarse / recomprar en esta sala
+  smallBlind: number;     // ciega pequeña fija de la sala
+  bigBlind: number;       // ciega grande fija de la sala
   currentTurnIndex: number;
   dealerIndex: number;
   deck: Card[];
@@ -50,6 +70,9 @@ export interface Room {
   inGrace?: boolean;        // true si el jugador agotó el tiempo base y está en periodo de gracia
   graceStartedAt?: number;  // timestamp (ms) en que empezó la gracia
   graceDuration?: number;   // ms de gracia (5s online / 0 offline)
+  showdownAt?: number;      // timestamp (ms) en que se entró en showdown (bloquea "next hand" 5s)
+  lastActivityAt?: number;  // timestamp (ms) de la última actividad real (acción/join) — para limpiar salas inactivas
+  paused?: boolean;         // true si el juego está congelado por no quedar nadie conectado
 }
 
 export const createDeck = (): Card[] => {

@@ -1,4 +1,4 @@
-import { Room, Player, createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames } from './pokerEngine';
+import { Room, Player, createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, STAKE_TIERS, blindsFor, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 
 const rooms: Map<string, Room> = new Map();
 
@@ -7,11 +7,16 @@ export const getRooms = () => {
     id: r.id,
     name: r.name,
     playerCount: r.players.filter(p => p.isActive).length,
-    phase: r.phase
+    phase: r.phase,
+    buyIn: r.buyIn,
+    smallBlind: r.smallBlind,
+    bigBlind: r.bigBlind
   }));
 };
 
-export const createRoom = (id: string, name: string, persistent = false): Room => {
+export const createRoom = (id: string, name: string, persistent = false, tierIndex = 0, blindDivisor = DEFAULT_BLIND_DIVISOR): Room => {
+  const buyIn = STAKE_TIERS[tierIndex] ?? STAKE_TIERS[0];
+  const { smallBlind, bigBlind } = blindsFor(buyIn, blindDivisor);
   const newRoom: Room = {
     id,
     name,
@@ -19,15 +24,56 @@ export const createRoom = (id: string, name: string, persistent = false): Room =
     communityCards: [],
     pot: 0,
     phase: 'waiting',
+    buyIn,
+    smallBlind,
+    bigBlind,
     currentTurnIndex: 0,
     dealerIndex: 0,
     deck: [],
     highestBet: 0,
     winners: [],
-    persistent
+    persistent,
+    lastActivityAt: Date.now()
   };
   rooms.set(id, newRoom);
   return newRoom;
+};
+
+// Marca actividad real en la sala (acción de jugador, join, nueva mano). Resetea el contador de inactividad.
+export const touchRoom = (roomId: string) => {
+  const room = rooms.get(roomId);
+  if (room) room.lastActivityAt = Date.now();
+};
+
+// Echa a TODOS de la sala (limpieza por inactividad). Devuelve los cash-outs pendientes para que la
+// capa de BD reintegre las fichas al saldo. Borra la sala si no es persistente; si lo es, la vacía.
+export const evictAll = (roomId: string): { userId: string; chips: number }[] => {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+  const cashOuts = room.players
+    .filter(p => p.isActive && !p.hasCashedOut && p.chips > 0)
+    .map(p => ({ userId: p.userId, chips: p.chips }));
+
+  if (!room.persistent) {
+    rooms.delete(roomId);
+    return cashOuts;
+  }
+
+  // Sala persistente: la vaciamos y reseteamos a estado inicial.
+  room.players = [];
+  room.communityCards = [];
+  room.pot = 0;
+  room.phase = 'waiting';
+  room.currentTurnIndex = -1;
+  room.highestBet = 0;
+  room.winners = [];
+  room.showdownAt = undefined;
+  room.turnStartedAt = undefined;
+  room.turnDuration = undefined;
+  room.inGrace = false;
+  room.paused = false;
+  room.lastActivityAt = Date.now();
+  return cashOuts;
 };
 
 export const getRoom = (id: string): Room | undefined => rooms.get(id);
@@ -36,6 +82,7 @@ export const getRoom = (id: string): Room | undefined => rooms.get(id);
 export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnected' | false => {
   const room = rooms.get(roomId);
   if (!room) return false;
+  room.lastActivityAt = Date.now();
 
   const isGameActive = room.phase !== 'waiting' && room.phase !== 'showdown';
   const existing = room.players.find(p => p.userId === player.userId);
@@ -173,8 +220,8 @@ export const startGame = (roomId: string) => {
   let sbActiveIndex = numActive === 2 ? dealerActiveIndex : (dealerActiveIndex + 1) % numActive;
   let bbActiveIndex = numActive === 2 ? (dealerActiveIndex + 1) % numActive : (dealerActiveIndex + 2) % numActive;
   
-  const sbAmount = 1;
-  const bbAmount = 2;
+  const sbAmount = room.smallBlind;
+  const bbAmount = room.bigBlind;
   
   if (activePlayers[sbActiveIndex]) {
     const amount = Math.min(sbAmount, activePlayers[sbActiveIndex].chips);
@@ -292,7 +339,7 @@ const advanceTurn = (room: Room) => {
   room.currentTurnIndex = count < numPlayers ? nextIndex : -1;
 };
 
-const gatherBetsToPot = (room: Room) => {
+export const gatherBetsToPot = (room: Room) => {
   room.players.forEach(p => {
     room.pot += p.currentBet;
     p.currentBet = 0;
@@ -366,6 +413,7 @@ export const endRound = (room: Room) => {
   gatherBetsToPot(room);
   room.phase = 'showdown';
   room.currentTurnIndex = -1; // En showdown ya no hay turno de nadie
+  room.showdownAt = Date.now(); // marca el inicio del showdown: "next hand" bloqueado 5s
   const activePlayers = room.players.filter(p => p.isActive && !p.hasFolded && !p.isSpectating);
 
   if (activePlayers.length === 1) {
