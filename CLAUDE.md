@@ -22,7 +22,21 @@ Client conecta a `http://localhost:3001` via Socket.IO.
 | `server/src/pokerEngine.ts` | Deck, reparto, evaluación de manos (pokersolver), fases del juego |
 | `server/src/roomManager.ts` | Lifecycle de salas, jugadores, turnos, blinds, apuestas |
 | `server/src/db.ts` | SQLite — usuarios, saldos, avatares, bcryptjs para contraseñas |
-| `client/src/App.tsx` | Componente monolítico (~1171 líneas) — toda la UI, socket events, estado, animaciones |
+| `shared/types.ts` | Tipos compartidos: Room, Player, PublicUser, Card |
+| `client/src/App.tsx` | Socket server, game state, game table render (~600 líneas) |
+| `client/src/utils.ts` | Constantes (STAKE_TIERS, BLIND_LABELS, HAND_RANKINGS), helpers (fmtChips, blindsFor, vibrate, playCheckSound) |
+| `client/src/components/PlayingCard.tsx` | Tarjeta individual (oculta o revelada, responsive) |
+| `client/src/components/Avatar.tsx` | Avatar DiceBear con seed |
+| `client/src/components/ProfileModal.tsx` | Modal cambiar nombre, avatar, contraseña |
+| `client/src/components/LoginScreen.tsx` | Login con usuario/password |
+| `client/src/components/Lobby.tsx` | Seleccionar/crear salas, configurar blinds |
+| `client/src/components/HandRankingsModal.tsx` | Ranking manos (tappable) |
+| `client/src/components/HandHistoryModal.tsx` | Historial manos jugadas (NEW) |
+| `client/src/components/TurnPie.tsx` | Timer "quesito" de turno |
+| `client/src/components/DealerBadge.tsx` | "D" en dealer |
+| `client/src/components/BetChip.tsx` | Ficha apuesta |
+| `client/src/components/MiniCard.tsx` | Carta pequeña para ranking |
+| `client/src/components/Slider.tsx` | Custom slider (NEW) |
 | `client/src/main.tsx` | Entry point React |
 
 ## Stack completo
@@ -43,10 +57,30 @@ Client conecta a `http://localhost:3001` via Socket.IO.
 ## Convenciones
 
 - UI en **español** (labels, mensajes, nombres de sala).
-- Mobile-first, max-width 420px.
+- Mobile-first, max-width 420px, safe-area-inset support.
 - Avatares: DiceBear API con seed basado en nombre de usuario.
 - Sin tests automatizados — verificar cambios con `/verify` o arrancando la app.
-- Componente App.tsx es monolítico — al extraer componentes, mantener props simples y socket en App.
+- **Socket.IO en App.tsx** — importado en utils.ts, los componentes emiten events via socket (pasado por props).
+- **Props simples**: evitar pasar toda la room/player — pasar lo mínimo necesario.
+- **Mobile UX**: vibration (vibrate function), sound effects (playCheckSound), notchsafe padding.
+
+## Estado actual (2026-06-02)
+
+**COMPLETADO:**
+- ✅ Monolito App.tsx (1283 líneas) → 12 componentes pequeños + utils
+- ✅ Tipo-seguro: shared/types.ts para Room/Player/PublicUser
+- ✅ Features mobile: vibração (ganador, turno), safe-area-inset
+- ✅ Nuevos componentes: HandHistoryModal, Slider custom
+- ✅ Sin `any` casts en componentes (antes 26 en App.tsx)
+
+**PENDIENTE:**
+- Error handling en server (solo 10 catch blocks, agregar try/catch en handlers)
+- Tests unitarios (pokerEngine.ts, roomManager.ts)
+- Chat en mesa
+- Estadísticas jugador (win rate, hands played)
+- Torneos/bracket
+- Migraciones DB formal
+- Rate limiting sockets
 
 ## Gotchas
 

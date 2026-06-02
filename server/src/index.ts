@@ -3,6 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { getRooms, createRoom, getRoom, evictAll } from './roomManager';
+import { getTournaments } from './tournamentManager';
 import { STAKE_TIERS } from './pokerEngine';
 import { setIo, clearTurnTimer, broadcastRoom, hasOnlinePlayers } from './socketHelpers';
 import { registerAllHandlers } from './handlers';
@@ -59,6 +60,10 @@ const bootServer = async () => {
 
 app.get('/rooms', (req, res) => {
   res.json(getRooms());
+});
+
+app.get('/tournaments', (req, res) => {
+  res.json(getTournaments());
 });
 
 io.on('connection', (socket) => {

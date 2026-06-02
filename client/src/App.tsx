@@ -10,14 +10,16 @@ import BetChip from './components/BetChip';
 import HandRankingsModal from './components/HandRankingsModal';
 import HandHistoryModal from './components/HandHistoryModal';
 import Slider from './components/Slider';
-import type { Room, Player, PublicUser } from '../../shared/types';
+import type { Room, Player, PublicUser, TournamentSummary } from '../../shared/types';
 
 function App() {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(() => !!sessionStorage.getItem('pokerToken'));
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [tournaments, setTournaments] = useState<TournamentSummary[]>([]);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(() => sessionStorage.getItem('tournamentId'));
   const [showBetMenu, setShowBetMenu] = useState(false);
   const [betAmount, setBetAmount] = useState(2);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
@@ -191,16 +193,44 @@ function App() {
       setUser(prev => prev ? { ...prev, balance } : prev);
     });
 
+    // Tournament events
+    socket.on('tournamentsUpdated', (list: TournamentSummary[]) => {
+      setTournaments(list);
+    });
+
+    socket.on('tournamentStarted', ({ tournamentId }: { tournamentId: string; roomId: string }) => {
+      setActiveTournamentId(tournamentId);
+      sessionStorage.setItem('tournamentId', tournamentId);
+    });
+
+    socket.on('tournamentEliminated', ({ position, totalPlayers }: any) => {
+      alert(`¡Eliminado! Posición: ${position}º de ${totalPlayers}`);
+    });
+
+    socket.on('tournamentFinished', () => {
+      setActiveTournamentId(null);
+      sessionStorage.removeItem('tournamentId');
+    });
+
+    // Initial data fetch
     fetch(`http://${window.location.hostname}:3001/rooms`)
       .then(res => res.json())
       .then(data => setRooms(data))
       .catch(console.error);
+
+    socket.emit('getTournaments', (res: any) => {
+      if (res?.tournaments) setTournaments(res.tournaments);
+    });
 
     return () => {
       socket.off('roomsUpdated');
       socket.off('roomUpdated');
       socket.off('playSound');
       socket.off('balanceUpdated');
+      socket.off('tournamentsUpdated');
+      socket.off('tournamentStarted');
+      socket.off('tournamentEliminated');
+      socket.off('tournamentFinished');
     };
   }, []);
 
@@ -246,11 +276,19 @@ function App() {
     socket.emit('joinRoom', { roomId, token });
   };
 
+  const joinTournamentRoom = (tournamentId: string) => {
+    setActiveTournamentId(tournamentId);
+    sessionStorage.setItem('tournamentId', tournamentId);
+    socket.emit('joinTournamentRoom', { tournamentId, token });
+  };
+
   const leaveRoom = () => {
     const roomId = currentRoom?.id;
     sessionStorage.removeItem('pokerRoomId');
+    sessionStorage.removeItem('tournamentId');
     setCurrentRoom(null);
     setShowLeaveConfirm(false);
+    setActiveTournamentId(null);
     if (roomId) socket.emit('leaveRoom', { roomId });
   };
 
@@ -285,7 +323,9 @@ function App() {
         user={user}
         token={token}
         rooms={rooms}
+        tournaments={tournaments}
         onJoinRoom={joinRoom}
+        onJoinTournamentRoom={joinTournamentRoom}
         onLogout={handleLogout}
         onUpdateUser={(u) => setUser(u)}
       />
@@ -408,6 +448,9 @@ function App() {
             </svg>
           </button>
           <div className="flex flex-col items-center leading-tight">
+            {activeTournamentId && (
+              <span className="text-[9px] text-amber-400 font-bold uppercase tracking-wider">🏆 Torneo</span>
+            )}
             <span className="text-sm font-semibold text-white truncate max-w-[160px]">{currentRoom.name}</span>
             {currentRoom.bigBlind != null && (
               <span className="text-[11px] text-emerald-300/80 font-semibold">{fmtChips(currentRoom.smallBlind)}/{fmtChips(currentRoom.bigBlind)}</span>
@@ -592,7 +635,7 @@ function App() {
               <>
                 {currentRoom.phase === 'showdown' ? (
                    <div className="flex justify-center w-full gap-2">
-                     {amBusted && (
+                     {amBusted && !activeTournamentId && (
                        <button
                          onClick={handleRebuy}
                          className="bg-emerald-600 hover:bg-emerald-500 text-white flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg"
@@ -608,7 +651,15 @@ function App() {
                        return (
                          <button
                            disabled={locked}
-                           onClick={() => { if (!locked) socket.emit('nextHand', { roomId: currentRoom?.id }); }}
+                           onClick={() => {
+                            if (!locked) {
+                              if (activeTournamentId) {
+                                socket.emit('tournamentNextHand', { tournamentId: activeTournamentId });
+                              } else {
+                                socket.emit('nextHand', { roomId: currentRoom?.id });
+                              }
+                            }
+                          }}
                            className={`flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg ${locked ? 'bg-surface text-gray-500 cursor-not-allowed' : 'bg-surfaceLight hover:bg-gray-700 text-white'}`}
                          >
                            {locked ? `Next hand (${remaining})` : 'Next hand'}
@@ -618,13 +669,17 @@ function App() {
                    </div>
                 ) : amBusted ? (
                   <div className="flex flex-col items-center gap-1">
-                    <button
-                      onClick={handleRebuy}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white w-full max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg"
-                    >
-                      Recomprar
-                    </button>
-                    <span className="text-gray-500 text-[10px] italic">Te quedaste sin fichas</span>
+                    {activeTournamentId ? (
+                      <span className="text-red-400 text-sm font-semibold">Eliminado del torneo</span>
+                    ) : (
+                      <button
+                        onClick={handleRebuy}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white w-full max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg"
+                      >
+                        Recomprar
+                      </button>
+                    )}
+                    <span className="text-gray-500 text-[10px] italic">{activeTournamentId ? '' : 'Te quedaste sin fichas'}</span>
                   </div>
                 ) : amSpectating ? (
                   <div className="flex justify-center h-10 items-center text-gray-400 text-xs italic">
