@@ -57,12 +57,9 @@ const bootServer = async () => {
   });
 };
 
-app.get('/rooms', (req, res) => {
-  res.json(getRooms());
-});
-
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
+  socket.emit('roomsUpdated', getRooms());
   registerAllHandlers(socket);
 });
 

@@ -192,11 +192,7 @@ function App() {
       setUser(prev => prev ? { ...prev, balance } : prev);
     });
 
-    // Initial data fetch
-    fetch(`http://${window.location.hostname}:3001/rooms`)
-      .then(res => res.json())
-      .then(data => setRooms(data))
-      .catch(console.error);
+
 
     return () => {
       socket.off('roomsUpdated');
