@@ -566,7 +566,7 @@ function App() {
       <div className="min-h-screen bg-background text-primary flex items-center justify-center p-4 font-sans">
         <div className="max-w-sm w-full space-y-8">
           <div className="text-center">
-            <h1 className="text-5xl font-extrabold tracking-tighter mb-2">Offsuit</h1>
+            <h1 className="text-5xl font-extrabold tracking-tighter mb-2">Poker</h1>
             <p className="text-gray-400 text-sm tracking-wide uppercase">Simple. Modern. Poker.</p>
           </div>
           <div className="bg-surface p-6 rounded-3xl shadow-2xl border border-surfaceLight space-y-4">
