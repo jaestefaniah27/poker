@@ -432,6 +432,12 @@ io.on('connection', (socket) => {
       });
 
       if (!result) return;
+      
+      if (result === 'full') {
+        socket.emit('error', 'La mesa está llena (máximo 8 jugadores).');
+        return;
+      }
+      
       socket.join(roomId);
 
       if (result === 'joined') {

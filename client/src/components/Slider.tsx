@@ -67,36 +67,8 @@ const Slider = ({ min, max, step = 1, value, onChange, accent = 'white', showBub
   return (
     <div
       className="relative w-full select-none"
-      style={{ touchAction: 'none', paddingTop: showBubble ? 28 : 8, paddingBottom: 8 }}
+      style={{ touchAction: 'none', paddingTop: 8, paddingBottom: 8 }}
     >
-      {/* Floating bubble */}
-      {showBubble && (
-        <div
-          className="absolute pointer-events-none transition-opacity duration-150"
-          style={{
-            left: `calc(${fraction * 100}% - 1px)`,
-            top: 0,
-            transform: 'translateX(-50%)',
-            opacity: dragging ? 1 : 0.7,
-          }}
-        >
-          <div
-            className="px-2.5 py-1 rounded-lg text-xs font-bold shadow-lg whitespace-nowrap"
-            style={{ background: colors.bubble, color: '#000' }}
-          >
-            {label}
-          </div>
-          <div
-            className="w-0 h-0 mx-auto"
-            style={{
-              borderLeft: '5px solid transparent',
-              borderRight: '5px solid transparent',
-              borderTop: `5px solid ${colors.bubble}`,
-            }}
-          />
-        </div>
-      )}
-
       {/* Track */}
       <div
         ref={trackRef}

@@ -300,8 +300,8 @@ function App() {
   if (!isMyTurn && showBetMenu) setShowBetMenu(false);
 
   return (
-    <div className="min-h-screen bg-background text-primary font-sans flex justify-center">
-      <div className="w-full max-w-md h-screen relative flex flex-col justify-between overflow-hidden">
+    <div className="bg-background text-primary font-sans flex justify-center" style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
+      <div className="w-full max-w-md h-full relative flex flex-col overflow-hidden">
 
         {flyingChips.map(chip => (
           <div
@@ -378,9 +378,10 @@ function App() {
           </div>
         )}
 
-        <header className="px-6 py-4 flex justify-between items-center mt-2">
+        {/* ===== ZONE 1: Header (fixed, shrink-0) ===== */}
+        <header className="flex-shrink-0 px-4 py-2 flex justify-between items-center">
           <button onClick={() => setShowLeaveConfirm(true)} className="text-white opacity-80 hover:opacity-100">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
@@ -390,11 +391,12 @@ function App() {
               <span className="text-[11px] text-emerald-300/80 font-semibold">{fmtChips(currentRoom.smallBlind)}/{fmtChips(currentRoom.bigBlind)}</span>
             )}
           </div>
-          <div className="w-6" />
+          <div className="w-5" />
         </header>
 
+        {/* ===== ZONE 2: Opponents (fixed, shrink-0) ===== */}
         <div
-          className="pt-2 px-4 flex justify-center gap-4 cursor-pointer select-none touch-none"
+          className="flex-shrink-0 px-2 flex justify-center gap-1.5 cursor-pointer select-none touch-none w-full max-w-full"
           onPointerDown={() => {
             if (currentRoom.phase === 'showdown') {
               winnerCardsRefs.current.forEach((el, playerId) => {
@@ -456,7 +458,7 @@ function App() {
 
                 {currentRoom.phase === 'showdown' && p.cards?.length > 0 && !hasFolded && currentRoom.winners?.[0]?.handName !== 'Won by fold' && (
                   <div
-                    className="flex gap-1 mt-2 relative"
+                    className="flex mt-1.5 relative"
                     ref={(el) => { if (el) winnerCardsRefs.current.set(p.id, el); }}
                     style={{
                       ...( currentRoom.winners?.some((w:any) => w.id === p.id)
@@ -475,8 +477,8 @@ function App() {
                          <PlayingCard
                            key={i}
                            rank={c.rank} suit={c.suit}
-                           className={`w-10 aspect-[2/3] shadow-sm animate-deal ${!isWinning ? 'brightness-[0.4]' : ''}`}
-                           style={{ animationDelay: `${i * 0.1}s` }}
+                           className={`w-8 aspect-[2/3] shadow-sm animate-deal ${!isWinning ? 'brightness-[0.4]' : ''} ${i > 0 ? '-ml-4' : ''}`}
+                           style={{ animationDelay: `${i * 0.1}s`, zIndex: i }}
                          />
                        );
                      })}
@@ -487,11 +489,12 @@ function App() {
           })}
         </div>
 
+        {/* ===== ZONE 3: Community cards (flex-1, fills remaining center) ===== */}
         <div
-          className="flex-1 flex flex-col justify-center items-center py-6 cursor-pointer"
+          className="flex-1 min-h-0 flex flex-col justify-center items-center cursor-pointer"
           onClick={() => setShowRankingsModal(true)}
         >
-          <div className="flex gap-1.5 mb-2 relative" ref={communityCardsRef}>
+          <div className="flex gap-1.5 relative" ref={communityCardsRef}>
             {[0, 1, 2, 3, 4].map(index => {
               const card = currentRoom.communityCards?.[index];
               if (card) {
@@ -505,34 +508,37 @@ function App() {
               return <PlayingCard key={index} hidden className="w-16 aspect-[2/3]" />;
             })}
 
-            <div className="absolute -bottom-8 right-0 text-white font-medium text-2xl" ref={potRef}>
+            <div className="absolute -bottom-8 right-0 text-white font-medium text-xl" ref={potRef}>
               {fmtChips(currentRoom.pot)}
             </div>
 
             {currentRoom.phase === 'showdown' && currentRoom.winners && currentRoom.winners.length > 0 && (
-               <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-white text-black px-4 py-1 rounded-full text-xs font-bold whitespace-nowrap shadow-md z-10">
+               <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-white text-black px-3 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-md z-10">
                  {currentRoom.winners[0].handName}
                </div>
             )}
           </div>
         </div>
 
-        <div className="p-4 flex flex-col justify-end relative">
+        {/* ===== ZONE 4: Bottom panel (flex-shrink-0, fixed height, never shifts) ===== */}
+        <div className="flex-shrink-0 px-3 relative flex flex-col">
 
           {showGraceWarning && (
-            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-red-600/90 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-lg animate-pulse z-30 whitespace-nowrap pointer-events-none">
-              ¡Se te acaba el tiempo! Haz algo ya
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-red-600/90 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg animate-pulse z-30 whitespace-nowrap pointer-events-none">
+              ¡Se te acaba el tiempo!
             </div>
           )}
 
-          {myPlayer?.currentBet > 0 && !showBetMenu && (
-             <div className="absolute top-0 left-6 -mt-8" ref={myBetRef}>
+          {myPlayer?.currentBet > 0 && (
+             <div className="absolute -top-12 left-4 z-20" ref={myBetRef}>
                <BetChip amount={myPlayer.currentBet} animateIn={animateBetIn} />
              </div>
           )}
 
-          {showBetMenu && (
-             <div className="mb-4">
+          {/* Actions zone: fixed height container — bet menu or buttons, same space */}
+          <div style={{ height: '110px' }} className="flex flex-col justify-end">
+            {showBetMenu ? (
+              <div>
                 <Slider
                   min={minRaise}
                   max={Math.max(minRaise, myPlayer?.chips || 1000)}
@@ -542,135 +548,140 @@ function App() {
                   accent="white"
                   formatLabel={fmtChips}
                 />
-                <div className="flex mt-2 gap-2">
-                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min(myPlayer.chips, prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">+1 BB</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">1/2 Pot</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, currentRoom.pot)))} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">Pot</button>
-                  <button onClick={() => setBetAmount(myPlayer.chips)} className="flex-1 bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-full text-sm font-semibold transition-colors">All-in</button>
+                <div className="flex gap-1.5 mt-1">
+                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min(myPlayer.chips, prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">+1 BB</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">1/2 Pot</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myPlayer.chips, currentRoom.pot)))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">Pot</button>
+                  <button onClick={() => setBetAmount(myPlayer.chips)} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">All-in</button>
                 </div>
-                <div className="flex flex-1 rounded-2xl overflow-hidden bg-surfaceLight transition-colors shadow-sm mt-4">
-                  <button className="hover:bg-gray-700 text-gray-300 px-4 py-3 font-semibold text-lg flex-1" onClick={() => handleAction('Raise', betAmount)}>
+                <div className="flex rounded-2xl overflow-hidden bg-surfaceLight shadow-sm mt-2">
+                  <button className="text-gray-300 px-4 py-2 font-semibold text-base flex-1" onClick={() => handleAction('Raise', betAmount)}>
                     Raise {fmtChips(betAmount)}
                   </button>
-                  <button onClick={() => setShowBetMenu(false)} className="px-4 text-gray-400">✕</button>
+                  <button onClick={() => setShowBetMenu(false)} className="px-3 text-gray-400">✕</button>
                 </div>
-             </div>
-          )}
-
-          {currentRoom.phase === 'showdown' ? (
-             <div className="mb-6 flex justify-center w-full gap-2">
-                {amBusted && (
-                  <button
-                    onClick={handleRebuy}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white flex-1 max-w-[200px] py-3 rounded-full text-lg font-semibold transition-colors shadow-lg"
-                  >
-                    Recomprar 1000
-                  </button>
-                )}
-                {(() => {
-                  const remaining = currentRoom.showdownAt
-                    ? Math.max(0, Math.ceil((5000 - (nowMs - currentRoom.showdownAt)) / 1000))
-                    : 0;
-                  const locked = remaining > 0;
-                  return (
-                    <button
-                      disabled={locked}
-                      onClick={() => { if (!locked) socket.emit('nextHand', { roomId: currentRoom.id }); }}
-                      className={`flex-1 max-w-[200px] py-3 rounded-full text-lg font-semibold transition-colors shadow-lg ${locked ? 'bg-surface text-gray-500 cursor-not-allowed' : 'bg-surfaceLight hover:bg-gray-700 text-white'}`}
-                    >
-                      {locked ? `Next hand (${remaining})` : 'Next hand'}
-                    </button>
-                  );
-                })()}
-             </div>
-          ) : amBusted ? (
-            <div className="mb-6 flex flex-col items-center gap-2">
-              <button
-                onClick={handleRebuy}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white w-full max-w-[200px] py-3 rounded-full text-lg font-semibold transition-colors shadow-lg"
-              >
-                Recomprar 1000
-              </button>
-              <span className="text-gray-500 text-xs italic">Te quedaste sin fichas</span>
-            </div>
-          ) : amSpectating ? (
-            <div className="flex justify-center mb-6 h-12 items-center text-gray-400 text-sm italic">
-              Joining next hand...
-            </div>
-          ) : currentRoom.phase !== 'waiting' && !showBetMenu ? (
-            isMyTurn ? (
-              <div className="flex gap-2 mb-6 h-12">
-                <button
-                  onClick={() => handleAction('Fold')}
-                  className="bg-surface hover:bg-gray-800 text-gray-400 px-4 rounded-full text-sm font-semibold transition-colors border border-transparent hover:border-gray-700"
-                >
-                  Fold
-                </button>
-
-                {myPlayer.chips <= toCallAmount ? (
-                  <button
-                    onClick={() => handleAction('Call')}
-                    className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1 transition-colors"
-                  >
-                    All-in {fmtChips(myPlayer.chips)}
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => handleAction(toCallAmount === 0 ? 'Check' : 'Call')}
-                      className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1 transition-colors"
-                    >
-                      {toCallAmount === 0 ? 'Check' : `Call ${fmtChips(toCallAmount)}`}
-                    </button>
-
-                    {(myPlayer.chips + myPlayer.currentBet) > currentRoom.highestBet && (() => {
-                      const quickRaise = Math.min(minRaise, myPlayer.chips + myPlayer.currentBet);
-                      return (
-                        <>
-                          <button
-                            onClick={() => handleAction('Raise', quickRaise)}
-                            className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1 transition-colors"
-                          >
-                            Raise {fmtChips(quickRaise)}
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              setBetAmount(Math.min(minRaise, myPlayer.chips + myPlayer.currentBet));
-                              setShowBetMenu(true);
-                            }}
-                            className="bg-surfaceLight hover:bg-gray-700 text-gray-200 w-12 rounded-full text-lg font-semibold transition-colors flex items-center justify-center"
-                          >
-                            ↑
-                          </button>
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
               </div>
             ) : (
-              <div className="flex justify-center mb-6 h-12 items-center text-gray-400 text-sm italic">
-                 {currentRoom.currentTurnIndex === -1
-                   ? 'Repartiendo cartas...'
-                   : `Waiting for ${currentTurnPlayer?.name}...`}
-              </div>
-            )
-          ) : (
-             currentRoom.players[0]?.userId === user?.id && currentRoom.phase === 'waiting' && (
-               <div className="flex justify-center mb-6">
-                 <button
-                  onClick={startGame}
-                  className="bg-white text-black px-10 py-4 rounded-full text-lg font-bold shadow-lg transition-transform active:scale-95"
-                 >
-                   Start Game
-                 </button>
-               </div>
-             )
-          )}
+              /* Action buttons / status — fill the same fixed space from the bottom */
+              <>
+                {currentRoom.phase === 'showdown' ? (
+                   <div className="flex justify-center w-full gap-2">
+                     {amBusted && (
+                       <button
+                         onClick={handleRebuy}
+                         className="bg-emerald-600 hover:bg-emerald-500 text-white flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg"
+                       >
+                         Recomprar
+                       </button>
+                     )}
+                     {(() => {
+                       const remaining = currentRoom.showdownAt
+                         ? Math.max(0, Math.ceil((5000 - (nowMs - currentRoom.showdownAt)) / 1000))
+                         : 0;
+                       const locked = remaining > 0;
+                       return (
+                         <button
+                           disabled={locked}
+                           onClick={() => { if (!locked) socket.emit('nextHand', { roomId: currentRoom.id }); }}
+                           className={`flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg ${locked ? 'bg-surface text-gray-500 cursor-not-allowed' : 'bg-surfaceLight hover:bg-gray-700 text-white'}`}
+                         >
+                           {locked ? `Next hand (${remaining})` : 'Next hand'}
+                         </button>
+                       );
+                     })()}
+                   </div>
+                ) : amBusted ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <button
+                      onClick={handleRebuy}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white w-full max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg"
+                    >
+                      Recomprar
+                    </button>
+                    <span className="text-gray-500 text-[10px] italic">Te quedaste sin fichas</span>
+                  </div>
+                ) : amSpectating ? (
+                  <div className="flex justify-center h-10 items-center text-gray-400 text-xs italic">
+                    Joining next hand...
+                  </div>
+                ) : currentRoom.phase !== 'waiting' && !showBetMenu ? (
+                  isMyTurn ? (
+                    <div className="flex gap-2 h-10">
+                      <button
+                        onClick={() => handleAction('Fold')}
+                        className="bg-surface hover:bg-gray-800 text-gray-400 px-3 rounded-full text-sm font-semibold border border-transparent hover:border-gray-700"
+                      >
+                        Fold
+                      </button>
 
-          <div className="flex justify-between items-end pb-4">
-            <div className="flex gap-2 ml-2 relative z-10">
+                      {myPlayer.chips <= toCallAmount ? (
+                        <button
+                          onClick={() => handleAction('Call')}
+                          className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1"
+                        >
+                          All-in {fmtChips(myPlayer.chips)}
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleAction(toCallAmount === 0 ? 'Check' : 'Call')}
+                            className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1"
+                          >
+                            {toCallAmount === 0 ? 'Check' : `Call ${fmtChips(toCallAmount)}`}
+                          </button>
+
+                          {(myPlayer.chips + myPlayer.currentBet) > currentRoom.highestBet && (() => {
+                            const quickRaise = Math.min(minRaise, myPlayer.chips + myPlayer.currentBet);
+                            return (
+                              <>
+                                <button
+                                  onClick={() => handleAction('Raise', quickRaise)}
+                                  className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-3 rounded-full text-sm font-semibold flex-1"
+                                >
+                                  Raise {fmtChips(quickRaise)}
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    setBetAmount(Math.min(minRaise, myPlayer.chips + myPlayer.currentBet));
+                                    setShowBetMenu(true);
+                                  }}
+                                  className="bg-surfaceLight hover:bg-gray-700 text-gray-200 w-10 rounded-full text-base font-semibold flex items-center justify-center"
+                                >
+                                  ↑
+                                </button>
+                              </>
+                            );
+                          })()}
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex justify-center h-10 items-center text-gray-400 text-xs italic">
+                       {currentRoom.currentTurnIndex === -1
+                         ? 'Repartiendo cartas...'
+                         : `Waiting for ${currentTurnPlayer?.name}...`}
+                    </div>
+                  )
+                ) : (
+                   currentRoom.players[0]?.userId === user?.id && currentRoom.phase === 'waiting' && (
+                     <div className="flex justify-center">
+                       <button
+                        onClick={startGame}
+                        className="bg-white text-black px-8 py-3 rounded-full text-base font-bold shadow-lg active:scale-95 transition-transform"
+                       >
+                         Start Game
+                       </button>
+                     </div>
+                   )
+                )}
+              </>
+            )}
+          </div>
+
+          {/* My cards + profile — always at the very bottom */}
+          <div className="flex justify-between items-end pb-1 mt-1">
+            <div className="flex gap-1.5 ml-1 relative z-10">
               {myPlayer?.cards?.length > 0 ? (
                 <>
                   {myPlayer.cards.map((c: any, i: number) => {
@@ -685,37 +696,37 @@ function App() {
                         key={i}
                         rank={c.rank}
                         suit={c.suit}
-                        className={`w-20 aspect-[2/3] shadow-xl transform hover:-translate-y-4 transition-all ${dimmed ? 'brightness-[0.35] saturate-50' : ''}`}
+                        className={`w-20 aspect-[2/3] shadow-xl ${dimmed ? 'brightness-[0.35] saturate-50' : ''}`}
                       />
                     );
                   })}
                 </>
               ) : (
                 <>
-                   <PlayingCard hidden className="w-24 aspect-[2/3]" />
-                   <PlayingCard hidden className="w-24 aspect-[2/3]" />
+                   <PlayingCard hidden className="w-20 aspect-[2/3]" />
+                   <PlayingCard hidden className="w-20 aspect-[2/3]" />
                 </>
               )}
             </div>
 
-            <div className="bg-surfaceLight rounded-3xl p-4 min-w-[140px] flex flex-col items-center shadow-2xl relative">
-              <div className="text-[10px] text-gray-400 mb-2 font-semibold">
+            <div className="bg-surfaceLight rounded-2xl p-3 min-w-[120px] flex flex-col items-center shadow-2xl relative">
+              <div className="text-[9px] text-gray-400 mb-1 font-semibold">
                 {currentRoom.phase === 'waiting' ? 'Waiting' : (myPlayer?.handName || 'High Card')}
               </div>
               <div
-                className="relative mb-1 cursor-pointer"
+                className="relative mb-0.5 cursor-pointer"
                 onClick={() => setViewPlayer(myPlayer || { name: user.name, avatar: user.avatar, userId: user.id, balance: user.balance, chips: 0 })}
               >
                  {isMyTurn && turnTimer && (
-                   <div className="absolute -right-7 top-1/2 -translate-y-1/2 z-20">
+                   <div className="absolute -right-6 top-1/2 -translate-y-1/2 z-20">
                      <TurnPie fraction={turnTimer.fraction} danger={turnTimer.danger} />
                    </div>
                  )}
                  <Avatar seed={user.avatar} />
                  {isDealer(myPlayerIndex) && <DealerBadge />}
               </div>
-              <div className="text-[11px] text-gray-400 font-bold mb-1">{user.name}</div>
-              <div className="text-white font-medium text-lg" ref={myChipsRef}>{fmtChips(myPlayer ? myPlayer.chips : user.balance)}</div>
+              <div className="text-[10px] text-gray-400 font-bold">{user.name}</div>
+              <div className="text-white font-medium text-base" ref={myChipsRef}>{fmtChips(myPlayer ? myPlayer.chips : user.balance)}</div>
             </div>
           </div>
         </div>

@@ -78,8 +78,8 @@ export const evictAll = (roomId: string): { userId: string; chips: number }[] =>
 
 export const getRoom = (id: string): Room | undefined => rooms.get(id);
 
-// 'joined' = nuevo asiento (hay que cobrar buy-in) | 'reconnected' = vuelve sin cobrar | false = error
-export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnected' | false => {
+// 'joined' = nuevo asiento (hay que cobrar buy-in) | 'reconnected' = vuelve sin cobrar | 'full' = mesa llena | false = error
+export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnected' | 'full' | false => {
   const room = rooms.get(roomId);
   if (!room) return false;
   room.lastActivityAt = Date.now();
@@ -99,6 +99,7 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
   }
 
   if (existing && existing.hasCashedOut) {
+    if (room.players.filter(p => p.isActive).length >= 8) return 'full';
     // Se había levantado de la mesa; vuelve a sentarse => nuevo buy-in
     existing.isActive = true;
     existing.id = player.id;
@@ -116,6 +117,8 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     existing.reducedTime = false;
     return 'joined';
   }
+
+  if (room.players.filter(p => p.isActive).length >= 8) return 'full';
 
   room.players.push({
     ...player,

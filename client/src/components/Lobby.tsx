@@ -38,7 +38,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   };
 
   return (
-    <div className="min-h-screen bg-background text-primary p-6 flex flex-col items-center font-sans">
+    <div className="min-h-screen bg-background text-primary p-6 flex flex-col items-center font-sans" style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 0px))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
       {showProfile && (
         <ProfileModal
           user={user}
@@ -117,7 +117,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                   >
                     <div>
                       <h3 className="font-semibold text-lg">{room.name}</h3>
-                      <p className="text-xs text-gray-500">{room.playerCount} Players • {room.phase}</p>
+                      <p className="text-xs text-gray-500">{room.playerCount}/8 Players • {room.phase}</p>
                       {room.bigBlind != null && (
                         <p className="text-xs mt-0.5">
                           <span className="text-emerald-300/80 font-semibold">{fmtChips(room.smallBlind)}/{fmtChips(room.bigBlind)}</span>

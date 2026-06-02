@@ -11,7 +11,8 @@
     overflow: hidden;
     position: fixed;
     width: 100%;
-    height: 100%;
+    height: 100dvh;
+    height: 100vh; /* fallback for older browsers */
     margin: 0;
     padding: 0;
     touch-action: none;
@@ -19,6 +20,13 @@
     user-select: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Support 100dvh in modern browsers */
+  @supports (height: 100dvh) {
+    html, body, #root {
+      height: 100dvh;
+    }
   }
 }
 
