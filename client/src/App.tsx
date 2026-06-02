@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { socket, fmtChips } from './utils';
+import { socket, fmtChips, playCheckSound, vibrate } from './utils';
 import LoginScreen from './components/LoginScreen';
 import Lobby from './components/Lobby';
 import PlayingCard from './components/PlayingCard';
@@ -108,6 +108,11 @@ function App() {
     const hasWinners = curr.phase === 'showdown' && curr.winners && curr.winners.length > 0;
     if (!hadWinners && hasWinners) {
       const myId = curr.players.find((p: any) => p.userId === user?.id)?.id;
+      
+      const amIWinner = curr.winners?.some((w: any) => w.id === myId);
+      if (amIWinner) vibrate([100, 50, 100, 50, 300]); // long happy vibration
+      else vibrate([100]); // short end hand vibration
+
       const outerTimeout = setTimeout(() => {
         const potEl = potRef.current;
         if (!potEl) return;
@@ -129,6 +134,15 @@ function App() {
         });
       }, 80);
       timeoutIds.push(outerTimeout);
+    }
+
+    const prevTurn = prev.currentTurnIndex;
+    const currTurn = curr.currentTurnIndex;
+    if (prevTurn !== currTurn && currTurn !== -1) {
+      const activePlayer = curr.players[currTurn];
+      if (activePlayer?.userId === user?.id) {
+        vibrate([200]); // my turn vibration
+      }
     }
 
     prevRoomRef.current = curr;
@@ -167,6 +181,10 @@ function App() {
       setCurrentRoom(room);
     });
 
+    socket.on('playSound', (sound) => {
+      if (sound === 'check') playCheckSound();
+    });
+
     socket.on('balanceUpdated', ({ balance }) => {
       setUser(prev => prev ? { ...prev, balance } : prev);
     });
@@ -179,6 +197,7 @@ function App() {
     return () => {
       socket.off('roomsUpdated');
       socket.off('roomUpdated');
+      socket.off('playSound');
       socket.off('balanceUpdated');
     };
   }, []);

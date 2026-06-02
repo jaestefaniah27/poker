@@ -27,3 +27,50 @@ export const HAND_RANKINGS = [
   { name: "Pair", desc: "2 cards of the same rank", cards: [{r:'K',s:'s'}, {r:'K',s:'d'}, {r:'9',s:'s'}, {r:'2',s:'c'}, {r:'10',s:'s'}], active: [0,1] },
   { name: "High Card", desc: "Highest-ranking card", cards: [{r:'A',s:'c'}, {r:'7',s:'s'}, {r:'3',s:'h'}, {r:'9',s:'s'}, {r:'2',s:'c'}], active: [0] },
 ];
+
+let audioCtx: AudioContext | null = null;
+
+const initAudio = () => {
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+    if (Ctx) audioCtx = new Ctx();
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+};
+
+export const playCheckSound = () => {
+  initAudio();
+  if (!audioCtx) return;
+  
+  const createKnock = (timeOffset: number) => {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    // Wood knock characteristics: short, low frequency punch
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime + timeOffset);
+    osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + timeOffset + 0.05);
+    
+    gain.gain.setValueAtTime(0, audioCtx.currentTime + timeOffset);
+    gain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + timeOffset + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + timeOffset + 0.05);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.start(audioCtx.currentTime + timeOffset);
+    osc.stop(audioCtx.currentTime + timeOffset + 0.06);
+  };
+
+  createKnock(0);
+  createKnock(0.15); // Second knock
+};
+
+export const vibrate = (pattern: number | number[]) => {
+  if (navigator.vibrate) {
+    navigator.vibrate(pattern);
+  }
+};

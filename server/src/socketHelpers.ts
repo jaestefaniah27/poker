@@ -156,6 +156,10 @@ export const processAction = (roomId: string, userId: string, action: string, am
   if (!room) return false;
   room.lastActivityAt = Date.now();
 
+  if (action === 'Check' && io) {
+    io.to(roomId).emit('playSound', 'check');
+  }
+
   if (signal === 'continue') {
     armTurnTimer(roomId, true);
     broadcastRoom(roomId);
