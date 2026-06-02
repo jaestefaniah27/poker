@@ -3,15 +3,17 @@ import { Room, Player, createDeck, shuffleDeck, dealCards, evaluateHands, update
 const rooms: Map<string, Room> = new Map();
 
 export const getRooms = () => {
-  return Array.from(rooms.values()).map(r => ({
-    id: r.id,
-    name: r.name,
-    playerCount: r.players.filter(p => p.isActive).length,
-    phase: r.phase,
-    buyIn: r.buyIn,
-    smallBlind: r.smallBlind,
-    bigBlind: r.bigBlind
-  }));
+  return Array.from(rooms.values())
+    .sort((a, b) => (a.persistent === b.persistent ? 0 : a.persistent ? 1 : -1))
+    .map(r => ({
+      id: r.id,
+      name: r.name,
+      playerCount: r.players.filter(p => p.isActive).length,
+      phase: r.phase,
+      buyIn: r.buyIn,
+      smallBlind: r.smallBlind,
+      bigBlind: r.bigBlind
+    }));
 };
 
 export const createRoom = (id: string, name: string, persistent = false, tierIndex = 0, blindDivisor = DEFAULT_BLIND_DIVISOR): Room => {
