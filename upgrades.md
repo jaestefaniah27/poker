@@ -24,7 +24,8 @@
 ## Mejoras Técnicas (solidez)
 - [x] **9. Error handling** — only 10 catch blocks in server. Socket handlers need try/catch wrapping to prevent one bad event crashing others.
   - *Hecho: Se ha añadido un wrapper global de try/catch (`wrapCallback` en `handlers/index.ts`) que envuelve automáticamente todos los eventos del socket.*
-- [ ] **10. Migraciones DB proper** — current ALTER TABLE with ignore-duplicate is fragile. Use versioned migration system.
+- [x] **10. Migraciones DB proper** — current ALTER TABLE with ignore-duplicate is fragile. Use versioned migration system.
+  - *Hecho: Implementado un sistema secuencial en `db.ts` que almacena el historial de migraciones en la propia SQLite. Soporta retrocompatibilidad.*
 - [ ] **11. Tests** — zero automated tests. At minimum: pokerEngine.ts hand evaluation, roomManager.ts betting logic.
 - [x] **12. Reconnection robustness** — rooms lost on server restart (except Sala Presidencial). Could serialize active games to DB.
   - *Hecho: Implementada la persistencia en `db.ts` con SQLite (WAL). Las salas se sincronizan en cada `broadcastRoom` y se restauran en el reinicio del servidor, garantizando que nadie pierda su asiento.*

@@ -13,28 +13,36 @@ const db = new sqlite3.Database(dbPath, (err) => {
     db.run('PRAGMA journal_mode = WAL');
     db.run('PRAGMA synchronous = FULL');
     db.run('PRAGMA foreign_keys = ON');
-    db.run(`CREATE TABLE IF NOT EXISTS users (
+  }
+});
+
+const MIGRATIONS = [
+  {
+    name: '001_initial_users',
+    sql: `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       balance INTEGER DEFAULT 0
-    )`, () => {
-      // Migraciones: añadimos columnas si no existen (ignoramos error de "duplicate column")
-      db.run('ALTER TABLE users ADD COLUMN password_hash TEXT', (err) => {
-        if (err && !err.message.includes('duplicate column')) console.error('Migration password_hash:', err.message);
-      });
-      db.run('ALTER TABLE users ADD COLUMN avatar TEXT', (err) => {
-        if (err && !err.message.includes('duplicate column')) console.error('Migration avatar:', err.message);
-      });
-    });
-    
-    db.run(`CREATE TABLE IF NOT EXISTS rooms (
+    )`
+  },
+  {
+    name: '002_add_password_hash',
+    sql: 'ALTER TABLE users ADD COLUMN password_hash TEXT',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '003_add_avatar',
+    sql: 'ALTER TABLE users ADD COLUMN avatar TEXT',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '004_rooms_table',
+    sql: `CREATE TABLE IF NOT EXISTS rooms (
       id TEXT PRIMARY KEY,
       data TEXT NOT NULL
-    )`, (err) => {
-      if (err) console.error('Error creating rooms table:', err.message);
-    });
+    )`
   }
-});
+];
 
 // Helper para usar Promesas en lugar de callbacks
 export const dbRun = (sql: string, params: any[] = []): Promise<void> => {
@@ -62,6 +70,34 @@ export const dbAll = <T>(sql: string, params: any[] = []): Promise<T[]> => {
       else resolve(rows as T[]);
     });
   });
+};
+
+export const initDB = async (): Promise<void> => {
+  await dbRun(`CREATE TABLE IF NOT EXISTS migrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL
+  )`);
+
+  const appliedRows = await dbAll<{ name: string }>('SELECT name FROM migrations');
+  const applied = new Set(appliedRows.map(r => r.name));
+
+  for (const m of MIGRATIONS) {
+    if (!applied.has(m.name)) {
+      try {
+        await dbRun(m.sql);
+      } catch (err: any) {
+        if (m.ignoreError && err.message.includes(m.ignoreError)) {
+          console.log(`Migration ${m.name} recovered from old schema (${m.ignoreError})`);
+        } else {
+          console.error(`Error running migration ${m.name}:`, err);
+          throw err;
+        }
+      }
+      await dbRun('INSERT INTO migrations (name) VALUES (?)', [m.name]);
+      console.log(`Migration applied: ${m.name}`);
+    }
+  }
+  console.log('Database migrations up to date.');
 };
 
 // Fila completa en BD (incluye el hash, que NUNCA sale del servidor)

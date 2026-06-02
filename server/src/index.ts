@@ -24,13 +24,16 @@ const PORT = process.env.PORT || 3001;
 const INACTIVITY_LIMIT = 5 * 60 * 1000;
 const SWEEP_INTERVAL = 30 * 1000;
 
-import { loadRoomsFromDB } from './db';
+import { initDB, loadRoomsFromDB } from './db';
 import { restoreRoom } from './roomManager';
 
 // Initialize io in helpers
 setIo(io);
 
 const bootServer = async () => {
+  console.log('Initializing database migrations...');
+  await initDB();
+
   console.log('Loading saved rooms from database...');
   const savedRooms = await loadRoomsFromDB();
   
