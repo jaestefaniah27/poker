@@ -46,6 +46,8 @@ Client conecta a `http://localhost:3001` via Socket.IO.
 
 ## Patrones clave
 
+- **Saldo solo indicativo**: el balance NUNCA bloquea jugar. Puede ser negativo. No añadir checks de "saldo insuficiente" en ninguna parte (mesas, torneos, buy-ins, recompras). El saldo es un marcador, no una restricción.
+- **Mesa = torneo unificado**: NO existe entidad "torneo" aparte. Toda partida es una `Room` creada con la misma UI. La ÚNICA diferencia configurable es `blindLevelDuration` (ms por nivel). Si es 0 → mesa cash (ciegas fijas, recompra permitida, no termina sola). Si >0 → modo torneo (`isTournament=true`): las ciegas suben cada `blindLevelDuration` (helper `nextBlinds`), sin recompra (busted=espectador), termina cuando un solo jugador conserva fichas (`checkTournamentEnd`) → `tournamentEnded=true` + pantalla `TournamentResults` con "Volver a empezar" (admin=`players[0]`, `restartTournament`) o "Salir". Winner-takes-all es automático (cash-out de fichas→saldo). Lógica en `roomManager.ts` (escalado/fin/reinicio) y `gameHandlers.ts` (eventos `nextHand`/`restartTournament`).
 - **Server-authoritative**: toda la lógica del juego vive en el servidor. El cliente solo renderiza estado.
 - **Anti-cheat**: cada socket recibe solo sus propias cartas. Cartas rivales se revelan únicamente en showdown.
 - **Persistencia**: SQLite con WAL mode. Salas en memoria (se pierden al reiniciar, excepto "Sala Presidencial").

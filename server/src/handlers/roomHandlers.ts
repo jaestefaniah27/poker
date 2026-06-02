@@ -7,12 +7,13 @@ import { applyBalanceDelta } from '../db';
 import { sanitizeInput } from '../security';
 
 export const roomHandlers = (socket: Socket) => {
-  socket.on('createRoom', ({ roomName, tierIndex, blindDivisor }, callback) => {
+  socket.on('createRoom', ({ roomName, tierIndex, blindDivisor, blindLevelDuration }, callback) => {
     const cleanRoomName = sanitizeInput(roomName?.trim() || 'Sala sin nombre');
     const idx = Number.isInteger(tierIndex) && tierIndex >= 0 && tierIndex < STAKE_TIERS.length ? tierIndex : 0;
     const div = BLIND_DIVISORS.includes(blindDivisor) ? blindDivisor : DEFAULT_BLIND_DIVISOR;
+    const dur = Number.isFinite(blindLevelDuration) && blindLevelDuration > 0 ? Math.floor(blindLevelDuration) : 0;
     const roomId = uuidv4();
-    createRoom(roomId, cleanRoomName, false, idx, div);
+    createRoom(roomId, cleanRoomName, false, idx, div, dur);
     callback({ roomId });
     io.emit('roomsUpdated', getRooms());
   });

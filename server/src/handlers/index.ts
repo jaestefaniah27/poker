@@ -2,7 +2,6 @@ import { Socket } from 'socket.io';
 import { authHandlers } from './authHandlers';
 import { roomHandlers } from './roomHandlers';
 import { gameHandlers } from './gameHandlers';
-import { tournamentHandlers } from './tournamentHandlers';
 
 const MAX_EVENTS_PER_SEC = 20;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -65,5 +64,4 @@ export const registerAllHandlers = (socket: Socket) => {
   authHandlers(socket);
   roomHandlers(socket);
   gameHandlers(socket);
-  tournamentHandlers(socket);
 };

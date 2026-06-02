@@ -1,5 +1,8 @@
 import { Socket } from 'socket.io';
-import { getRooms, getRoom, rebuy, startGame, touchRoom, nextHand } from '../roomManager';
+import {
+  getRooms, getRoom, rebuy, startGame, touchRoom, nextHand,
+  markBustedPlayers, checkTournamentEnd, restartTournament, clearBlindTimer
+} from '../roomManager';
 import { broadcastRoom, armTurnTimer, clearTurnTimer, processAction, io, SHOWDOWN_LOCK_MS } from '../socketHelpers';
 import { applyBalanceDelta } from '../db';
 
@@ -7,6 +10,7 @@ export const gameHandlers = (socket: Socket) => {
   socket.on('rebuy', async ({ roomId }) => {
     const room = getRoom(roomId);
     if (!room) return;
+    if (room.isTournament) return; // En torneo no hay recompra: busted = espectador
     const player = room.players.find(p => p.id === socket.id);
     if (!player) return;
 
@@ -37,10 +41,28 @@ export const gameHandlers = (socket: Socket) => {
 
   socket.on('nextHand', ({ roomId }) => {
     const r = getRoom(roomId);
-    if (r && r.phase === 'showdown' && Date.now() - (r.showdownAt || 0) < SHOWDOWN_LOCK_MS) {
+    if (!r) return;
+    if (r.phase === 'showdown' && Date.now() - (r.showdownAt || 0) < SHOWDOWN_LOCK_MS) {
       broadcastRoom(roomId);
       return;
     }
+
+    // Modo torneo: registrar orden de eliminación y comprobar fin (winner-takes-all)
+    if (r.isTournament) {
+      markBustedPlayers(roomId);
+      const end = checkTournamentEnd(roomId);
+      if (end.ended) {
+        r.tournamentEnded = true;
+        r.phase = 'waiting';
+        clearBlindTimer(roomId);
+        clearTurnTimer(roomId);
+        broadcastRoom(roomId);
+        io.to(roomId).emit('tournamentEnded', { roomId });
+        io.emit('roomsUpdated', getRooms());
+        return;
+      }
+    }
+
     clearTurnTimer(roomId);
     touchRoom(roomId);
     if (nextHand(roomId)) {
@@ -51,5 +73,24 @@ export const gameHandlers = (socket: Socket) => {
     } else {
       broadcastRoom(roomId);
     }
+  });
+
+  // Reiniciar torneo terminado con la misma config (solo el admin = primer jugador)
+  socket.on('restartTournament', async ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room || !room.isTournament || !room.tournamentEnded) return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player || room.players[0]?.userId !== player.userId) return;
+
+    const deltas = restartTournament(roomId);
+    for (const d of deltas) {
+      if (d.delta !== 0) {
+        const newBalance = await applyBalanceDelta(d.userId, d.delta);
+        io.to(d.socketId).emit('balanceUpdated', { balance: newBalance });
+      }
+    }
+    clearTurnTimer(roomId);
+    broadcastRoom(roomId);
+    io.emit('roomsUpdated', getRooms());
   });
 };

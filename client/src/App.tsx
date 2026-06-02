@@ -9,17 +9,16 @@ import DealerBadge from './components/DealerBadge';
 import BetChip from './components/BetChip';
 import HandRankingsModal from './components/HandRankingsModal';
 import HandHistoryModal from './components/HandHistoryModal';
+import TournamentResults from './components/TournamentResults';
 import Slider from './components/Slider';
-import type { Room, Player, PublicUser, TournamentSummary } from '../../shared/types';
+import type { Room, Player, PublicUser } from '../../shared/types';
 
 function App() {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(() => !!sessionStorage.getItem('pokerToken'));
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [tournaments, setTournaments] = useState<TournamentSummary[]>([]);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
-  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(() => sessionStorage.getItem('tournamentId'));
   const [showBetMenu, setShowBetMenu] = useState(false);
   const [betAmount, setBetAmount] = useState(2);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
@@ -193,44 +192,17 @@ function App() {
       setUser(prev => prev ? { ...prev, balance } : prev);
     });
 
-    // Tournament events
-    socket.on('tournamentsUpdated', (list: TournamentSummary[]) => {
-      setTournaments(list);
-    });
-
-    socket.on('tournamentStarted', ({ tournamentId }: { tournamentId: string; roomId: string }) => {
-      setActiveTournamentId(tournamentId);
-      sessionStorage.setItem('tournamentId', tournamentId);
-    });
-
-    socket.on('tournamentEliminated', ({ position, totalPlayers }: any) => {
-      alert(`¡Eliminado! Posición: ${position}º de ${totalPlayers}`);
-    });
-
-    socket.on('tournamentFinished', () => {
-      setActiveTournamentId(null);
-      sessionStorage.removeItem('tournamentId');
-    });
-
     // Initial data fetch
     fetch(`http://${window.location.hostname}:3001/rooms`)
       .then(res => res.json())
       .then(data => setRooms(data))
       .catch(console.error);
 
-    socket.emit('getTournaments', (res: any) => {
-      if (res?.tournaments) setTournaments(res.tournaments);
-    });
-
     return () => {
       socket.off('roomsUpdated');
       socket.off('roomUpdated');
       socket.off('playSound');
       socket.off('balanceUpdated');
-      socket.off('tournamentsUpdated');
-      socket.off('tournamentStarted');
-      socket.off('tournamentEliminated');
-      socket.off('tournamentFinished');
     };
   }, []);
 
@@ -276,19 +248,11 @@ function App() {
     socket.emit('joinRoom', { roomId, token });
   };
 
-  const joinTournamentRoom = (tournamentId: string) => {
-    setActiveTournamentId(tournamentId);
-    sessionStorage.setItem('tournamentId', tournamentId);
-    socket.emit('joinTournamentRoom', { tournamentId, token });
-  };
-
   const leaveRoom = () => {
     const roomId = currentRoom?.id;
     sessionStorage.removeItem('pokerRoomId');
-    sessionStorage.removeItem('tournamentId');
     setCurrentRoom(null);
     setShowLeaveConfirm(false);
-    setActiveTournamentId(null);
     if (roomId) socket.emit('leaveRoom', { roomId });
   };
 
@@ -303,6 +267,10 @@ function App() {
 
   const handleRebuy = () => {
     if (currentRoom) socket.emit('rebuy', { roomId: currentRoom?.id });
+  };
+
+  const handleRestartTournament = () => {
+    if (currentRoom) socket.emit('restartTournament', { roomId: currentRoom.id });
   };
 
   if (!user && initializing) {
@@ -323,9 +291,7 @@ function App() {
         user={user}
         token={token}
         rooms={rooms}
-        tournaments={tournaments}
         onJoinRoom={joinRoom}
-        onJoinTournamentRoom={joinTournamentRoom}
         onLogout={handleLogout}
         onUpdateUser={(u) => setUser(u)}
       />
@@ -343,6 +309,12 @@ function App() {
   const inBettingPhase = ['preflop', 'flop', 'turn', 'river'].includes(currentRoom.phase);
   const isAllInLive = inBettingPhase && !amSpectating && !myPlayer?.hasFolded;
   const amBusted = myPlayer?.chips === 0 && !isAllInLive;
+  const isTournament = !!currentRoom.isTournament;
+  const tournamentEnded = !!currentRoom.tournamentEnded;
+  const isAdmin = currentRoom.players[0]?.userId === user?.id;
+  const blindNextChangeAt = (isTournament && currentRoom.blindLevelStartedAt && currentRoom.blindLevelDuration)
+    ? currentRoom.blindLevelStartedAt + currentRoom.blindLevelDuration
+    : null;
   const currentTurnPlayer = currentRoom.players[currentRoom.currentTurnIndex];
   const toCallAmount = currentRoom.highestBet - (myPlayer?.currentBet || 0);
   const minRaise = currentRoom.highestBet > 0 ? currentRoom.highestBet * 2 : (currentRoom.bigBlind || 2);
@@ -441,20 +413,31 @@ function App() {
         )}
 
         {/* ===== ZONE 1: Header (fixed, shrink-0) ===== */}
-        <header className="flex-shrink-0 px-4 py-2 flex justify-between items-center relative z-40">
+        <header className="flex-shrink-0 px-4 py-2 flex justify-between items-center relative z-40 bg-black">
           <button onClick={() => setShowLeaveConfirm(true)} className="text-white opacity-80 hover:opacity-100">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
           <div className="flex flex-col items-center leading-tight">
-            {activeTournamentId && (
+            {isTournament && (
               <span className="text-[9px] text-amber-400 font-bold uppercase tracking-wider">🏆 Torneo</span>
             )}
             <span className="text-sm font-semibold text-white truncate max-w-[160px]">{currentRoom.name}</span>
             {currentRoom.bigBlind != null && (
               <span className="text-[11px] text-emerald-300/80 font-semibold">{fmtChips(currentRoom.smallBlind)}/{fmtChips(currentRoom.bigBlind)}</span>
             )}
+            {blindNextChangeAt && (() => {
+              const secsLeft = Math.max(0, Math.ceil((blindNextChangeAt - nowMs) / 1000));
+              const mins = Math.floor(secsLeft / 60);
+              const secs = secsLeft % 60;
+              const isUrgent = secsLeft <= 30;
+              return (
+                <span className={`text-[10px] font-mono font-semibold ${isUrgent ? 'text-red-400 animate-pulse' : 'text-amber-300/70'}`}>
+                  Nivel {(currentRoom.blindLevel || 0) + 1} · sube en {mins}:{secs.toString().padStart(2, '0')}
+                </span>
+              );
+            })()}
           </div>
           <button onClick={() => setShowHistoryModal(true)} className="text-white opacity-80 hover:opacity-100">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -465,7 +448,7 @@ function App() {
 
         {/* ===== ZONE 2: Opponents (fixed, shrink-0) ===== */}
         <div
-          className="flex-shrink-0 px-2 flex justify-center gap-1.5 cursor-pointer select-none touch-none w-full max-w-full"
+          className="flex-shrink-0 px-2 pt-6 flex justify-center gap-1.5 cursor-pointer select-none touch-none w-full max-w-full"
           onPointerDown={() => {
             if (currentRoom.phase === 'showdown') {
               winnerCardsRefs.current.forEach((el, playerId) => {
@@ -635,7 +618,7 @@ function App() {
               <>
                 {currentRoom.phase === 'showdown' ? (
                    <div className="flex justify-center w-full gap-2">
-                     {amBusted && !activeTournamentId && (
+                     {amBusted && !isTournament && (
                        <button
                          onClick={handleRebuy}
                          className="bg-emerald-600 hover:bg-emerald-500 text-white flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg"
@@ -652,25 +635,19 @@ function App() {
                          <button
                            disabled={locked}
                            onClick={() => {
-                            if (!locked) {
-                              if (activeTournamentId) {
-                                socket.emit('tournamentNextHand', { tournamentId: activeTournamentId });
-                              } else {
-                                socket.emit('nextHand', { roomId: currentRoom?.id });
-                              }
-                            }
+                            if (!locked) socket.emit('nextHand', { roomId: currentRoom?.id });
                           }}
                            className={`flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg ${locked ? 'bg-surface text-gray-500 cursor-not-allowed' : 'bg-surfaceLight hover:bg-gray-700 text-white'}`}
                          >
-                           {locked ? `Next hand (${remaining})` : 'Next hand'}
+                           {locked ? `Siguiente mano (${remaining})` : 'Siguiente mano'}
                          </button>
                        );
                      })()}
                    </div>
                 ) : amBusted ? (
                   <div className="flex flex-col items-center gap-1">
-                    {activeTournamentId ? (
-                      <span className="text-red-400 text-sm font-semibold">Eliminado del torneo</span>
+                    {isTournament ? (
+                      <span className="text-red-400 text-sm font-semibold">Eliminado · espectador</span>
                     ) : (
                       <button
                         onClick={handleRebuy}
@@ -679,7 +656,7 @@ function App() {
                         Recomprar
                       </button>
                     )}
-                    <span className="text-gray-500 text-[10px] italic">{activeTournamentId ? '' : 'Te quedaste sin fichas'}</span>
+                    <span className="text-gray-500 text-[10px] italic">{isTournament ? 'Sigues hasta el final del torneo' : 'Te quedaste sin fichas'}</span>
                   </div>
                 ) : amSpectating ? (
                   <div className="flex justify-center h-10 items-center text-gray-400 text-xs italic">
@@ -812,6 +789,16 @@ function App() {
           </div>
         </div>
       </div>
+
+      {tournamentEnded && (
+        <TournamentResults
+          room={currentRoom}
+          currentUserId={user.id}
+          isAdmin={isAdmin}
+          onRestart={handleRestartTournament}
+          onExit={leaveRoom}
+        />
+      )}
 
       {showRankingsModal && (
         <HandRankingsModal

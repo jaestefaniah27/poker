@@ -1,0 +1,6 @@
+Archivos modificados: shared/types.ts (añadido TournamentRequest + pendingRequests), server/src/tournamentManager.ts (sistema request/approve/reject), server/src/handlers/tournamentHandlers.ts (reescrito con nuevos eventos), server/src/handlers/authHandlers.ts (tagSocket), client/src/components/Lobby.tsx (rediseño completo: toggle Mesa/Torneo, lista mixta, modal inline), client/src/App.tsx (tournaments state, joinTournamentRoom, eliminado showTournaments/TournamentLobby).
+
+Pendiente: TournamentLobby.tsx es fichero huérfano (ya no se usa, borrar). Blind escalation en la mesa no muestra contador visual de nivel/tiempo al jugador. El evento tournamentStarted en App.tsx llama joinTournamentRoom pero la sala se crea en el servidor sin que los jugadores hayan hecho join previo al socket room — falta verificar que broadcastRoom les llega correctamente tras joinTournamentRoom. Sin tests reales aún.
+
+Siguiente paso: Arrancar servidor + cliente con /run, crear torneo con dos usuarios, verificar flujo completo solicitud→aprobación→inicio→juego→eliminación→premio.
+

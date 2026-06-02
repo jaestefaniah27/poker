@@ -1,9 +1,18 @@
-import { Player, Room, STAKE_TIERS, blindsFor, HandHistory } from '../../shared/types';
+import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 import { deleteRoomFromDB } from './db';
+import { broadcastRoom } from './socketHelpers';
 import { v4 as uuidv4 } from 'uuid';
 
 const rooms: Map<string, Room> = new Map();
+
+// Timers de escalado de ciegas (solo salas en modo torneo)
+const blindTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+export const clearBlindTimer = (roomId: string) => {
+  const t = blindTimers.get(roomId);
+  if (t) { clearTimeout(t); blindTimers.delete(roomId); }
+};
 
 export const getRooms = () => {
   return Array.from(rooms.values())
@@ -15,11 +24,16 @@ export const getRooms = () => {
       phase: r.phase,
       buyIn: r.buyIn,
       smallBlind: r.smallBlind,
-      bigBlind: r.bigBlind
+      bigBlind: r.bigBlind,
+      isTournament: !!r.isTournament,
+      blindLevelDuration: r.blindLevelDuration || 0
     }));
 };
 
-export const createRoom = (id: string, name: string, persistent = false, tierIndex = 0, blindDivisor = DEFAULT_BLIND_DIVISOR): Room => {
+export const createRoom = (
+  id: string, name: string, persistent = false, tierIndex = 0,
+  blindDivisor = DEFAULT_BLIND_DIVISOR, blindLevelDuration = 0
+): Room => {
   const buyIn = STAKE_TIERS[tierIndex] ?? STAKE_TIERS[0];
   const { smallBlind, bigBlind } = blindsFor(buyIn, blindDivisor);
   const newRoom: Room = {
@@ -38,7 +52,13 @@ export const createRoom = (id: string, name: string, persistent = false, tierInd
     highestBet: 0,
     winners: [],
     persistent,
-    lastActivityAt: Date.now()
+    lastActivityAt: Date.now(),
+    isTournament: blindLevelDuration > 0,
+    blindLevelDuration,
+    blindLevel: 0,
+    startingChips: buyIn,
+    startingSmallBlind: smallBlind,
+    startingBigBlind: bigBlind
   };
   rooms.set(id, newRoom);
   return newRoom;
@@ -64,6 +84,7 @@ export const evictAll = (roomId: string): { userId: string; chips: number }[] =>
     .map(p => ({ userId: p.userId, chips: p.chips }));
 
   if (!room.persistent) {
+    clearBlindTimer(roomId);
     rooms.delete(roomId);
     deleteRoomFromDB(roomId).catch(e => console.error('DB delete error', e));
     return cashOuts;
@@ -181,6 +202,7 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
 
   // Clean up empty non-persistent room
   if (room.players.every(p => !p.isActive) && !room.persistent) {
+    clearBlindTimer(roomId);
     rooms.delete(roomId);
     deleteRoomFromDB(roomId).catch(e => console.error('DB delete error', e));
   }
@@ -260,7 +282,10 @@ export const startGame = (roomId: string) => {
   // Turno es del siguiente al BB
   let turnActiveIndex = (bbActiveIndex + 1) % numActive;
   room.currentTurnIndex = room.players.findIndex(p => p.id === activePlayers[turnActiveIndex].id);
-  
+
+  // Modo torneo: arrancar reloj de ciegas en la primera mano (idempotente)
+  startBlindEscalation(room.id);
+
   return true;
 };
 
@@ -541,7 +566,7 @@ export const endRound = (room: Room) => {
 export const nextHand = (roomId: string) => {
   const room = rooms.get(roomId);
   if (!room || room.phase !== 'showdown') return false;
-  
+
   room.phase = 'waiting';
   room.players.forEach(p => {
     p.currentBet = 0;
@@ -551,4 +576,96 @@ export const nextHand = (roomId: string) => {
   room.highestBet = 0;
   room.winners = [];
   return true;
+};
+
+// ---- Modo torneo: escalado de ciegas ----
+
+// Arranca el reloj de ciegas en la primera mano (idempotente).
+export const startBlindEscalation = (roomId: string) => {
+  const room = rooms.get(roomId);
+  if (!room || !room.isTournament || !room.blindLevelDuration) return;
+  if (room.blindLevelStartedAt) return; // ya en marcha
+  room.blindLevelStartedAt = Date.now();
+  scheduleBlindEscalation(roomId);
+};
+
+const scheduleBlindEscalation = (roomId: string) => {
+  const room = rooms.get(roomId);
+  if (!room || !room.isTournament || !room.blindLevelDuration) return;
+  clearBlindTimer(roomId);
+  const t = setTimeout(() => escalateBlinds(roomId), room.blindLevelDuration);
+  blindTimers.set(roomId, t);
+};
+
+const escalateBlinds = (roomId: string) => {
+  const room = rooms.get(roomId);
+  if (!room || !room.isTournament || room.tournamentEnded) return;
+  const nb = nextBlinds(room.bigBlind);
+  room.smallBlind = nb.smallBlind;
+  room.bigBlind = nb.bigBlind;
+  room.blindLevel = (room.blindLevel || 0) + 1;
+  room.blindLevelStartedAt = Date.now();
+  scheduleBlindEscalation(roomId);
+  broadcastRoom(roomId);
+};
+
+// Marca a los jugadores recién eliminados (chips 0) con su orden de bust.
+export const markBustedPlayers = (roomId: string) => {
+  const room = rooms.get(roomId);
+  if (!room || !room.isTournament) return;
+  room.players.forEach(p => {
+    if (p.isActive && p.chips <= 0 && p.bustedSeq == null) {
+      room.bustCounter = (room.bustCounter || 0) + 1;
+      p.bustedSeq = room.bustCounter;
+    }
+  });
+};
+
+// El torneo termina cuando, habiendo empezado (>=2 jugadores), solo 1 conserva fichas.
+export const checkTournamentEnd = (roomId: string): { ended: boolean; winner?: Player } => {
+  const room = rooms.get(roomId);
+  if (!room || !room.isTournament) return { ended: false };
+  const active = room.players.filter(p => p.isActive);
+  const withChips = active.filter(p => p.chips > 0);
+  if (active.length >= 2 && withChips.length <= 1) {
+    return { ended: true, winner: withChips[0] };
+  }
+  return { ended: false };
+};
+
+// Reinicia el torneo con la misma config. Devuelve deltas de saldo a aplicar en BD.
+export const restartTournament = (roomId: string): { userId: string; socketId: string; delta: number }[] => {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+  clearBlindTimer(roomId);
+  const buyIn = room.startingChips ?? room.buyIn;
+  const deltas: { userId: string; socketId: string; delta: number }[] = [];
+  room.players.forEach(p => {
+    if (!p.isActive) return;
+    const delta = p.chips - buyIn; // banca ganancias / cobra nueva entrada
+    deltas.push({ userId: p.userId, socketId: p.id, delta });
+    p.balance += delta;
+    p.chips = buyIn;
+    p.isSpectating = false;
+    p.hasCashedOut = false;
+    p.bustedSeq = undefined;
+    p.cards = [];
+    p.currentBet = 0;
+    p.hasFolded = false;
+    p.hasActed = false;
+    p.totalContribution = 0;
+    p.handName = '';
+  });
+  room.tournamentEnded = false;
+  room.phase = 'waiting';
+  room.blindLevel = 0;
+  room.bustCounter = 0;
+  room.blindLevelStartedAt = undefined;
+  room.smallBlind = room.startingSmallBlind ?? room.smallBlind;
+  room.bigBlind = room.startingBigBlind ?? room.bigBlind;
+  room.communityCards = [];
+  room.pot = 0;
+  room.highestBet = 0;
+  room.winners = [];
+  return deltas;
 };

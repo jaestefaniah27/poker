@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
 import { sanitizeInput } from '../security';
-import { tagSocket } from './tournamentHandlers';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -27,7 +26,6 @@ export const authHandlers = (socket: Socket) => {
 
     if (!user) { callback({ error: 'No se pudo crear el usuario' }); return; }
     const token = issueToken(user.id);
-    tagSocket(socket, user.id);
     console.log(`Login: ${user.name} -> ${user.id} (balance ${user.balance})`);
     callback({ user: toPublicUser(user), token });
   });
@@ -35,7 +33,6 @@ export const authHandlers = (socket: Socket) => {
   socket.on('resumeSession', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'sesión no válida' }); return; }
-    tagSocket(socket, user.id);
     callback({ user: toPublicUser(user), token });
   });
 
