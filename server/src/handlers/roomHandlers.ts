@@ -4,13 +4,15 @@ import { getRooms, createRoom, getRoom, joinRoom, leaveRoom } from '../roomManag
 import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR } from '../pokerEngine';
 import { authUser, broadcastRoom, armTurnTimer, clearTurnTimer, io } from '../socketHelpers';
 import { applyBalanceDelta } from '../db';
+import { sanitizeInput } from '../security';
 
 export const roomHandlers = (socket: Socket) => {
   socket.on('createRoom', ({ roomName, tierIndex, blindDivisor }, callback) => {
+    const cleanRoomName = sanitizeInput(roomName?.trim() || 'Sala sin nombre');
     const idx = Number.isInteger(tierIndex) && tierIndex >= 0 && tierIndex < STAKE_TIERS.length ? tierIndex : 0;
     const div = BLIND_DIVISORS.includes(blindDivisor) ? blindDivisor : DEFAULT_BLIND_DIVISOR;
     const roomId = uuidv4();
-    createRoom(roomId, roomName, false, idx, div);
+    createRoom(roomId, cleanRoomName, false, idx, div);
     callback({ roomId });
     io.emit('roomsUpdated', getRooms());
   });

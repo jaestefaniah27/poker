@@ -31,8 +31,10 @@
   - *Hecho: Instalado `vitest`. Añadidos tests automáticos en `server/tests` que verifican la creación de barajas, el barajado (ahora con nivel criptográfico `crypto.randomInt`), la evaluación de manos y el complejo reparto matemático de los side pots.*
 - [x] **12. Reconnection robustness** — rooms lost on server restart (except Sala Presidencial). Could serialize active games to DB.
   - *Hecho: Implementada la persistencia en `db.ts` con SQLite (WAL). Las salas se sincronizan en cada `broadcastRoom` y se restauran en el reinicio del servidor, garantizando que nadie pierda su asiento.*
-- [ ] **13. Rate limiting** — no socket event rate limiting. Easy to spam actions.
-- [ ] **14. Input validation** — sanitize usernames, room names against XSS.
+- [x] **13. Rate limiting** — no socket event rate limiting. Easy to spam actions.
+  - *Hecho: Implementado `rateLimits` en `wrapCallback` (máx 20 req/s, con auto-kick para spammers extremos).*
+- [x] **14. Input validation** — sanitize usernames, room names against XSS.
+  - *Hecho: Creado `sanitizeInput` aplicado globalmente a creación de salas, registro y cambio de nombre/avatar.*
 
 ## Quick Wins
 - [x] **15. PWA / installable** — add manifest + service worker for mobile.

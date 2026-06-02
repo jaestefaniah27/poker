@@ -3,12 +3,13 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
+import { sanitizeInput } from '../security';
 
 const BCRYPT_ROUNDS = 10;
 
 export const authHandlers = (socket: Socket) => {
   socket.on('login', async ({ name, password }, callback) => {
-    const cleanName = (name || '').trim();
+    const cleanName = sanitizeInput((name || '').trim());
     if (!cleanName) { callback({ error: 'Nombre vacío' }); return; }
 
     let user = await getUserByName(cleanName);
@@ -64,7 +65,7 @@ export const authHandlers = (socket: Socket) => {
   socket.on('changeName', async ({ token, newName }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
-    const clean = (newName || '').trim();
+    const clean = sanitizeInput((newName || '').trim());
     if (clean.length < 2) { callback({ error: 'Nombre demasiado corto' }); return; }
     if (await isNameTaken(clean, user.id)) { callback({ error: 'Ese nombre ya está en uso' }); return; }
     await updateUserName(user.id, clean);
@@ -75,7 +76,7 @@ export const authHandlers = (socket: Socket) => {
   socket.on('changeAvatar', async ({ token, avatar }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
-    const seed = String(avatar || '').trim().slice(0, 64) || user.id;
+    const seed = sanitizeInput(String(avatar || '').trim().slice(0, 64)) || user.id;
     await updateUserAvatar(user.id, seed);
     const updated = await getUser(user.id);
     callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
