@@ -57,7 +57,7 @@ export const evaluateHands = (room: Room) => {
   return winners.map((w: any) => ({
     playerId: w.playerId,
     handName: w.name,
-    winningCards: w.cards.map((c: any) => `${c.value}${c.suit}`) // pokersolver uses value/suit internally
+    winningCards: w.cards.map((c: any) => `${c.value === '1' ? 'A' : c.value}${c.suit}`) // pokersolver uses '1' for low Ace
   }));
 };
 
