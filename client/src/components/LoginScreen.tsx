@@ -36,7 +36,7 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
       <div className="max-w-sm w-full space-y-8">
         <div className="text-center">
           <h1 className="text-5xl font-extrabold tracking-tighter mb-2">Poker</h1>
-          <p className="text-gray-400 text-sm tracking-wide uppercase">Simple. Modern. Poker.</p>
+          <p className="text-gray-400 text-sm tracking-wide uppercase">Play Poker.</p>
         </div>
         <div className="bg-surface p-6 rounded-3xl shadow-2xl border border-surfaceLight space-y-4">
           <div>
