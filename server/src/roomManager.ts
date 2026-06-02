@@ -1,6 +1,7 @@
-import { Player, Room, STAKE_TIERS, blindsFor } from '../../shared/types';
+import { Player, Room, STAKE_TIERS, blindsFor, HandHistory } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 import { deleteRoomFromDB } from './db';
+import { v4 as uuidv4 } from 'uuid';
 
 const rooms: Map<string, Room> = new Map();
 
@@ -429,6 +430,7 @@ export const resolveRoundSync = (room: Room) => {
 
 export const endRound = (room: Room) => {
   gatherBetsToPot(room);
+  const totalPotForHistory = room.pot;
   room.phase = 'showdown';
   room.currentTurnIndex = -1; // En showdown ya no hay turno de nadie
   room.showdownAt = Date.now(); // marca el inicio del showdown: "next hand" bloqueado 5s
@@ -499,6 +501,39 @@ export const endRound = (room: Room) => {
     }
     room.pot = 0; // Vaciamos el bote global
   }
+
+  const wonByFold = activePlayers.length === 1;
+  const historyEntry: HandHistory = {
+    id: uuidv4(),
+    timestamp: Date.now(),
+    communityCards: [...room.communityCards],
+    pot: totalPotForHistory,
+    wonByFold,
+    winners: room.winners ? room.winners.map(w => {
+      const winnerPlayer = room.players.find(p => p.id === w.id);
+      return {
+        userId: winnerPlayer ? winnerPlayer.userId : w.id,
+        amount: w.amount,
+        handName: w.handName,
+        winningCards: [...w.winningCards]
+      };
+    }) : [],
+    players: room.players.filter(p => p.isActive).map(p => {
+      const winnerData = room.winners?.find(w => w.id === p.id);
+      return {
+        userId: p.userId,
+        name: p.name,
+        cards: [...p.cards],
+        chipsDelta: winnerData ? winnerData.amount : 0,
+        handName: p.handName,
+        hasFolded: p.hasFolded
+      };
+    })
+  };
+
+  if (!room.history) room.history = [];
+  room.history.unshift(historyEntry);
+  if (room.history.length > 3) room.history.pop();
 
   // La sala se queda en 'showdown' esperando a que llamen a nextHand()
 };

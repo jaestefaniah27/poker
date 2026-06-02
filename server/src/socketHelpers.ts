@@ -44,7 +44,15 @@ export const buildRoomView = (room: Room, socketId: string) => {
         p.id === socketId ||
         (room.phase === 'showdown' && !p.hasFolded && !p.isSpectating && !wonByFold);
       return reveal ? p : { ...p, cards: [] };
-    })
+    }),
+    history: room.history?.map(h => ({
+      ...h,
+      players: h.players.map(p => {
+        const currentUserId = room.players.find(rp => rp.id === socketId)?.userId;
+        const reveal = p.userId === currentUserId || (!h.wonByFold && !p.hasFolded);
+        return reveal ? p : { ...p, cards: [] };
+      })
+    }))
   };
 };
 

@@ -52,6 +52,26 @@ export interface Room {
   showdownAt?: number;
   lastActivityAt?: number;
   paused?: boolean;
+  history?: HandHistory[];
+}
+
+export interface HandHistoryPlayer {
+  userId: string;
+  name: string;
+  cards: Card[];
+  chipsDelta: number; // Positive if won, negative if lost
+  handName?: string;
+  hasFolded: boolean;
+}
+
+export interface HandHistory {
+  id: string;
+  timestamp: number;
+  communityCards: Card[];
+  pot: number;
+  winners: { userId: string; amount: number; handName: string; winningCards: string[] }[];
+  players: HandHistoryPlayer[];
+  wonByFold: boolean;
 }
 
 export interface PublicUser {

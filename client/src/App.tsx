@@ -8,6 +8,7 @@ import TurnPie from './components/TurnPie';
 import DealerBadge from './components/DealerBadge';
 import BetChip from './components/BetChip';
 import HandRankingsModal from './components/HandRankingsModal';
+import HandHistoryModal from './components/HandHistoryModal';
 import Slider from './components/Slider';
 import type { Room, Player, PublicUser } from '../../shared/types';
 
@@ -20,6 +21,7 @@ function App() {
   const [showBetMenu, setShowBetMenu] = useState(false);
   const [betAmount, setBetAmount] = useState(2);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [isPressingShowdown, setIsPressingShowdown] = useState(false);
   const [flyingChips, setFlyingChips] = useState<{id: number, x: number, y: number, tx: number, ty: number, amount: number}[]>([]);
   const [animateBetIn, setAnimateBetIn] = useState(false);
@@ -399,7 +401,7 @@ function App() {
         )}
 
         {/* ===== ZONE 1: Header (fixed, shrink-0) ===== */}
-        <header className="flex-shrink-0 px-4 py-2 flex justify-between items-center">
+        <header className="flex-shrink-0 px-4 py-2 flex justify-between items-center relative z-40">
           <button onClick={() => setShowLeaveConfirm(true)} className="text-white opacity-80 hover:opacity-100">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -411,7 +413,11 @@ function App() {
               <span className="text-[11px] text-emerald-300/80 font-semibold">{fmtChips(currentRoom.smallBlind)}/{fmtChips(currentRoom.bigBlind)}</span>
             )}
           </div>
-          <div className="w-5" />
+          <button onClick={() => setShowHistoryModal(true)} className="text-white opacity-80 hover:opacity-100">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
         </header>
 
         {/* ===== ZONE 2: Opponents (fixed, shrink-0) ===== */}
@@ -756,6 +762,12 @@ function App() {
         <HandRankingsModal
           myHandName={myPlayer?.handName}
           onClose={() => setShowRankingsModal(false)}
+        />
+      )}
+      {showHistoryModal && (
+        <HandHistoryModal
+          history={currentRoom.history || []}
+          onClose={() => setShowHistoryModal(false)}
         />
       )}
     </div>

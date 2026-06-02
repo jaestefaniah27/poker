@@ -16,7 +16,8 @@
 
 ## Mejoras de Funcionalidad (medio impacto)
 - [ ] **4. Chat en mesa** — players can communicate. Already noted as "alta" complexity in dev-method.
-- [ ] **5. Historial de manos** — log completed hands to SQLite, let players review past hands.
+- [x] **5. Historial de manos** — log completed hands to SQLite, let players review past hands.
+  - *Hecho: Se ha añadido un historial de las últimas 3 manos (`HandHistory`) que se puede consultar en vivo desde un modal en la mesa. Filtra automáticamente las cartas ocultas de rivales para evitar trampas.*
 - [ ] **6. Estadísticas de jugador** — win rate, hands played, biggest pot. Stored in DB.
 - [ ] **7. Sistema de torneos** — bracket/sit-n-go format. New module needed.
 - [x] **8. Sonidos y Háptica** — deal cards, chip sounds, timer warning, your turn notification.
