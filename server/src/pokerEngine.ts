@@ -73,6 +73,10 @@ export const shuffleDeck = (deck: Card[]) => {
 
 export const dealCards = (room: Room) => {
   const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating);
+  if (room.deck.length < activePlayers.length * 2) {
+    console.error(`dealCards: deck has ${room.deck.length} cards, need ${activePlayers.length * 2}`);
+    return;
+  }
   activePlayers.forEach(p => {
     p.cards = [room.deck.pop()!, room.deck.pop()!];
     p.hasFolded = false;
@@ -86,7 +90,7 @@ export const evaluateHands = (room: Room) => {
   const communityStrings = room.communityCards.map(c => `${c.rank}${c.suit}`);
   
   const hands = room.players
-    .filter(p => !p.hasFolded && p.isActive)
+    .filter(p => !p.hasFolded && p.isActive && !p.isSpectating)
     .map(p => {
       const playerStrings = p.cards.map(c => `${c.rank}${c.suit}`);
       const hand = Hand.solve([...playerStrings, ...communityStrings]);

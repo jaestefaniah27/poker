@@ -19,8 +19,12 @@ const db = new sqlite3.Database(dbPath, (err) => {
       balance INTEGER DEFAULT 0
     )`, () => {
       // Migraciones: añadimos columnas si no existen (ignoramos error de "duplicate column")
-      db.run('ALTER TABLE users ADD COLUMN password_hash TEXT', () => {});
-      db.run('ALTER TABLE users ADD COLUMN avatar TEXT', () => {});
+      db.run('ALTER TABLE users ADD COLUMN password_hash TEXT', (err) => {
+        if (err && !err.message.includes('duplicate column')) console.error('Migration password_hash:', err.message);
+      });
+      db.run('ALTER TABLE users ADD COLUMN avatar TEXT', (err) => {
+        if (err && !err.message.includes('duplicate column')) console.error('Migration avatar:', err.message);
+      });
     });
   }
 });

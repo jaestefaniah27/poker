@@ -39,21 +39,27 @@ const PRESIDENTIAL_ID = 'presidential';
 createRoom(PRESIDENTIAL_ID, 'Sala Presidencial', true);
 
 // --- Sesiones: token opaco -> userId (en memoria; al reiniciar el server se piden credenciales de nuevo) ---
-const sessions = new Map<string, string>(); // token -> userId
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+interface SessionData { userId: string; issuedAt: number; }
+const sessions = new Map<string, SessionData>(); // token -> { userId, issuedAt }
 
 const issueToken = (userId: string): string => {
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, userId);
+  sessions.set(token, { userId, issuedAt: Date.now() });
   return token;
 };
 
-// Devuelve la fila de usuario autenticada por token, o undefined si el token no es válido.
+// Devuelve la fila de usuario autenticada por token, o undefined si el token no es válido o expiró.
 // IMPORTANTE: las operaciones sensibles SIEMPRE resuelven la identidad por aquí, nunca por un id que mande el cliente.
 const authUser = async (token: string | undefined): Promise<UserRow | undefined> => {
   if (!token) return undefined;
-  const userId = sessions.get(token);
-  if (!userId) return undefined;
-  return getUser(userId);
+  const session = sessions.get(token);
+  if (!session) return undefined;
+  if (Date.now() - session.issuedAt > SESSION_TTL_MS) {
+    sessions.delete(token);
+    return undefined;
+  }
+  return getUser(session.userId);
 };
 
 app.get('/rooms', (req, res) => {

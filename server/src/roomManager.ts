@@ -263,7 +263,7 @@ const checkRoundEnd = (room: Room): 'advancePhase' | 'endRound' | 'continue' => 
     return 'endRound';
   }
 
-  const allActedAndMatched = activePlayers.every(p => p.hasActed && p.currentBet === room.highestBet || p.chips === 0);
+  const allActedAndMatched = activePlayers.every(p => (p.hasActed && p.currentBet === room.highestBet) || p.chips === 0);
 
   if (allActedAndMatched) {
     return 'advancePhase';
@@ -275,16 +275,21 @@ const checkRoundEnd = (room: Room): 'advancePhase' | 'endRound' | 'continue' => 
 
 const advanceTurn = (room: Room) => {
   const numPlayers = room.players.length;
+  if (numPlayers === 0) { room.currentTurnIndex = -1; return; }
   let nextIndex = (room.currentTurnIndex + 1) % numPlayers;
-  
-  // Find next active, non-folded, non-spectating player
-  while (!room.players[nextIndex].isActive || room.players[nextIndex].hasFolded || room.players[nextIndex].chips === 0 || room.players[nextIndex].isSpectating) {
+  let count = 0;
+
+  while (count < numPlayers && (
+    !room.players[nextIndex].isActive ||
+    room.players[nextIndex].hasFolded ||
+    room.players[nextIndex].chips === 0 ||
+    room.players[nextIndex].isSpectating
+  )) {
     nextIndex = (nextIndex + 1) % numPlayers;
-    // Evitar loop infinito si algo va mal
-    if (nextIndex === room.currentTurnIndex) break;
+    count++;
   }
-  
-  room.currentTurnIndex = nextIndex;
+
+  room.currentTurnIndex = count < numPlayers ? nextIndex : -1;
 };
 
 const gatherBetsToPot = (room: Room) => {

@@ -306,6 +306,7 @@ function App() {
     if (!prev || !curr) { prevRoomRef.current = curr; return; }
 
     const potEl = potRef.current;
+    const timeoutIds: ReturnType<typeof setTimeout>[] = [];
 
     // Detect bets being collected to pot (currentBet resets to 0 while pot grows)
     const potGrew = curr.pot > prev.pot && curr.phase !== 'waiting';
@@ -328,7 +329,7 @@ function App() {
             ty: potRect.top + potRect.height / 2,
             amount: prevP.currentBet,
           }]);
-          setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), 600);
+          timeoutIds.push(setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), 600));
         }
       });
     }
@@ -338,7 +339,7 @@ function App() {
     const currMyPlayer = curr.players.find((p: any) => p.userId === user?.id);
     if (prevMyPlayer && currMyPlayer && currMyPlayer.currentBet > prevMyPlayer.currentBet) {
       setAnimateBetIn(true);
-      setTimeout(() => setAnimateBetIn(false), 400);
+      timeoutIds.push(setTimeout(() => setAnimateBetIn(false), 400));
     }
 
     // Detect newly revealed community cards (flop/turn/river) to animate their reveal
@@ -348,7 +349,7 @@ function App() {
       const idxs: number[] = [];
       for (let i = prevLen; i < currLen; i++) idxs.push(i);
       setNewCommunityIdx(idxs);
-      setTimeout(() => setNewCommunityIdx([]), 600);
+      timeoutIds.push(setTimeout(() => setNewCommunityIdx([]), 600));
     }
 
     // Detect winner(s) appearing at showdown -> fly chips from the pot to each winner
@@ -357,7 +358,7 @@ function App() {
     if (!hadWinners && hasWinners) {
       const myId = curr.players.find((p: any) => p.userId === user?.id)?.id;
       // pequeño retardo para que el DOM del showdown esté colocado
-      setTimeout(() => {
+      const outerTimeout = setTimeout(() => {
         const potEl = potRef.current;
         if (!potEl) return;
         const potRect = potEl.getBoundingClientRect();
@@ -374,12 +375,14 @@ function App() {
             ty: r.top + r.height / 2,
             amount: w.amount,
           }]);
-          setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), 850);
+          timeoutIds.push(setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), 850));
         });
       }, 80);
+      timeoutIds.push(outerTimeout);
     }
 
     prevRoomRef.current = curr;
+    return () => { timeoutIds.forEach(clearTimeout); };
   }, [currentRoom]);
 
   // Reloj que avanza ~10 veces/seg mientras estamos en una sala, para pintar el temporizador de turno
@@ -442,8 +445,15 @@ function App() {
   useEffect(() => {
     const saved = sessionStorage.getItem('pokerToken');
     if (!saved) return;
+    // Fallback: si el servidor no responde en 5s, salimos del estado "Cargando"
+    const fallback = setTimeout(() => {
+      setInitializing(false);
+      sessionStorage.removeItem('pokerToken');
+      sessionStorage.removeItem('pokerRoomId');
+    }, 5000);
     socket.emit('resumeSession', { token: saved }, (response: any) => {
-      if (response.user) {
+      clearTimeout(fallback);
+      if (response?.user) {
         setUser(response.user);
         setToken(saved);
         // Si estábamos sentados en una sala, volvemos a ella automáticamente (conservando saldo/asiento)
@@ -455,6 +465,7 @@ function App() {
       }
       setInitializing(false);
     });
+    return () => clearTimeout(fallback);
   }, []);
 
   const handleLogin = () => {
@@ -494,6 +505,7 @@ function App() {
   const createRoom = () => {
     if (!newRoomName.trim()) return;
     socket.emit('createRoom', { roomName: newRoomName }, (res: any) => {
+      if (!res?.roomId) return;
       sessionStorage.setItem('pokerRoomId', res.roomId);
       socket.emit('joinRoom', { roomId: res.roomId, token });
     });
