@@ -233,7 +233,7 @@ function App() {
     setToken(t);
     setUser(u);
     if (activeRoomId) {
-      joinRoom(activeRoomId);
+      joinRoom(activeRoomId, t);
     }
   };
 
@@ -245,9 +245,9 @@ function App() {
     setToken(null);
   };
 
-  const joinRoom = (roomId: string) => {
+  const joinRoom = (roomId: string, explicitToken?: string) => {
     sessionStorage.setItem('pokerRoomId', roomId);
-    socket.emit('joinRoom', { roomId, token });
+    socket.emit('joinRoom', { roomId, token: explicitToken || token });
   };
 
   const leaveRoom = () => {
