@@ -381,7 +381,7 @@ function App() {
   return (
     <>
       <ConnectionOverlay isConnected={isConnected} />
-      <div className="bg-background text-primary font-sans flex justify-center" style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
+      <div className="absolute inset-0 bg-background text-primary font-sans flex justify-center" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
       <div className="w-full max-w-md h-full relative flex flex-col overflow-hidden">
 
         {flyingChips.map(chip => (
