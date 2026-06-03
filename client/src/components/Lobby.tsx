@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import Slider from './Slider';
-import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips } from '../utils';
+import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
 import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
 
 interface LobbyProps {
@@ -42,7 +42,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
     }, (res: any) => {
       if (!res?.roomId) return;
       setShowStakeSlider(false);
-      sessionStorage.setItem('pokerRoomId', res.roomId);
+      getStorage().setItem('pokerRoomId', res.roomId);
       socket.emit('joinRoom', { roomId: res.roomId, token });
     });
   };

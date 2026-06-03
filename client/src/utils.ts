@@ -9,6 +9,13 @@ export const socket: Socket = io(
     : `http://${window.location.hostname}:3001`
 );
 
+export const getStorage = (): Storage => {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return sessionStorage;
+  }
+  return localStorage.getItem('devMode') === 'true' ? sessionStorage : localStorage;
+};
+
 export const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Normal', 5: 'Rápida', 4: 'Express' };
 
 export const fmtChips = (n: number | null | undefined): string => {

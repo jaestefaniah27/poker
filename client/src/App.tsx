@@ -16,7 +16,7 @@ import type { Room, Player, PublicUser } from '../../shared/types';
 function App() {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [initializing, setInitializing] = useState(() => !!sessionStorage.getItem('pokerToken'));
+  const [initializing, setInitializing] = useState(() => !!getStorage().getItem('pokerToken'));
   const [rooms, setRooms] = useState<Room[]>([]);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [showBetMenu, setShowBetMenu] = useState(false);
@@ -203,26 +203,26 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem('pokerToken');
+    const saved = getStorage().getItem('pokerToken');
     if (!saved) return;
     const fallback = setTimeout(() => {
       setInitializing(false);
-      sessionStorage.removeItem('pokerToken');
-      sessionStorage.removeItem('pokerRoomId');
+      getStorage().removeItem('pokerToken');
+      getStorage().removeItem('pokerRoomId');
     }, 5000);
     socket.emit('resumeSession', { token: saved }, (response: any) => {
       clearTimeout(fallback);
       if (response?.user) {
         setUser(response.user);
         setToken(saved);
-        const roomId = response.activeRoomId || sessionStorage.getItem('pokerRoomId');
+        const roomId = response.activeRoomId || getStorage().getItem('pokerRoomId');
         if (roomId) {
-          sessionStorage.setItem('pokerRoomId', roomId);
+          getStorage().setItem('pokerRoomId', roomId);
           socket.emit('joinRoom', { roomId, token: saved });
         }
       } else {
-        sessionStorage.removeItem('pokerToken');
-        sessionStorage.removeItem('pokerRoomId');
+        getStorage().removeItem('pokerToken');
+        getStorage().removeItem('pokerRoomId');
       }
       setInitializing(false);
     });
@@ -238,21 +238,21 @@ function App() {
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('pokerToken');
-    sessionStorage.removeItem('pokerRoomId');
+    getStorage().removeItem('pokerToken');
+    getStorage().removeItem('pokerRoomId');
     setCurrentRoom(null);
     setUser(null);
     setToken(null);
   };
 
   const joinRoom = (roomId: string, explicitToken?: string) => {
-    sessionStorage.setItem('pokerRoomId', roomId);
+    getStorage().setItem('pokerRoomId', roomId);
     socket.emit('joinRoom', { roomId, token: explicitToken || token });
   };
 
   const leaveRoom = () => {
     const roomId = currentRoom?.id;
-    sessionStorage.removeItem('pokerRoomId');
+    getStorage().removeItem('pokerRoomId');
     setCurrentRoom(null);
     setShowLeaveConfirm(false);
     if (roomId) socket.emit('leaveRoom', { roomId });

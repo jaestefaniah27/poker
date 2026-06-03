@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { socket } from '../utils';
+import { socket, getStorage } from '../utils';
 
 interface LoginScreenProps {
   onLogin: (user: any, token: string, activeRoomId?: string) => void;
@@ -24,7 +24,7 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
         setLoginError(response.error);
         return;
       } else if (response.user && response.token) {
-        sessionStorage.setItem('pokerToken', response.token);
+        getStorage().setItem('pokerToken', response.token);
         onLogin(response.user, response.token, response.activeRoomId);
       }
     });
