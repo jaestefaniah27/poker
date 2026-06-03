@@ -41,6 +41,14 @@ const MIGRATIONS = [
       id TEXT PRIMARY KEY,
       data TEXT NOT NULL
     )`
+  },
+  {
+    name: '005_sessions_table',
+    sql: `CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      issued_at INTEGER NOT NULL
+    )`
   }
 ];
 
@@ -187,4 +195,17 @@ export const saveRoomToDB = async (room: Room): Promise<void> => {
 
 export const deleteRoomFromDB = async (id: string): Promise<void> => {
   await dbRun('DELETE FROM rooms WHERE id = ?', [id]);
+};
+
+// --- Persistencia de Sesiones ---
+export const saveSessionToDB = async (token: string, userId: string, issuedAt: number): Promise<void> => {
+  await dbRun('INSERT INTO sessions (token, user_id, issued_at) VALUES (?, ?, ?)', [token, userId, issuedAt]);
+};
+
+export const getSessionFromDB = async (token: string): Promise<{ user_id: string; issued_at: number } | undefined> => {
+  return dbGet<{ user_id: string; issued_at: number }>('SELECT * FROM sessions WHERE token = ?', [token]);
+};
+
+export const deleteSessionFromDB = async (token: string): Promise<void> => {
+  await dbRun('DELETE FROM sessions WHERE token = ?', [token]);
 };

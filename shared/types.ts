@@ -113,10 +113,8 @@ export const BLIND_LEVEL_DURATIONS: { key: string; label: string; sub: string; m
   { key: 'deep', label: 'Lento', sub: '10 min/nivel', ms: 10 * 60 * 1000 },
 ];
 
-// Sube las ciegas ~1.5x redondeando a un número limpio.
+// Sube las ciegas multiplicándolas por 2 (doble).
 export const nextBlinds = (bigBlind: number): { smallBlind: number; bigBlind: number } => {
-  const target = bigBlind * 1.5;
-  const mag = Math.pow(10, Math.floor(Math.log10(target)));
-  const rounded = Math.max(bigBlind + 1, Math.round(target / mag) * mag);
-  return { bigBlind: rounded, smallBlind: Math.max(1, Math.round(rounded / 2)) };
+  const target = bigBlind * 2;
+  return { bigBlind: target, smallBlind: Math.max(1, Math.round(target / 2)) };
 };

@@ -1,10 +1,6 @@
 import crypto from 'crypto';
 import { Server } from 'socket.io';
-import { getUser, UserRow } from './db';
-import { Room } from './pokerEngine';
-import { getRoom, handlePlayerAction, endRound, gatherBetsToPot, advanceStreet, bettingClosed, contenders } from './roomManager';
-import { sessions, SESSION_TTL_MS, turnTimers, TurnTimer } from './state';
-import { saveRoomToDB } from './db';
+import { getUser, UserRow, saveSessionToDB, getSessionFromDB, deleteSessionFromDB, saveRoomToDB } from './db';
 
 export let io: Server;
 export const setIo = (serverIo: Server) => { io = serverIo; };
@@ -17,18 +13,35 @@ export const TURN_TIME = 15000;
 export const GRACE_TIME = 5000;
 export const OFFLINE_REDUCED_TIME = 8000;
 
-export const issueToken = (userId: string): string => {
+import { Room } from './pokerEngine';
+import { getRoom, handlePlayerAction, endRound, gatherBetsToPot, advanceStreet, bettingClosed, contenders } from './roomManager';
+import { sessions, SESSION_TTL_MS, turnTimers, TurnTimer } from './state';
+
+export const issueToken = async (userId: string): Promise<string> => {
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, { userId, issuedAt: Date.now() });
+  const now = Date.now();
+  sessions.set(token, { userId, issuedAt: now });
+  await saveSessionToDB(token, userId, now);
   return token;
 };
 
 export const authUser = async (token: string | undefined): Promise<UserRow | undefined> => {
   if (!token) return undefined;
-  const session = sessions.get(token);
+  
+  let session = sessions.get(token);
+  if (!session) {
+    const dbSession = await getSessionFromDB(token);
+    if (dbSession) {
+      session = { userId: dbSession.user_id, issuedAt: dbSession.issued_at };
+      sessions.set(token, session);
+    }
+  }
+
   if (!session) return undefined;
+  
   if (Date.now() - session.issuedAt > SESSION_TTL_MS) {
     sessions.delete(token);
+    await deleteSessionFromDB(token);
     return undefined;
   }
   return getUser(session.userId);

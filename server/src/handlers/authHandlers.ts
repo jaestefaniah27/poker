@@ -26,7 +26,7 @@ export const authHandlers = (socket: Socket) => {
     }
 
     if (!user) { callback({ error: 'No se pudo crear el usuario' }); return; }
-    const token = issueToken(user.id);
+    const token = await issueToken(user.id);
     console.log(`Login: ${user.name} -> ${user.id} (balance ${user.balance})`);
     const activeRoomId = findActiveRoomForUser(user.id);
     callback({ user: toPublicUser(user), token, activeRoomId });
