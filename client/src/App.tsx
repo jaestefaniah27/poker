@@ -477,7 +477,7 @@ function App() {
               const secs = secsLeft % 60;
               const isUrgent = secsLeft <= 30;
               return (
-                <span className={`text-[10px] font-mono font-semibold ${isUrgent ? 'text-red-400 animate-pulse' : 'text-amber-300/70'}`}>
+                <span key={isUrgent ? 'urgent' : 'normal'} className={`text-[10px] font-mono font-semibold ${isUrgent ? 'text-red-400 animate-pulse' : 'text-amber-300/70'}`}>
                   Nivel {(currentRoom.blindLevel || 0) + 1} · sube en {mins}:{secs.toString().padStart(2, '0')}
                 </span>
               );
