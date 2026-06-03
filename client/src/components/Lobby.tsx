@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import Slider from './Slider';
@@ -14,6 +14,12 @@ interface LobbyProps {
   onUpdateUser: (u: any) => void;
 }
 
+interface LeaderboardEntry {
+  name: string;
+  balance: number;
+  avatar: string;
+}
+
 const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: LobbyProps) => {
   const [showProfile, setShowProfile] = useState(false);
 
@@ -23,6 +29,15 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const [createTierIndex, setCreateTierIndex] = useState(STAKE_TIERS.length - 1);
   const [createBlindDivisor, setCreateBlindDivisor] = useState(DEFAULT_BLIND_DIVISOR);
   const [createBlindDuration, setCreateBlindDuration] = useState(0); // ms; 0 = mesa cash
+
+  // Leaderboard
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+
+  useEffect(() => {
+    socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
+      if (Array.isArray(data)) setLeaderboard(data);
+    });
+  }, []);
 
   const openStakeSlider = () => {
     if (!newRoomName.trim()) return;
@@ -46,6 +61,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
       socket.emit('joinRoom', { roomId: res.roomId, token });
     });
   };
+
+  const medals = ['🥇', '🥈', '🥉'];
 
   return (
     <div className="min-h-screen bg-background text-primary flex flex-col items-center font-sans" style={{ padding: 'max(1.5rem, env(safe-area-inset-top, 0px)) 1.5rem max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
@@ -133,6 +150,39 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                     </div>
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* ---- Leaderboard ---- */}
+          <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
+            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Ranking</h2>
+            {leaderboard.length === 0 ? (
+              <p className="text-gray-500 text-center py-4 text-sm">Cargando ranking...</p>
+            ) : (
+              <div className="space-y-1.5">
+                {leaderboard.map((entry, i) => {
+                  const isMe = entry.name === user.name;
+                  return (
+                    <div
+                      key={entry.name}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${isMe ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-background border border-transparent'}`}
+                    >
+                      <span className="w-7 text-center text-sm font-bold shrink-0">
+                        {i < 3 ? medals[i] : <span className="text-gray-600">{i + 1}</span>}
+                      </span>
+                      <div className="shrink-0">
+                        <Avatar seed={entry.avatar} size={28} />
+                      </div>
+                      <span className={`text-sm font-medium truncate flex-1 ${isMe ? 'text-emerald-300' : 'text-gray-300'}`}>
+                        {entry.name}
+                      </span>
+                      <span className={`font-mono text-sm font-semibold shrink-0 ${entry.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {entry.balance < 0 ? `-$${fmtChips(Math.abs(entry.balance))}` : `$${fmtChips(entry.balance)}`}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

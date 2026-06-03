@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser } from '../db';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser } from '../roomManager';
@@ -83,5 +83,10 @@ export const authHandlers = (socket: Socket) => {
     await updateUserAvatar(user.id, seed);
     const updated = await getUser(user.id);
     callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('getLeaderboard', async (_data, callback) => {
+    const users = await getAllUsersRanked();
+    callback(users.map(u => ({ name: u.name, balance: u.balance, avatar: u.avatar || u.id })));
   });
 };

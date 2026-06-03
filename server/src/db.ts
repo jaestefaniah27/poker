@@ -127,6 +127,10 @@ export const toPublicUser = (row: UserRow): PublicUser => ({
   hasPassword: !!row.password_hash,
 });
 
+export const getAllUsersRanked = async (): Promise<UserRow[]> => {
+  return dbAll<UserRow>('SELECT * FROM users ORDER BY balance DESC');
+};
+
 export const getUser = async (id: string): Promise<UserRow | undefined> => {
   return dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
 };
