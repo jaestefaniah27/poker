@@ -13,7 +13,19 @@ import TournamentResults from './components/TournamentResults';
 import Slider from './components/Slider';
 import type { Room, Player, PublicUser } from '../../shared/types';
 
+const ConnectionOverlay = ({ isConnected }: { isConnected: boolean }) => {
+  if (isConnected) return null;
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center backdrop-blur-sm transition-opacity duration-300">
+      <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+      <h2 className="text-2xl font-bold text-emerald-500 mb-2">Conexión perdida</h2>
+      <p className="text-gray-300 animate-pulse font-medium">Reconectando con el servidor...</p>
+    </div>
+  );
+};
+
 function App() {
+  const [isConnected, setIsConnected] = useState(socket.connected);
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(() => !!getStorage().getItem('pokerToken'));
@@ -203,30 +215,50 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const saved = getStorage().getItem('pokerToken');
-    if (!saved) return;
-    const fallback = setTimeout(() => {
-      setInitializing(false);
-      getStorage().removeItem('pokerToken');
-      getStorage().removeItem('pokerRoomId');
-    }, 5000);
-    socket.emit('resumeSession', { token: saved }, (response: any) => {
-      clearTimeout(fallback);
-      if (response?.user) {
-        setUser(response.user);
-        setToken(saved);
-        const roomId = response.activeRoomId || getStorage().getItem('pokerRoomId');
-        if (roomId) {
-          getStorage().setItem('pokerRoomId', roomId);
-          socket.emit('joinRoom', { roomId, token: saved });
-        }
-      } else {
+    const onConnect = () => {
+      setIsConnected(true);
+      const saved = getStorage().getItem('pokerToken');
+      if (!saved) return;
+      
+      const fallback = setTimeout(() => {
+        setInitializing(false);
         getStorage().removeItem('pokerToken');
         getStorage().removeItem('pokerRoomId');
-      }
-      setInitializing(false);
-    });
-    return () => clearTimeout(fallback);
+      }, 5000);
+
+      socket.emit('resumeSession', { token: saved }, (response: any) => {
+        clearTimeout(fallback);
+        if (response?.user) {
+          setUser(response.user);
+          setToken(saved);
+          const roomId = response.activeRoomId || getStorage().getItem('pokerRoomId');
+          if (roomId) {
+            getStorage().setItem('pokerRoomId', roomId);
+            socket.emit('joinRoom', { roomId, token: saved });
+          }
+        } else {
+          getStorage().removeItem('pokerToken');
+          getStorage().removeItem('pokerRoomId');
+        }
+        setInitializing(false);
+      });
+    };
+
+    const onDisconnect = () => setIsConnected(false);
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    if (socket.connected) {
+      onConnect();
+    } else {
+      if (!getStorage().getItem('pokerToken')) setInitializing(false);
+    }
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+    };
   }, []);
 
   const handleLogin = (u: any, t: string, activeRoomId?: string) => {
@@ -277,26 +309,37 @@ function App() {
 
   if (!user && initializing) {
     return (
-      <div className="min-h-screen bg-background text-primary flex items-center justify-center font-sans">
-        <div className="animate-pulse text-gray-500 text-sm tracking-widest uppercase">Cargando…</div>
-      </div>
+      <>
+        <ConnectionOverlay isConnected={isConnected} />
+        <div className="min-h-screen bg-background text-primary flex items-center justify-center font-sans">
+          <div className="animate-pulse text-gray-500 text-sm tracking-widest uppercase">Cargando…</div>
+        </div>
+      </>
     );
   }
 
   if (!user) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return (
+      <>
+        <ConnectionOverlay isConnected={isConnected} />
+        <LoginScreen onLogin={handleLogin} />
+      </>
+    );
   }
 
   if (!currentRoom) {
     return (
-      <Lobby
-        user={user}
-        token={token}
-        rooms={rooms}
-        onJoinRoom={joinRoom}
-        onLogout={handleLogout}
-        onUpdateUser={(u) => setUser(u)}
-      />
+      <>
+        <ConnectionOverlay isConnected={isConnected} />
+        <Lobby
+          user={user}
+          token={token}
+          rooms={rooms}
+          onJoinRoom={joinRoom}
+          onLogout={handleLogout}
+          onUpdateUser={(u) => setUser(u)}
+        />
+      </>
     );
   }
 
@@ -336,7 +379,9 @@ function App() {
   if (!isMyTurn && showBetMenu) setShowBetMenu(false);
 
   return (
-    <div className="bg-background text-primary font-sans flex justify-center" style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
+    <>
+      <ConnectionOverlay isConnected={isConnected} />
+      <div className="min-h-screen bg-background text-primary flex flex-col font-sans" style={{ padding: 'env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)' }}>
       <div className="w-full max-w-md h-full relative flex flex-col overflow-hidden">
 
         {flyingChips.map(chip => (
@@ -814,7 +859,8 @@ function App() {
           onClose={() => setShowHistoryModal(false)}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }
 
