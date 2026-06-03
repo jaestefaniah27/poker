@@ -147,7 +147,7 @@ export const isNameTaken = async (name: string, exceptId: string): Promise<boole
 };
 
 export const createUser = async (id: string, name: string): Promise<void> => {
-  await dbRun('INSERT OR IGNORE INTO users (id, name, balance) VALUES (?, ?, 0)', [id, name.trim()]);
+  await dbRun('INSERT OR IGNORE INTO users (id, name, balance) VALUES (?, ?, 1000)', [id, name.trim()]);
 };
 
 export const setPasswordHash = async (id: string, hash: string | null): Promise<void> => {
