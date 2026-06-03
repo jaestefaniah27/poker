@@ -27,7 +27,7 @@ const TournamentResults = ({ room, currentUserId, isAdmin, onRestart, onExit }: 
     <div className="fixed inset-0 z-[80] flex flex-col items-center bg-background/97 text-primary font-sans overflow-y-auto"
       style={{ padding: 'max(1.5rem, env(safe-area-inset-top, 0px)) 1.5rem max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
       <div className="w-full max-w-md flex flex-col items-center">
-        <p className="text-[11px] text-amber-400 uppercase tracking-widest font-bold mb-1">🏆 Torneo finalizado</p>
+        <p className="text-[11px] text-amber-400 uppercase tracking-widest font-bold mb-1">Torneo finalizado</p>
         <h1 className="text-2xl font-bold tracking-tight mb-1 text-center">{room.name}</h1>
 
         {winner && (

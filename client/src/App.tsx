@@ -467,9 +467,6 @@ function App() {
             </svg>
           </button>
           <div className="flex flex-col items-center leading-tight">
-            {isTournament && (
-              <span className="text-[9px] text-amber-400 font-bold uppercase tracking-wider">🏆 Torneo</span>
-            )}
             <span className="text-sm font-semibold text-white truncate max-w-[160px]">{currentRoom.name}</span>
             {currentRoom.bigBlind != null && (
               <span className="text-[11px] text-emerald-300/80 font-semibold">{fmtChips(currentRoom.smallBlind)}/{fmtChips(currentRoom.bigBlind)}</span>

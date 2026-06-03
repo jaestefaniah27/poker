@@ -110,7 +110,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                   <button key={room.id} onClick={() => onJoinRoom(room.id)}
                     className={`w-full flex justify-between items-center bg-background p-4 rounded-2xl border transition-colors text-left ${room.isTournament ? 'border-amber-900/40 hover:border-amber-600/60' : 'border-gray-800 hover:border-gray-500'}`}>
                     <div>
-                      <h3 className="font-semibold text-base">{room.isTournament ? '🏆 ' : ''}{room.name}</h3>
+                      <h3 className="font-semibold text-base">{room.name}</h3>
                       <p className="text-xs text-gray-500">{room.playerCount}/8 jugadores • {room.phase}</p>
                       {room.bigBlind != null && (
                         <p className="text-xs mt-0.5">
