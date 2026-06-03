@@ -65,7 +65,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const medals = ['🥇', '🥈', '🥉'];
 
   return (
-    <div className="min-h-screen bg-background text-primary flex flex-col items-center font-sans" style={{ padding: 'max(1.5rem, env(safe-area-inset-top, 0px)) 1.5rem max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
+    <div className="h-full w-full overflow-y-auto scrollbar-hide bg-background text-primary flex flex-col items-center font-sans" style={{ padding: 'max(1.5rem, env(safe-area-inset-top, 0px)) 1.5rem max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
       {showProfile && (
         <ProfileModal user={user} token={token} onClose={() => setShowProfile(false)} onUpdate={onUpdateUser} />
       )}
@@ -160,7 +160,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
             {leaderboard.length === 0 ? (
               <p className="text-gray-500 text-center py-4 text-sm">Cargando ranking...</p>
             ) : (
-              <div className="space-y-1.5 max-h-[40vh] overflow-y-auto scrollbar-hide">
+              <div className="space-y-1.5">
                 {leaderboard.map((entry, i) => {
                   const isMe = entry.name === user.name;
                   return (
