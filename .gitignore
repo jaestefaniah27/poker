@@ -2,3 +2,5 @@ node_modules
 
 *.sqlite-shm
 *.sqlite-wal
+
+*.sqlite
