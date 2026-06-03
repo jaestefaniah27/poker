@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { socket, fmtChips, playCheckSound, vibrate } from './utils';
+import { socket, fmtChips, playCheckSound, vibrate, getStorage } from './utils';
 import LoginScreen from './components/LoginScreen';
 import Lobby from './components/Lobby';
 import PlayingCard from './components/PlayingCard';
