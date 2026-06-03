@@ -679,3 +679,15 @@ export const findActiveRoomForUser = (userId: string): string | undefined => {
   }
   return undefined;
 };
+
+export const resumeBlindTimers = () => {
+  for (const [roomId, room] of rooms.entries()) {
+    if (room.isTournament && room.blindLevelDuration && room.blindLevelStartedAt) {
+      const elapsed = Date.now() - room.blindLevelStartedAt;
+      const remaining = Math.max(0, room.blindLevelDuration - elapsed);
+      clearBlindTimer(roomId);
+      const t = setTimeout(() => escalateBlinds(roomId), remaining);
+      blindTimers.set(roomId, t);
+    }
+  }
+};

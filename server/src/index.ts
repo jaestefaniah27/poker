@@ -25,7 +25,7 @@ const INACTIVITY_LIMIT = 5 * 60 * 1000;
 const SWEEP_INTERVAL = 30 * 1000;
 
 import { initDB, loadRoomsFromDB } from './db';
-import { restoreRoom } from './roomManager';
+import { restoreRoom, resumeBlindTimers } from './roomManager';
 
 // Initialize io in helpers
 setIo(io);
@@ -45,6 +45,9 @@ const bootServer = async () => {
     room.inGrace = false;
     restoreRoom(room);
   }
+  
+  resumeBlindTimers();
+  
   console.log(`Restored ${savedRooms.length} active rooms from previous session.`);
 
   // Salas fijas siempre disponibles, crearlas si no fueron restauradas
