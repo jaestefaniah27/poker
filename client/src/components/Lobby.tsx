@@ -160,7 +160,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
             {leaderboard.length === 0 ? (
               <p className="text-gray-500 text-center py-4 text-sm">Cargando ranking...</p>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 max-h-[40vh] overflow-y-auto scrollbar-hide">
                 {leaderboard.map((entry, i) => {
                   const isMe = entry.name === user.name;
                   return (
