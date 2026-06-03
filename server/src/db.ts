@@ -128,11 +128,20 @@ export const toPublicUser = (row: UserRow): PublicUser => ({
 });
 
 export const getAllUsersRanked = async (): Promise<UserRow[]> => {
-  return dbAll<UserRow>('SELECT * FROM users ORDER BY balance DESC');
+  return dbAll<UserRow>("SELECT * FROM users WHERE name != 'Jorge' ORDER BY balance DESC");
+};
+
+export const getAllUsersAdmin = async (): Promise<UserRow[]> => {
+  return dbAll<UserRow>("SELECT * FROM users ORDER BY name ASC");
 };
 
 export const getUser = async (id: string): Promise<UserRow | undefined> => {
   return dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
+};
+
+export const deleteUser = async (id: string): Promise<void> => {
+  await dbRun('DELETE FROM sessions WHERE user_id = ?', [id]);
+  await dbRun('DELETE FROM users WHERE id = ?', [id]);
 };
 
 // Búsqueda por nombre (sin distinguir mayúsculas ni espacios sobrantes).

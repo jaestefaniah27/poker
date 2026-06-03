@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked } from '../db';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser } from '../roomManager';
@@ -88,5 +88,21 @@ export const authHandlers = (socket: Socket) => {
   socket.on('getLeaderboard', async (_data, callback) => {
     const users = await getAllUsersRanked();
     callback(users.map(u => ({ name: u.name, balance: u.balance, avatar: u.avatar || u.id })));
+  });
+
+  socket.on('getAdminUsers', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    const users = await getAllUsersAdmin();
+    callback({ ok: true, users: users.map(toPublicUser) });
+  });
+
+  socket.on('adminDeleteUser', async ({ token, targetId }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    if (user.id === targetId) { callback({ error: 'No te puedes borrar a ti mismo' }); return; }
+    await deleteUser(targetId);
+    console.log(`[ADMIN] User ${user.name} deleted user ${targetId}`);
+    callback({ ok: true });
   });
 };
