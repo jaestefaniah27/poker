@@ -7,6 +7,7 @@ import Avatar from './components/Avatar';
 import TurnPie from './components/TurnPie';
 import DealerBadge from './components/DealerBadge';
 import BetChip from './components/BetChip';
+import AnimatedNumber from './components/AnimatedNumber';
 import HandRankingsModal from './components/HandRankingsModal';
 import HandHistoryModal from './components/HandHistoryModal';
 import TournamentResults from './components/TournamentResults';
@@ -36,11 +37,12 @@ function App() {
   const [showRankingsModal, setShowRankingsModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [isPressingShowdown, setIsPressingShowdown] = useState(false);
-  const [flyingChips, setFlyingChips] = useState<{id: number, x: number, y: number, tx: number, ty: number, amount: number}[]>([]);
+  const [flyingChips, setFlyingChips] = useState<{id: number, x: number, y: number, tx: number, ty: number, amount: number, delay: number}[]>([]);
   const [animateBetIn, setAnimateBetIn] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [viewPlayer, setViewPlayer] = useState<Player | null>(null);
   const [newCommunityIdx, setNewCommunityIdx] = useState<number[]>([]);
+  const [displayCommCount, setDisplayCommCount] = useState(0);
   const [nowMs, setNowMs] = useState(Date.now());
   const playerAnchorRefs = useRef<Map<string, HTMLElement>>(new Map());
   const flyIdRef = useRef(0);
@@ -54,6 +56,13 @@ function App() {
   const opponentBetRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const prevRoomRef = useRef<Room | null>(null);
   const lastBetPositionsRef = useRef<Map<string, {x: number, y: number}>>(new Map());
+  const potAnimEndsAtRef = useRef<number>(0);
+  // --- Cola serializada de revelado de cartas comunitarias ---
+  const targetCommCountRef = useRef<number>(0);   // nº de cartas que el servidor ya repartió
+  const displayCommCountRef = useRef<number>(0);   // nº de cartas ya reveladas en pantalla
+  const revealRunningRef = useRef<boolean>(false); // hay un drenado en curso
+  const revealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const revealDoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // cleanup de la marca
 
   useLayoutEffect(() => {
     opponentBetRefs.current.forEach((el, playerId) => {
@@ -69,19 +78,94 @@ function App() {
         lastBetPositionsRef.current.set('myPlayer', { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
       }
     }
-  });
+    // Solo recalcular posiciones cuando cambia el estado de la sala (apuestas),
+    // NO en cada tick de nowMs ni en cleanups de fichas → evita reflow síncrono constante.
+  }, [currentRoom]);
+
+  // Cancela cualquier revelado pendiente y opcionalmente fija el contador mostrado.
+  const cancelReveal = useCallback((syncTo?: number) => {
+    revealTimersRef.current.forEach(clearTimeout);
+    revealTimersRef.current = [];
+    if (revealDoneTimerRef.current) { clearTimeout(revealDoneTimerRef.current); revealDoneTimerRef.current = null; }
+    revealRunningRef.current = false;
+    setNewCommunityIdx([]);
+    if (syncTo != null) {
+      displayCommCountRef.current = syncTo;
+      setDisplayCommCount(syncTo);
+    }
+  }, []);
+
+  // Drena la cola: revela las cartas pendientes UNA a una, en orden, a cadencia fija.
+  // Espera el fin del conteo del pot (potAnimEndsAtRef) solo antes de la primera carta pendiente;
+  // las siguientes salen STEP_MS después de la anterior. Re-entrante seguro: si ya corre, no duplica.
+  const pumpReveal = useCallback(() => {
+    if (revealRunningRef.current) return;
+    revealRunningRef.current = true;
+    const STEP_MS = 220;   // separación entre cartas consecutivas
+    const ANIM_MS = 560;   // duración del flip (para limpiar la marca al final)
+
+    const step = () => {
+      const target = targetCommCountRef.current;
+      const shown = displayCommCountRef.current;
+      if (shown >= target) {
+        revealRunningRef.current = false;
+        // Limpiar la marca de "recién revelada" tras la última animación (cancelable si llega otra calle)
+        if (revealDoneTimerRef.current) clearTimeout(revealDoneTimerRef.current);
+        revealDoneTimerRef.current = setTimeout(() => {
+          setNewCommunityIdx([]);
+          revealDoneTimerRef.current = null;
+        }, ANIM_MS);
+        return;
+      }
+      const wait = Math.max(0, potAnimEndsAtRef.current - Date.now());
+      const t = setTimeout(() => {
+        // Una nueva carta empieza a animar: cancela el cleanup pendiente para no cortar su flip.
+        if (revealDoneTimerRef.current) { clearTimeout(revealDoneTimerRef.current); revealDoneTimerRef.current = null; }
+        displayCommCountRef.current = shown + 1;
+        setDisplayCommCount(shown + 1);
+        setNewCommunityIdx([shown]);
+        const nt = setTimeout(step, STEP_MS);
+        revealTimersRef.current.push(nt);
+      }, wait);
+      revealTimersRef.current.push(t);
+    };
+
+    step();
+  }, []);
+
+  // Limpieza global al desmontar
+  useEffect(() => () => cancelReveal(), [cancelReveal]);
 
   useEffect(() => {
     const prev = prevRoomRef.current;
     const curr = currentRoom;
-    if (!prev || !curr) { prevRoomRef.current = curr; return; }
+    if (!prev || !curr) {
+      // Primer estado conocido (p.ej. entrar a mitad de mano): mostrar cartas ya repartidas sin animar.
+      if (curr) {
+        const len = curr.communityCards?.length || 0;
+        targetCommCountRef.current = len;
+        cancelReveal(len);
+      }
+      prevRoomRef.current = curr;
+      return;
+    }
 
     const potEl = potRef.current;
     const timeoutIds: ReturnType<typeof setTimeout>[] = [];
 
     const potGrew = curr.pot > prev.pot && curr.phase !== 'waiting';
+    let chipsToPotMaxDelay = 0;
+    const CHIP_FLIGHT_MS = 850;
+    if (potGrew) {
+      const potDiff = curr.pot - prev.pot;
+      const potAnimMs = Math.min(2000, potDiff * (1000 / 60));
+      // Reserva el final del periodo "pot animándose" para futuros eventos (revelado de cartas)
+      // Asumimos el peor caso de stagger ahora; se refinará abajo si hay vuelo real
+      potAnimEndsAtRef.current = Date.now() + Math.max(CHIP_FLIGHT_MS, potAnimMs) + 500;
+    }
     if (potGrew && potEl) {
       const potRect = potEl.getBoundingClientRect();
+      let staggerIdx = 0;
       prev.players.forEach((prevP: any) => {
         if (prevP.currentBet > 0) {
           const isMe = prevP.userId === user?.id;
@@ -90,6 +174,14 @@ function App() {
             : lastBetPositionsRef.current.get(prevP.id);
           if (!storedPos) return;
           const id = ++flyIdRef.current;
+          const delay = staggerIdx * 70;
+          staggerIdx++;
+          chipsToPotMaxDelay = Math.max(chipsToPotMaxDelay, delay);
+          // Refina el end-time con el stagger real de fichas
+          const potDiff = Math.max(0, curr.pot - prev.pot);
+          const potAnimMs = Math.min(2000, potDiff * (1000 / 60));
+          const refined = Date.now() + Math.max(CHIP_FLIGHT_MS + chipsToPotMaxDelay, potAnimMs) + 500;
+          if (refined > potAnimEndsAtRef.current) potAnimEndsAtRef.current = refined;
           setFlyingChips(fc => [...fc, {
             id,
             x: storedPos.x,
@@ -97,8 +189,9 @@ function App() {
             tx: potRect.left + potRect.width / 2,
             ty: potRect.top + potRect.height / 2,
             amount: prevP.currentBet,
+            delay,
           }]);
-          timeoutIds.push(setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), 600));
+          timeoutIds.push(setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), CHIP_FLIGHT_MS + delay));
         }
       });
     }
@@ -110,13 +203,17 @@ function App() {
       timeoutIds.push(setTimeout(() => setAnimateBetIn(false), 400));
     }
 
+    // --- Revelado de cartas: solo actualizamos el TARGET y dejamos que el scheduler drene la cola ---
     const prevLen = prev.communityCards?.length || 0;
     const currLen = curr.communityCards?.length || 0;
-    if (currLen > prevLen) {
-      const idxs: number[] = [];
-      for (let i = prevLen; i < currLen; i++) idxs.push(i);
-      setNewCommunityIdx(idxs);
-      timeoutIds.push(setTimeout(() => setNewCommunityIdx([]), 600));
+    targetCommCountRef.current = currLen;
+    if (currLen < prevLen) {
+      // Nueva mano (o reset): corta reveals en curso y sincroniza al instante, sin animar.
+      cancelReveal(currLen);
+    } else if (currLen > prevLen) {
+      // Nuevas calles: el scheduler las revela una a una, esperando el pot solo en la 1ª pendiente.
+      // Re-entrante: si todos van all-in y llegan varias calles seguidas, se encolan sin solaparse.
+      pumpReveal();
     }
 
     const hadWinners = prev.winners && prev.winners.length > 0;
@@ -132,11 +229,14 @@ function App() {
         const potEl = potRef.current;
         if (!potEl) return;
         const potRect = potEl.getBoundingClientRect();
+        let staggerIdx = 0;
         curr.winners?.forEach((w: any) => {
           const targetEl = w.id === myId ? myChipsRef.current : playerAnchorRefs.current.get(w.id);
           if (!targetEl) return;
           const r = targetEl.getBoundingClientRect();
           const id = ++flyIdRef.current;
+          const delay = staggerIdx * 110;
+          staggerIdx++;
           setFlyingChips(fc => [...fc, {
             id,
             x: potRect.left + potRect.width / 2,
@@ -144,8 +244,9 @@ function App() {
             tx: r.left + r.width / 2,
             ty: r.top + r.height / 2,
             amount: w.amount,
+            delay,
           }]);
-          timeoutIds.push(setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), 850));
+          timeoutIds.push(setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), 900 + delay));
         });
       }, 80);
       timeoutIds.push(outerTimeout);
@@ -385,6 +486,7 @@ function App() {
       <div className="w-full max-w-md h-full relative flex flex-col overflow-hidden">
 
         {flyingChips.map(chip => (
+          /* Wrapper: centra de forma ESTÁTICA en el origen (no se anima → no recalcula layout) */
           <div
             key={chip.id}
             className="fixed pointer-events-none z-[200]"
@@ -392,13 +494,28 @@ function App() {
               left: chip.x,
               top: chip.y,
               transform: 'translate(-50%, -50%)',
-              animation: 'flyChip 0.55s cubic-bezier(0.4, 0, 0.2, 1) both',
-              '--tx': `${chip.tx - chip.x}px`,
-              '--ty': `${chip.ty - chip.y}px`,
-            } as React.CSSProperties}
+            }}
           >
-            <div className="bg-[#2A2A2A] text-[#FDE047] text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-700 shadow-md">
-              {chip.amount}
+            {/* Inner: solo translate3d → animación 100% en compositor, sin trompicones */}
+            <div
+              style={{
+                animation: 'flyChip 0.85s linear both',
+                animationDelay: `${chip.delay}ms`,
+                willChange: 'transform, opacity',
+                backfaceVisibility: 'hidden',
+                '--tx': `${chip.tx - chip.x}px`,
+                '--ty': `${chip.ty - chip.y}px`,
+              } as React.CSSProperties}
+            >
+              <div
+                className="text-[#FDE047] text-[10px] font-bold px-2.5 py-1 rounded-full border border-yellow-200/30 shadow-[0_3px_10px_rgba(0,0,0,0.55)]"
+                style={{
+                  background: 'radial-gradient(circle at 30% 30%, #3a3a3a 0%, #1a1a1a 70%)',
+                  textShadow: '0 0 6px rgba(253, 224, 71, 0.55)',
+                }}
+              >
+                {fmtChips(chip.amount)}
+              </div>
             </div>
           </div>
         ))}
@@ -543,7 +660,9 @@ function App() {
                 <span
                   className="text-[12px] text-gray-500 font-medium mb-1"
                   ref={(el) => { if (el) playerAnchorRefs.current.set(p.id, el); }}
-                >{fmtChips(p.chips)}</span>
+                >
+                  <AnimatedNumber value={p.chips} />
+                </span>
                 <div className="h-5 flex items-center justify-center">
                   {p.currentBet > 0 && (
                     <div ref={(el) => { if (el) opponentBetRefs.current.set(p.id, el); }}>
@@ -593,19 +712,27 @@ function App() {
           <div className="flex gap-1.5 relative" ref={communityCardsRef}>
             {[0, 1, 2, 3, 4].map(index => {
               const card = currentRoom.communityCards?.[index];
-              if (card) {
+              const visible = card && index < displayCommCount;
+              if (visible) {
                 const cardStr = `${card.rank}${card.suit}`;
                 const isWinning = currentRoom.phase === 'showdown'
                    ? currentRoom.winners?.some((w:any) => w.winningCards?.includes(cardStr))
                    : true;
                 const justRevealed = newCommunityIdx.includes(index);
-                return <PlayingCard key={index} rank={card.rank} suit={card.suit} className={`w-16 aspect-[2/3] ${justRevealed ? 'animate-deal' : ''} ${!isWinning ? 'brightness-[0.4]' : ''}`} />;
+                return (
+                  <PlayingCard
+                    key={index}
+                    rank={card.rank}
+                    suit={card.suit}
+                    className={`w-16 aspect-[2/3] ${justRevealed ? 'animate-deal' : ''} ${!isWinning ? 'brightness-[0.4]' : ''}`}
+                  />
+                );
               }
               return <PlayingCard key={index} hidden className="w-16 aspect-[2/3]" />;
             })}
 
             <div className="absolute -bottom-8 right-0 text-white font-medium text-xl" ref={potRef}>
-              {fmtChips(currentRoom.pot)}
+              <AnimatedNumber value={currentRoom.pot} />
             </div>
 
             {currentRoom.phase === 'showdown' && currentRoom.winners && currentRoom.winners.length > 0 && (
@@ -828,7 +955,9 @@ function App() {
                  {isDealer(myPlayerIndex) && <DealerBadge />}
               </div>
               <div className="text-[10px] text-gray-400 font-bold">{user.name}</div>
-              <div className="text-white font-medium text-base" ref={myChipsRef}>{fmtChips(myPlayer ? (myPlayer?.chips || 0) : user.balance)}</div>
+              <div className="text-white font-medium text-base" ref={myChipsRef}>
+                <AnimatedNumber value={myPlayer ? (myPlayer?.chips || 0) : user.balance} />
+              </div>
             </div>
           </div>
         </div>

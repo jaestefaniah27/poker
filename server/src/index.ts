@@ -2,7 +2,7 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import { getRooms, createRoom, getRoom, evictAll } from './roomManager';
+import { getRooms, createRoom, getRoom, evictAll, leaveRoom } from './roomManager';
 import { STAKE_TIERS } from './pokerEngine';
 import { setIo, clearTurnTimer, broadcastRoom, hasOnlinePlayers } from './socketHelpers';
 import { registerAllHandlers } from './handlers';
@@ -22,6 +22,7 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 const INACTIVITY_LIMIT = 5 * 60 * 1000;
+const OFFLINE_KICK_LIMIT = 5 * 60 * 1000;
 const SWEEP_INTERVAL = 30 * 1000;
 
 import { initDB, loadRoomsFromDB } from './db';
@@ -39,7 +40,8 @@ const bootServer = async () => {
   
   for (const room of savedRooms) {
     // Reset volatile state on reboot
-    room.players.forEach(p => p.isOnline = false);
+    const now = Date.now();
+    room.players.forEach(p => { p.isOnline = false; p.offlineSince = now; });
     room.paused = true;
     room.turnStartedAt = undefined;
     room.inGrace = false;
@@ -68,11 +70,40 @@ io.on('connection', (socket) => {
 
 // --- Barrido de inactividad ---
 setInterval(async () => {
+  const now = Date.now();
+
+  // 1) Expulsión por jugador: cualquiera offline > OFFLINE_KICK_LIMIT
+  for (const r of getRooms()) {
+    const room = getRoom(r.id);
+    if (!room) continue;
+    const toKick = room.players.filter(p =>
+      p.isActive && !p.hasCashedOut && p.isOnline === false &&
+      p.offlineSince != null && (now - p.offlineSince) >= OFFLINE_KICK_LIMIT
+    );
+    if (toKick.length === 0) continue;
+
+    let kicked = 0;
+    for (const p of toKick) {
+      const cashOut = leaveRoom(r.id, p.id);
+      if (cashOut) {
+        try { await applyBalanceDelta(cashOut.userId, cashOut.chips); }
+        catch (e) { console.error('Error reintegrando fichas al expulsar offline:', e); }
+      }
+      kicked++;
+    }
+    if (kicked > 0) {
+      console.log(`Sala ${r.id}: ${kicked} jugador(es) expulsado(s) por estar offline >5min`);
+      broadcastRoom(r.id);
+      io.emit('roomsUpdated', getRooms());
+    }
+  }
+
+  // 2) Limpieza de sala entera si lleva sin actividad y nadie online
   for (const r of getRooms()) {
     const room = getRoom(r.id);
     if (!room || room.players.length === 0) continue;
     if (hasOnlinePlayers(room)) continue;
-    if (Date.now() - (room.lastActivityAt || 0) < INACTIVITY_LIMIT) continue;
+    if (now - (room.lastActivityAt || 0) < INACTIVITY_LIMIT) continue;
 
     clearTurnTimer(r.id);
     const cashOuts = evictAll(r.id);

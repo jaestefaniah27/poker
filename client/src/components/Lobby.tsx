@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
+import MatchHistoryModal from './MatchHistoryModal';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
 import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
@@ -22,6 +23,7 @@ interface LeaderboardEntry {
 
 const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: LobbyProps) => {
   const [showProfile, setShowProfile] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Create section
   const [newRoomName, setNewRoomName] = useState('');
@@ -68,6 +70,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
     <div className="h-full w-full overflow-y-auto scrollbar-hide bg-background text-primary flex flex-col items-center font-sans" style={{ padding: 'max(1.5rem, env(safe-area-inset-top, 0px)) 1.5rem max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
       {showProfile && (
         <ProfileModal user={user} token={token} onClose={() => setShowProfile(false)} onUpdate={onUpdateUser} />
+      )}
+      {showHistory && (
+        <MatchHistoryModal token={token} onClose={() => setShowHistory(false)} />
       )}
 
       <div className="w-full max-w-md">
@@ -153,6 +158,27 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
               </div>
             )}
           </div>
+
+          {/* ---- Mi historial ---- */}
+          <button
+            onClick={() => setShowHistory(true)}
+            className="w-full flex items-center justify-between bg-surface p-4 rounded-3xl border border-surfaceLight hover:border-gray-500 transition-colors active:scale-[0.99]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <h3 className="font-semibold text-sm">Mis partidas</h3>
+                <p className="text-[11px] text-gray-500">Entrada · máximo · salida · diferencia</p>
+              </div>
+            </div>
+            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
 
           {/* ---- Leaderboard ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">

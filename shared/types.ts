@@ -25,6 +25,10 @@ export interface Player {
   handName?: string;
   totalContribution: number;
   bustedSeq?: number; // Orden de eliminación en modo torneo (1 = primer eliminado)
+  sessionBuyIn?: number;   // Fichas totales compradas en esta sesión de mesa (incluye recompras)
+  sessionMaxChips?: number; // Pico de fichas durante la sesión
+  sessionStartedAt?: number; // Timestamp del primer buy-in de la sesión
+  offlineSince?: number; // Timestamp en que pasó a offline (para expulsión automática)
 }
 
 export type GamePhase = 'waiting' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';

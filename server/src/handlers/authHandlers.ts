@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser } from '../db';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser } from '../roomManager';
@@ -95,6 +95,23 @@ export const authHandlers = (socket: Socket) => {
     if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
     const users = await getAllUsersAdmin();
     callback({ ok: true, users: users.map(toPublicUser) });
+  });
+
+  socket.on('getMatchHistory', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    const rows = await getMatchHistoryForUser(user.id, 30);
+    callback({
+      ok: true,
+      matches: rows.map(r => ({
+        id: r.id,
+        roomName: r.room_name,
+        buyIn: r.buy_in,
+        maxChips: r.max_chips,
+        cashOut: r.cash_out,
+        playedAt: r.played_at
+      }))
+    });
   });
 
   socket.on('adminDeleteUser', async ({ token, targetId }, callback) => {

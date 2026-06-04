@@ -1,8 +1,37 @@
 import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
-import { deleteRoomFromDB } from './db';
+import { deleteRoomFromDB, recordMatchHistory } from './db';
 import { broadcastRoom } from './socketHelpers';
 import { v4 as uuidv4 } from 'uuid';
+
+// Cierra la sesión de un jugador en una sala: persiste el historial (entrada / pico / salida)
+// y limpia los campos de sesión. Devuelve las fichas con las que sale (cash_out).
+const closePlayerSession = (room: Room, player: Player, cashOutChips: number) => {
+  const buyIn = player.sessionBuyIn;
+  if (buyIn == null || buyIn <= 0) return;
+  const maxChips = Math.max(player.sessionMaxChips ?? cashOutChips, cashOutChips);
+  recordMatchHistory(
+    player.userId,
+    room.name,
+    buyIn,
+    maxChips,
+    cashOutChips,
+    Date.now()
+  ).catch(e => console.error('Error guardando historial de partida:', e));
+  player.sessionBuyIn = undefined;
+  player.sessionMaxChips = undefined;
+  player.sessionStartedAt = undefined;
+};
+
+// Recorre los jugadores activos y actualiza su pico de fichas. Llamar tras cada endRound.
+export const bumpMaxChips = (room: Room) => {
+  room.players.forEach(p => {
+    if (!p.isActive) return;
+    if (p.sessionBuyIn == null) return;
+    const cur = p.sessionMaxChips ?? 0;
+    if (p.chips > cur) p.sessionMaxChips = p.chips;
+  });
+};
 
 const rooms: Map<string, Room> = new Map();
 
@@ -79,6 +108,10 @@ export const touchRoom = (roomId: string) => {
 export const evictAll = (roomId: string): { userId: string; chips: number }[] => {
   const room = rooms.get(roomId);
   if (!room) return [];
+  // Grabar historial para TODOS los jugadores con sesión abierta (incluso los busted con chips=0)
+  room.players
+    .filter(p => p.isActive && !p.hasCashedOut)
+    .forEach(p => closePlayerSession(room, p, p.chips));
   const cashOuts = room.players
     .filter(p => p.isActive && !p.hasCashedOut && p.chips > 0)
     .map(p => ({ userId: p.userId, chips: p.chips }));
@@ -123,6 +156,7 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     // Reconexión a un asiento todavía vivo: NO se cobra buy-in, conserva sus fichas
     existing.isActive = true;
     existing.isOnline = true;
+    existing.offlineSince = undefined;
     existing.reducedTime = false; // al reconectar recupera sus tiempos normales
     existing.id = player.id;
     existing.name = player.name;
@@ -146,7 +180,11 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     existing.totalContribution = 0;
     existing.isSpectating = isGameActive;
     existing.isOnline = true;
+    existing.offlineSince = undefined;
     existing.reducedTime = false;
+    existing.sessionBuyIn = player.chips;
+    existing.sessionMaxChips = player.chips;
+    existing.sessionStartedAt = Date.now();
     return 'joined';
   }
 
@@ -161,7 +199,10 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     hasCashedOut: false,
     isOnline: true,
     reducedTime: false,
-    isSpectating: isGameActive // Wait for next hand if joining mid-game
+    isSpectating: isGameActive, // Wait for next hand if joining mid-game
+    sessionBuyIn: player.chips,
+    sessionMaxChips: player.chips,
+    sessionStartedAt: Date.now()
   });
   return 'joined';
 };
@@ -181,6 +222,7 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
   }
 
   const cashOut = { userId: player.userId, chips: player.chips };
+  closePlayerSession(room, player, player.chips);
 
   const isInHand = room.phase !== 'waiting' && room.phase !== 'showdown' && !player.isSpectating;
   if (isInHand) {
@@ -219,6 +261,9 @@ export const rebuy = (roomId: string, userId: string, buyIn: number): boolean =>
   player.balance -= buyIn;
   player.hasCashedOut = false;
   player.isSpectating = true; // Se incorpora en la siguiente mano
+  player.sessionBuyIn = (player.sessionBuyIn ?? 0) + buyIn;
+  if (buyIn > (player.sessionMaxChips ?? 0)) player.sessionMaxChips = buyIn;
+  if (!player.sessionStartedAt) player.sessionStartedAt = Date.now();
   return true;
 };
 
@@ -560,6 +605,8 @@ export const endRound = (room: Room) => {
   room.history.unshift(historyEntry);
   if (room.history.length > 3) room.history.pop();
 
+  bumpMaxChips(room);
+
   // La sala se queda en 'showdown' esperando a que llamen a nextHand()
 };
 
@@ -645,6 +692,8 @@ export const restartTournament = (roomId: string): { userId: string; socketId: s
     const delta = p.chips - buyIn; // banca ganancias / cobra nueva entrada
     deltas.push({ userId: p.userId, socketId: p.id, delta });
     p.balance += delta;
+    // Cerramos historial de la sesión que acaba (cash_out = fichas actuales)
+    closePlayerSession(room, p, p.chips);
     p.chips = buyIn;
     p.isSpectating = false;
     p.hasCashedOut = false;
@@ -655,6 +704,10 @@ export const restartTournament = (roomId: string): { userId: string; socketId: s
     p.hasActed = false;
     p.totalContribution = 0;
     p.handName = '';
+    // Arrancamos sesión nueva con el nuevo buy-in
+    p.sessionBuyIn = buyIn;
+    p.sessionMaxChips = buyIn;
+    p.sessionStartedAt = Date.now();
   });
   room.tournamentEnded = false;
   room.phase = 'waiting';

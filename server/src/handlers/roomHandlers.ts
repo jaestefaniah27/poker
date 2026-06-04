@@ -87,6 +87,7 @@ export const roomHandlers = (socket: Socket) => {
       const p = room.players.find(pl => pl.id === socket.id && pl.isActive && !pl.hasCashedOut);
       if (!p) continue;
       p.isOnline = false;
+      p.offlineSince = Date.now();
       
       const hasOnlinePlayers = room.players.some(p => p.isActive && !p.hasCashedOut && p.isOnline !== false);
       if (!hasOnlinePlayers) {

@@ -49,6 +49,22 @@ const MIGRATIONS = [
       user_id TEXT NOT NULL,
       issued_at INTEGER NOT NULL
     )`
+  },
+  {
+    name: '006_match_history',
+    sql: `CREATE TABLE IF NOT EXISTS match_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      room_name TEXT NOT NULL,
+      buy_in INTEGER NOT NULL,
+      max_chips INTEGER NOT NULL,
+      cash_out INTEGER NOT NULL,
+      played_at INTEGER NOT NULL
+    )`
+  },
+  {
+    name: '007_match_history_user_idx',
+    sql: 'CREATE INDEX IF NOT EXISTS idx_match_history_user ON match_history (user_id, played_at DESC)'
   }
 ];
 
@@ -221,4 +237,36 @@ export const getSessionFromDB = async (token: string): Promise<{ user_id: string
 
 export const deleteSessionFromDB = async (token: string): Promise<void> => {
   await dbRun('DELETE FROM sessions WHERE token = ?', [token]);
+};
+
+// --- Historial de partidas ---
+export interface MatchHistoryRow {
+  id: number;
+  user_id: string;
+  room_name: string;
+  buy_in: number;
+  max_chips: number;
+  cash_out: number;
+  played_at: number;
+}
+
+export const recordMatchHistory = async (
+  userId: string,
+  roomName: string,
+  buyIn: number,
+  maxChips: number,
+  cashOut: number,
+  playedAt: number
+): Promise<void> => {
+  await dbRun(
+    'INSERT INTO match_history (user_id, room_name, buy_in, max_chips, cash_out, played_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [userId, roomName, buyIn, maxChips, cashOut, playedAt]
+  );
+};
+
+export const getMatchHistoryForUser = async (userId: string, limit = 30): Promise<MatchHistoryRow[]> => {
+  return dbAll<MatchHistoryRow>(
+    'SELECT * FROM match_history WHERE user_id = ? ORDER BY played_at DESC LIMIT ?',
+    [userId, limit]
+  );
 };

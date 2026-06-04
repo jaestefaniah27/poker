@@ -40,10 +40,23 @@
   }
 }
 
+/* Vuelo de fichas: anticipación (pop+asiento en origen) → arco parabólico denso → llegada.
+   0-14%: se materializa y "carga" en el origen sin moverse. 14-100%: arco con X lineal e
+   Y = lineal - 40px*sin(pi*f), f=(t-14)/86. Timing LINEAR → sin re-ease por segmento. */
 @keyframes flyChip {
-  0%   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  70%  { opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.5); opacity: 0; }
+  0%   { transform: translate3d(0, 0, 0) scale(0.45); opacity: 0; }
+  6%   { transform: translate3d(0, 0, 0) scale(1.15); opacity: 1; }
+  14%  { transform: translate3d(0, 0, 0) scale(1.0); opacity: 1; }
+  22.6% { transform: translate3d(calc(var(--tx) * 0.10), calc(var(--ty) * 0.10 - 12.4px), 0) scale(1.02); }
+  31.2% { transform: translate3d(calc(var(--tx) * 0.20), calc(var(--ty) * 0.20 - 23.5px), 0) scale(1.0); }
+  39.8% { transform: translate3d(calc(var(--tx) * 0.30), calc(var(--ty) * 0.30 - 32.4px), 0) scale(0.97); }
+  48.4% { transform: translate3d(calc(var(--tx) * 0.40), calc(var(--ty) * 0.40 - 38.0px), 0) scale(0.93); }
+  57%  { transform: translate3d(calc(var(--tx) * 0.50), calc(var(--ty) * 0.50 - 40.0px), 0) scale(0.9); }
+  65.6% { transform: translate3d(calc(var(--tx) * 0.60), calc(var(--ty) * 0.60 - 38.0px), 0) scale(0.86); }
+  74.2% { transform: translate3d(calc(var(--tx) * 0.70), calc(var(--ty) * 0.70 - 32.4px), 0) scale(0.82); }
+  82.8% { transform: translate3d(calc(var(--tx) * 0.80), calc(var(--ty) * 0.80 - 23.5px), 0) scale(0.76); }
+  91.4% { transform: translate3d(calc(var(--tx) * 0.90), calc(var(--ty) * 0.90 - 12.4px), 0) scale(0.7); opacity: 1; }
+  100% { transform: translate3d(var(--tx), var(--ty), 0) scale(0.6); opacity: 0; }
 }
 
 @keyframes chipPop {
@@ -52,14 +65,47 @@
   100% { transform: scale(1); opacity: 1; }
 }
 
-/* Revelado de carta comunitaria: voltea desde el reverso con un ligero rebote */
+/* Revelado de carta: flip 3D limpio, deceleración suave sin snap */
 @keyframes dealCard {
-  0%   { transform: rotateY(90deg) scale(0.8); opacity: 0; }
-  60%  { transform: rotateY(0deg) scale(1.08); opacity: 1; }
-  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+  0% {
+    transform: perspective(900px) translateZ(0) rotateY(-88deg) scale(0.96);
+    opacity: 0;
+  }
+  100% {
+    transform: perspective(900px) translateZ(0) rotateY(0deg) scale(1);
+    opacity: 1;
+  }
 }
 
 .animate-deal {
-  animation: dealCard 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  transform-style: preserve-3d;
+  animation: dealCard 0.52s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* Pulso del valor del bote cuando recibe fichas */
+@keyframes potPulse {
+  0%   { transform: scale(1); text-shadow: 0 0 0 rgba(253, 224, 71, 0); }
+  40%  { transform: scale(1.18); text-shadow: 0 0 18px rgba(253, 224, 71, 0.55); }
+  100% { transform: scale(1); text-shadow: 0 0 0 rgba(253, 224, 71, 0); }
+}
+
+.animate-pot-pulse {
+  animation: potPulse 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  display: inline-block;
+  transform-origin: center;
+}
+
+/* Pulso suave para fichas que crecen (recompensa al ganador) */
+@keyframes chipsGrow {
+  0%   { transform: scale(1); color: inherit; }
+  40%  { transform: scale(1.18); color: #FDE047; }
+  100% { transform: scale(1); }
+}
+
+.animate-chips-grow {
+  animation: chipsGrow 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  display: inline-block;
+  transform-origin: center;
 }
