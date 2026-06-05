@@ -706,16 +706,16 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         {phase === 'resolve' && <div className="text-[10px] text-emerald-200/70 uppercase tracking-widest font-bold">Resultado</div>}
       </div>
 
-      {/* Círculo de apuesta (slot fijo: círculo + línea de importe SIEMPRE reservada → no salta al apostar) */}
+      {/* Rectángulo de apuesta (slot fijo: área de apuesta + línea de importe SIEMPRE reservada → no salta al apostar) */}
       <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 140 }}>
         <motion.div
           ref={circleRef}
-          className="relative rounded-full flex items-center justify-center shrink-0"
+          className="relative rounded-[24px] flex items-center justify-center shrink-0"
           style={{
-            width: 100,
-            height: 100,
+            width: 200,
+            height: 90,
             border: '2px dashed rgba(255,215,140,0.55)',
-            background: 'radial-gradient(circle at 50% 35%, rgba(255,215,140,0.10), rgba(0,0,0,0.25))',
+            background: 'radial-gradient(ellipse at 50% 50%, rgba(255,215,140,0.10), rgba(0,0,0,0.25))',
             boxShadow: '0 0 30px rgba(0,0,0,0.5), inset 0 0 30px rgba(0,0,0,0.4)',
           }}
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
