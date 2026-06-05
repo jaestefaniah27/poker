@@ -634,7 +634,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       </div>
 
       {/* Círculo de apuesta (slot fijo: círculo + línea de importe SIEMPRE reservada → no salta al apostar) */}
-      <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 120 }}>
+      <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 140 }}>
         <motion.div
           ref={circleRef}
           className="relative rounded-full flex items-center justify-center shrink-0"
@@ -742,7 +742,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                     className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">½</button>
                 )}
                 <button onClick={placeBet} disabled={pendingTotal < minBet}
-                  className="py-3 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 text-white font-extrabold text-[12px] tracking-wider shadow-lg active:scale-95 disabled:active:scale-100">REPARTIR</button>
+                  className="py-3 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 text-white font-extrabold text-[12px] tracking-wider shadow-lg active:scale-95 disabled:active:scale-100">LISTO</button>
               </div>
             </div>
           )}
