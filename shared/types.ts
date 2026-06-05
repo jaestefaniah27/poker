@@ -36,6 +36,7 @@ export interface Player {
   bjResult?: 'win' | 'lose' | 'push' | 'blackjack'; // Resultado de la última mano
   bjDelta?: number; // Cambio de chips de la última mano (para mostrar +N/-N)
   lastBuyIn?: number; // Último buy-in elegido (para recompra rápida en blackjack)
+  bjHasContinued?: boolean; // True si el jugador ha pulsado continuar y está listo para la siguiente ronda
 }
 
 export type GameType = 'poker' | 'blackjack';

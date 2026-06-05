@@ -44,6 +44,9 @@ const eligibleCount = (room: Room) =>
   room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0).length;
 
 const armBettingTimer = (roomId: string) => {
+  const room = getRoom(roomId);
+  if (!room) return;
+  room.bettingDeadline = Date.now() + BJ_BETTING_DURATION;
   const t = getTimers(roomId);
   if (t.betting) clearTimeout(t.betting);
   // Añadimos 2s de gracia para que los auto-place de los clientes (con posibles desajustes de reloj) lleguen antes de cerrar las apuestas
@@ -70,7 +73,8 @@ const armDealerTimer = (roomId: string) => {
 
 const onBettingDeadline = (roomId: string) => {
   const room = getRoom(roomId);
-  if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'betting') return;
+  if (!room || room.gameType !== 'blackjack') return;
+  if (room.bjPhase !== 'betting' && room.bjPhase !== 'resolve') return;
   proceedDeal(roomId);
 };
 
@@ -136,7 +140,6 @@ const startNextRound = (roomId: string) => {
   }
   const ok = startBlackjackRound(roomId);
   if (!ok) { room.bjPhase = 'waiting'; broadcastRoom(roomId); return; }
-  armBettingTimer(roomId);
   broadcastRoom(roomId);
   io.emit('roomsUpdated', getRooms());
 };
@@ -149,7 +152,6 @@ export const maybeStartBlackjack = (roomId: string) => {
   if (eligibleCount(room) < 1) return;
   const ok = startBlackjackRound(roomId);
   if (ok) {
-    armBettingTimer(roomId);
     broadcastRoom(roomId);
     io.emit('roomsUpdated', getRooms());
   }
@@ -180,8 +182,20 @@ export const blackjackHandlers = (socket: Socket) => {
     if (!room || room.gameType !== 'blackjack') return;
     const seat = room.players.find(p => p.id === socket.id);
     if (!seat) return;
+    
+    if (room.bjPhase !== 'waiting' && room.bjPhase !== 'betting') {
+      if (!(room.bjPhase === 'resolve' && seat.bjHasContinued)) {
+        return;
+      }
+    }
+    
     const ok = placeBlackjackBet(roomId, seat.userId, Number(amount) || 0);
     if (!ok) return;
+    
+    if (!room.bettingDeadline) {
+      armBettingTimer(roomId);
+    }
+    
     broadcastRoom(roomId);
     // Si todos ya apostaron, repartir ya
     if (allBlackjackBetsIn(room)) {
@@ -217,12 +231,28 @@ export const blackjackHandlers = (socket: Socket) => {
     maybeStartBlackjack(roomId);
   });
 
-  // Continuar tras el resultado: cualquiera en la mesa puede arrancar la siguiente ronda.
+  // Continuar tras el resultado: cualquiera en la mesa puede arrancar la siguiente ronda, pero solo avanza de fase global si todos lo hacen.
   socket.on('bjContinue', ({ roomId }) => {
     const room = getRoom(roomId);
     if (!room || room.gameType !== 'blackjack') return;
     if (room.bjPhase !== 'resolve') return;
-    startNextRound(roomId);
+    
+    const p = room.players.find(p => p.id === socket.id);
+    if (!p || p.bjHasContinued) return; // ya continuó, ignorar
+    
+    p.bjHasContinued = true;
+    p.bet = 0; // limpiar apuesta de la ronda anterior
+    p.bjResult = undefined;
+    p.bjDelta = undefined;
+
+    const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
+    const allContinued = activePlayers.every(p => p.bjHasContinued);
+
+    if (allContinued) {
+      startNextRound(roomId);
+    } else {
+      broadcastRoom(roomId);
+    }
   });
 
   // Recompra: repite el último buy-in cuando te quedas sin fichas.

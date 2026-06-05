@@ -244,6 +244,15 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
   }
 
   const cashOut = { userId: player.userId, chips: player.chips };
+
+  // Blackjack: si el jugador se va con fichas apostadas (le dio a LISTO), pierde esa apuesta.
+  if (room.gameType === 'blackjack' && (player.bet || 0) > 0) {
+    const lostBet = player.bet || 0;
+    player.chips = Math.max(0, player.chips - lostBet);
+    cashOut.chips = player.chips;
+    player.bet = 0;
+    player.bjStatus = 'idle';
+  }
   closePlayerSession(room, player, player.chips);
 
   const isInHand = room.gameType === 'blackjack'
@@ -779,7 +788,7 @@ export const resumeBlindTimers = () => {
 // BLACKJACK
 // ============================================================
 
-export const BJ_BETTING_DURATION = 15_000;
+export const BJ_BETTING_DURATION = 7_000;
 export const BJ_PLAYER_ACTION_DURATION = 15_000;
 export const BJ_RESOLVE_DURATION = 7_000;
 export const BJ_DEALER_REVEAL_DELAY = 1_400; // dealer pause before flipping/playing
@@ -789,28 +798,60 @@ export const BJ_DEALER_REVEAL_DELAY = 1_400; // dealer pause before flipping/pla
 export const startBlackjackRound = (roomId: string): boolean => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack') return false;
+  
+  // Guardar apuestas tempranas (jugadores que ya apostaron durante resolve)
+  const earlyBets = new Map<string, { bet: number; status: string }>();
+  room.players.forEach(p => {
+    if (p.bjHasContinued && (p.bet || 0) > 0) {
+      earlyBets.set(p.userId, { bet: p.bet!, status: p.bjStatus || 'playing' });
+    }
+  });
+  
   // Activar de espectador a participante a los que entraron en la ronda anterior
   room.players.forEach(p => {
     if (p.isActive && p.isSpectating) p.isSpectating = false;
     if (p.isActive) p.reducedTime = p.isOnline === false;
+    p.bjHasContinued = false;
   });
   const eligibles = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
   if (eligibles.length < 1) return false;
   resetBlackjackHand(room);
   room.bjPhase = 'betting';
-  room.bettingDeadline = Date.now() + BJ_BETTING_DURATION;
   room.bjTurnUserId = undefined;
   room.dealerCards = [];
   room.lastActivityAt = Date.now();
+  
+  // Restaurar apuestas tempranas
+  for (const [userId, saved] of earlyBets) {
+    const p = room.players.find(pl => pl.userId === userId);
+    if (p && p.isActive && !p.isSpectating && p.chips > 0) {
+      p.bet = saved.bet;
+      p.bjStatus = 'playing';
+    }
+  }
+  
+  // Preservar bettingDeadline SOLO si hay apuestas tempranas Y el deadline aún no ha expirado.
+  // En cualquier otro caso, limpiar para que el timer se re-arme al apostar.
+  if (earlyBets.size > 0 && room.bettingDeadline && room.bettingDeadline > Date.now()) {
+    // Timer sigue vivo — no tocamos nada
+  } else {
+    room.bettingDeadline = undefined;
+  }
+  
   return true;
 };
 
 // Coloca apuesta del jugador. Devuelve true si la apuesta queda registrada.
 export const placeBlackjackBet = (roomId: string, userId: string, amount: number): boolean => {
   const room = rooms.get(roomId);
-  if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'betting') return false;
+  if (!room || room.gameType !== 'blackjack') return false;
   const player = room.players.find(p => p.userId === userId);
   if (!player || !player.isActive || player.isSpectating || player.chips <= 0) return false;
+  
+  if (room.bjPhase !== 'betting') {
+    if (!(room.bjPhase === 'resolve' && player.bjHasContinued)) return false;
+  }
+  
   const min = room.minBet || 1;
   const max = Math.min(room.maxBet || player.chips, player.chips);
   const safe = Math.floor(Math.max(min, Math.min(max, amount)));
@@ -823,6 +864,7 @@ export const placeBlackjackBet = (roomId: string, userId: string, amount: number
 
 // ¿Todos los jugadores activos con fichas ya apostaron?
 export const allBlackjackBetsIn = (room: Room): boolean => {
+  if (room.bjPhase !== 'betting') return false;
   const eligibles = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
   return eligibles.length > 0 && eligibles.every(p => (p.bet || 0) > 0);
 };
@@ -832,13 +874,22 @@ export const allBlackjackBetsIn = (room: Room): boolean => {
 export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerAction' | 'betting' | null => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack') return null;
+  
+  // Limpiar apuestas de los que estaban admirando sin darle a continuar
+  room.players.forEach(p => {
+    if (!p.bjHasContinued && room.bjPhase === 'resolve') p.bet = 0;
+  });
+  
   const bettors = room.players.filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0);
   if (bettors.length === 0) {
     // Nadie apostó → reabrir betting
     room.bjPhase = 'betting';
-    room.bettingDeadline = Date.now() + BJ_BETTING_DURATION;
+    room.bettingDeadline = undefined;
     return 'betting';
   }
+  // Asegurar que bajamos la bandera de continuación para todos al repartir
+  room.players.forEach(p => p.bjHasContinued = false);
+  
   // Asegurar mazo fresco al inicio de cada ronda
   room.deck = createDeck();
   shuffleDeck(room.deck);
@@ -949,6 +1000,14 @@ export const finishBlackjackHand = (roomId: string) => {
   room.bjPhase = 'resolve';
   room.showdownAt = Date.now();
   bumpMaxChips(room);
+  
+  // Auto-continuar a los que NO apostaron en esta ronda: no participaron,
+  // así que no necesitan pulsar Continuar para admirar nada.
+  room.players.forEach(p => {
+    if (p.isActive && !p.isSpectating && (p.bet || 0) === 0) {
+      p.bjHasContinued = true;
+    }
+  });
 };
 
 // Devuelve true si el bjPhase y la fecha indican que el dealer debe revelar/jugar.

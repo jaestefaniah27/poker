@@ -282,32 +282,7 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
   );
 };
 
-const ResultBadge = ({ result, big = false }: { result?: string; big?: boolean }) => {
-  const map: Record<string, { txt: string; from: string; to: string; text: string }> = {
-    blackjack: { txt: 'BLACKJACK!', from: '#fde047', to: '#f59e0b', text: '#451a03' },
-    win:       { txt: 'GANAS',      from: '#34d399', to: '#059669', text: '#022c22' },
-    lose:      { txt: 'PIERDES',    from: '#fb7185', to: '#be123c', text: '#fff'    },
-    push:      { txt: 'EMPATE',     from: '#7dd3fc', to: '#0284c7', text: '#082f49' },
-  };
-  if (!result || !map[result]) return null;
-  const m = map[result];
-  return (
-    <motion.div
-      initial={{ scale: 0.5, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: 'spring', stiffness: 260, damping: 16 }}
-      className={`rounded-full font-black tracking-wider shadow-2xl ${big ? 'px-5 py-1.5 text-lg' : 'px-3 py-1 text-xs'}`}
-      style={{
-        background: `linear-gradient(135deg, ${m.from}, ${m.to})`,
-        color: m.text,
-        textShadow: '0 1px 2px rgba(0,0,0,0.3)',
-        boxShadow: `0 0 30px ${m.from}66, 0 8px 20px rgba(0,0,0,0.5)`,
-      }}
-    >
-      {m.txt}
-    </motion.div>
-  );
-};
+
 
 // Mano compacta para oponentes: cartas pequeñas muy superpuestas (estilo escritorio).
 const MiniHand = ({ cards }: { cards: Card[] }) => {
@@ -330,7 +305,8 @@ const MiniHand = ({ cards }: { cards: Card[] }) => {
 const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const myPlayer = room.players.find(p => p.userId === user.id) || null;
   const opponents = room.players.filter(p => p.userId !== user.id && p.isActive);
-  const phase = room.bjPhase || 'waiting';
+  const rawPhase = room.bjPhase || 'waiting';
+  const phase = (rawPhase === 'resolve' && myPlayer?.bjHasContinued) ? 'betting' : rawPhase;
   // Modelo concurrente: puedo actuar sobre mi mano mientras esté 'playing' (sin esperar turno).
   const canAct = phase === 'playerAction' && myPlayer?.bjStatus === 'playing';
 
@@ -363,7 +339,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   // Ocultar fichas automáticamente si se pierde la mano
   useEffect(() => {
     if (phase === 'resolve' && myPlayer && myBet > 0) {
-      if (myPlayer.bjResult === 'lose' || myPlayer.bjResult === 'bust') {
+      if (myPlayer.bjResult === 'lose' || myPlayer.bjStatus === 'bust') {
         // Un pequeño timeout para que el usuario vea el resultado un instante antes de que desaparezcan
         const t = setTimeout(() => setHideLostChips(true), 1200);
         return () => clearTimeout(t);
@@ -387,7 +363,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, []);
-  const bettingLeft = room.bettingDeadline ? Math.max(0, Math.ceil((room.bettingDeadline - now) / 1000)) : null;
+  const bettingLeft = (phase === 'betting' && room.bettingDeadline) ? Math.max(0, Math.ceil((room.bettingDeadline - now) / 1000)) : null;
 
   useEffect(() => { if (canAct) vibrate([200]); }, [canAct]);
 
@@ -397,18 +373,20 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   }, [phase, myBet]);
   // Auto-place pending chips when betting deadline expires
   useEffect(() => {
+    if (room.bjPhase !== 'betting') return;
     if (!room.bettingDeadline || now < room.bettingDeadline) return;
     if (!canBet || pendingTotal < minBet || autoPlacedRef.current) return;
     autoPlacedRef.current = true;
     setPlacedComposition([...pendingChips]);
     socket.emit('bjPlaceBet', { roomId: room.id, amount: pendingTotal });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, room.bettingDeadline]);
+  }, [now, room.bettingDeadline, room.bjPhase]);
 
+  const dealerCards = (phase === 'betting' || phase === 'waiting') ? [] : (room.dealerCards || []);
   const dealer = useMemo(() => {
-    const cards = room.dealerCards || [];
+    const cards = dealerCards;
     return { cards, ...handTotalDisplay(cards) };
-  }, [room.dealerCards]);
+  }, [dealerCards]);
 
   const addChip = (d: ChipDenom) => {
     if (!canBet) return;
@@ -461,7 +439,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         if (result === 'push') glyphs = circleChips;
         else if (result === 'win') glyphs = [...circleChips, ...circleChips];
         else {
-          const amount = myBet + Math.abs(myPlayer?.bjDelta || myBet);
+          const amount = myBet + Math.abs(myPlayer?.bjDelta || 0);
           glyphs = chipsFromAmount(amount);
         }
         const fromX = circle.left + circle.width / 2;
@@ -484,9 +462,10 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   };
   const rebuy = () => { socket.emit('bjRebuy', { roomId: room.id }); vibrate(20); };
 
-  const myTotals = myPlayer ? handTotalDisplay(myPlayer.cards || []) : null;
+  const myCards = (phase === 'betting' || phase === 'waiting') ? [] : (myPlayer?.cards || []);
+  const myTotals = myPlayer ? handTotalDisplay(myCards) : null;
 
-  const canDouble = canAct && (myPlayer?.cards?.length || 0) === 2 && myChips >= myBet * 2;
+  const canDouble = canAct && myCards.length === 2 && myChips >= myBet * 2;
   const canRebuy = !!myPlayer && myChips <= 0 && (phase === 'waiting' || phase === 'betting' || phase === 'resolve');
 
   // Fichas disponibles mostradas: restan la apuesta en mesa (ves cuánto te queda en todo momento).
@@ -531,7 +510,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
     } else if ((result === 'win' || result === 'blackjack') && (myPlayer.bjDelta || 0) > 0) {
       // Dealer empuja fichas de premio hacia el círculo
-      const prizeAmount = Math.abs(myPlayer.bjDelta);
+      const prizeAmount = Math.abs(myPlayer.bjDelta || 0);
       const glyphs = result === 'win' ? circleChips : chipsFromAmount(prizeAmount);
       const spawned = glyphs.map((d, i) => ({
         id: ++flyIdRef.current,
@@ -685,9 +664,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
       {/* Cartas del jugador (slot fijo SIEMPRE reservado: placeholder cuando no hay cartas) */}
       <div className="relative z-10 px-4 shrink-0 flex items-center justify-center gap-2" style={{ height: 110 }}>
-        {myPlayer && (myPlayer.cards?.length || 0) > 0 ? (
+        {myPlayer && myCards.length > 0 ? (
           <>
-            <CardFan cards={myPlayer.cards || []} big />
+            <CardFan cards={myCards} big />
             {myTotals && (
               <AnimatePresence>
                 <motion.div
@@ -749,7 +728,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                       exit={{ opacity: 0, scale: 0.6 }}
                       transition={{ type: 'spring', stiffness: 280, damping: 22, delay: 0.25 }}
                     >
-                      <ChipStack chips={myPlayer.bjResult === 'win' ? circleChips : chipsFromAmount(Math.abs(myPlayer.bjDelta))} size={34} />
+                      <ChipStack chips={myPlayer.bjResult === 'win' ? circleChips : chipsFromAmount(Math.abs(myPlayer.bjDelta || 0))} size={34} />
                     </motion.div>
                   )}
                 </AnimatePresence>
