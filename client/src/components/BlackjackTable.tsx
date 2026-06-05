@@ -593,10 +593,10 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         </div>
       </div>
 
-      {/* ===== Oponentes: entre dealer y mis cartas ===== */}
-      {opponents.length > 0 && (
-        <div className="relative z-10 shrink-0 w-full flex justify-center py-1">
-          <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-2 items-start">
+      {/* ===== Oponentes: entre dealer y mis cartas (Altura reservada permanentemente) ===== */}
+      <div className="relative z-10 shrink-0 w-full flex justify-center py-1" style={{ minHeight: 96 }}>
+        {opponents.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-2 items-start w-full justify-center">
             {opponents.map((p: Player) => {
               const isTurn = phase === 'playerAction' && p.bjStatus === 'playing';
               const t = handTotalDisplay(p.cards || []);
@@ -656,8 +656,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Spacer constante (todos los slots son fijos → este reparto es igual en toda fase) */}
       <div className="flex-1 min-h-0" />
@@ -688,26 +688,11 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         )}
       </div>
 
-      {/* Estado (slot fijo) */}
-      <div className="relative z-10 flex justify-center items-center pointer-events-none shrink-0" style={{ height: 16 }}>
-        {phase === 'waiting' && <div className="text-[10px] text-white/40 uppercase tracking-widest">Esperando</div>}
-        {phase === 'betting' && (
-          <div className="text-[10px] text-amber-200/80 uppercase tracking-widest font-bold">
-            {bettingLeft != null ? `Apuesten · ${bettingLeft}s` : 'Apuesten'}
-          </div>
-        )}
-        {phase === 'dealing' && <div className="text-[10px] text-white/60 uppercase tracking-widest">Repartiendo</div>}
-        {phase === 'playerAction' && (
-          <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">
-            {canAct ? 'Tu turno · pide o plántate' : 'Esperando a los demás'}
-          </div>
-        )}
-        {phase === 'dealerAction' && <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">Dealer juega</div>}
-        {phase === 'resolve' && <div className="text-[10px] text-emerald-200/70 uppercase tracking-widest font-bold">Resultado</div>}
-      </div>
+      {/* Spacer constante para mantener la distancia idéntica a cuando el texto de estado estaba aquí arriba */}
+      <div className="relative z-10 shrink-0 pointer-events-none" style={{ height: 16 }} />
 
-      {/* Rectángulo de apuesta (slot fijo: área de apuesta + línea de importe SIEMPRE reservada → no salta al apostar) */}
-      <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 140 }}>
+      {/* Rectángulo de apuesta (slot fijo: área de apuesta + texto de estado integrado SIEMPRE reservado → no salta) */}
+      <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 120 }}>
         <motion.div
           ref={circleRef}
           className="relative rounded-[24px] flex items-center justify-center shrink-0"
@@ -742,8 +727,24 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             <span className="text-[9px] text-white/30 uppercase tracking-[0.25em] font-bold">Apuesta</span>
           )}
         </motion.div>
-        {/* Espacio reservado para que el círculo no salte */}
-        <div className="h-2" />
+
+        {/* Estado movido justo debajo del rectángulo de apuestas, integrado en su misma altura (no suma altura total) */}
+        <div className="relative flex justify-center items-center pointer-events-none shrink-0" style={{ height: 16 }}>
+          {phase === 'waiting' && <div className="text-[10px] text-white/40 uppercase tracking-widest">Esperando</div>}
+          {phase === 'betting' && (
+            <div className={`text-[10px] uppercase tracking-widest font-bold ${bettingLeft != null && bettingLeft <= 5 ? 'text-red-400' : 'text-amber-200/80'}`}>
+              {bettingLeft != null ? `Apuesten · ${bettingLeft}s` : 'Apuesten'}
+            </div>
+          )}
+          {phase === 'dealing' && <div className="text-[10px] text-white/60 uppercase tracking-widest">Repartiendo</div>}
+          {phase === 'playerAction' && (
+            <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">
+              {canAct ? 'Tu turno · pide o plántate' : 'Esperando a los demás'}
+            </div>
+          )}
+          {phase === 'dealerAction' && <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">Dealer juega</div>}
+          {phase === 'resolve' && <div className="text-[10px] text-emerald-200/70 uppercase tracking-widest font-bold">Resultado</div>}
+        </div>
       </div>
 
       </div>{/* fin columna central */}
