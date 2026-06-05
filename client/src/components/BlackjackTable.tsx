@@ -624,9 +624,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               return (
                 <motion.div
                   key={p.userId}
-                  animate={isTurn ? { boxShadow: ['0 0 0 0 rgba(251,191,36,0)', '0 0 16px rgba(251,191,36,0.5)', '0 0 0 0 rgba(251,191,36,0)'] } : {}}
-                  transition={{ duration: 1.5, repeat: isTurn ? Infinity : 0 }}
-                  className={`shrink-0 flex flex-col items-center gap-0.5 px-1.5 pt-1 pb-1 rounded-xl border backdrop-blur ${isTurn ? 'bg-amber-400/20 border-amber-300/70' : 'bg-black/45 border-white/10'}`}
+                  className={`shrink-0 flex flex-col items-center gap-0.5 px-1.5 pt-1 pb-1 rounded-xl border backdrop-blur transition-colors duration-300 ${isTurn ? 'bg-amber-400/20 border-amber-300/70' : 'bg-black/45 border-white/10'}`}
                   style={{ opacity, minWidth: 88 }}
                 >
                   <div className="flex items-center gap-1 self-stretch">
