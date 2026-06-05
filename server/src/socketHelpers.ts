@@ -77,6 +77,35 @@ export const buildRoomView = (room: Room, socketId: string) => {
   };
 };
 
+// Throttle de persistencia: saveRoomToDB hace fsync (PRAGMA synchronous=FULL).
+// En partida activa broadcastRoom dispara docenas de veces/seg; sin throttle el
+// event-loop se atasca y los clientes muestran "conectando al servidor".
+// Persistimos como mucho 1 escritura por sala cada PERSIST_INTERVAL.
+const PERSIST_INTERVAL = 1000;
+const pendingPersist: Map<string, { last: number; timer?: NodeJS.Timeout }> = new Map();
+
+const schedulePersist = (roomId: string) => {
+  const now = Date.now();
+  const slot = pendingPersist.get(roomId) || { last: 0 };
+  const since = now - slot.last;
+
+  const doSave = () => {
+    const r = getRoom(roomId);
+    if (!r) { pendingPersist.delete(roomId); return; }
+    slot.last = Date.now();
+    slot.timer = undefined;
+    saveRoomToDB(r).catch(e => console.error(`[persist] sala ${roomId}:`, e));
+  };
+
+  if (since >= PERSIST_INTERVAL) {
+    pendingPersist.set(roomId, slot);
+    doSave();
+  } else if (!slot.timer) {
+    slot.timer = setTimeout(doSave, PERSIST_INTERVAL - since);
+    pendingPersist.set(roomId, slot);
+  }
+};
+
 export const broadcastRoom = (roomId: string) => {
   if (!io) return;
   const room = getRoom(roomId);
@@ -84,7 +113,7 @@ export const broadcastRoom = (roomId: string) => {
   room.players.forEach(p => {
     if (p.isActive) io.to(p.id).emit('roomUpdated', buildRoomView(room, p.id));
   });
-  saveRoomToDB(room).catch(e => console.error(`Error saving room ${roomId} to DB:`, e));
+  schedulePersist(roomId);
 };
 
 export const clearTurnTimer = (roomId: string) => {

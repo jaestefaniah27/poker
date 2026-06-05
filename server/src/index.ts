@@ -37,7 +37,13 @@ const io = new Server(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
-  }
+  },
+  // Tolerar blips de red en móvil (cambio WiFi↔datos, app en background).
+  // Si el server tarda en responder a un ping por una pausa breve del event-loop,
+  // damos margen antes de cerrar el socket. Cliente sigue mostrando "conectando"
+  // hasta recibir respuesta, pero la sesión no se pierde.
+  pingInterval: 20000,
+  pingTimeout: 30000
 });
 
 const PORT = process.env.PORT || 3001;
@@ -143,6 +149,20 @@ setInterval(() => {
   try { turnWatchdog(); }
   catch (e) { console.error('[Watchdog] error:', e); }
 }, WATCHDOG_INTERVAL);
+
+// --- Monitor de event-loop: si bloquea >500ms, log con stack.
+// Causa típica de "conectando al servidor" simultáneo en todos los clientes.
+const LOOP_CHECK = 200;
+const LOOP_BLOCK_THRESHOLD = 500;
+let lastTick = Date.now();
+setInterval(() => {
+  const now = Date.now();
+  const drift = now - lastTick - LOOP_CHECK;
+  if (drift > LOOP_BLOCK_THRESHOLD) {
+    console.warn(`[event-loop] bloqueado ${drift}ms — investigar último handler/timer activo.`);
+  }
+  lastTick = now;
+}, LOOP_CHECK).unref();
 
 // --- Shutdown graceful ---
 const shutdown = (signal: string) => {

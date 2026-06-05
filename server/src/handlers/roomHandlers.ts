@@ -79,8 +79,8 @@ export const roomHandlers = (socket: Socket) => {
     io.emit('roomsUpdated', getRooms());
   });
 
-  socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
+  socket.on('disconnect', (reason: string) => {
+    console.log(`User disconnected: ${socket.id} reason=${reason}`);
     for (const r of getRooms()) {
       const room = getRoom(r.id);
       if (!room) continue;
