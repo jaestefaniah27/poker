@@ -889,7 +889,9 @@ export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerActi
   }
   // Asegurar que bajamos la bandera de continuación para todos al repartir
   room.players.forEach(p => p.bjHasContinued = false);
-  
+  // Matar el deadline de apuestas: ya repartimos → el timer del cliente no debe quedarse pillado en 0
+  room.bettingDeadline = undefined;
+
   // Asegurar mazo fresco al inicio de cada ronda
   room.deck = createDeck();
   shuffleDeck(room.deck);

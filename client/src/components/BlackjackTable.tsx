@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate, STAKE_TIERS } from '../utils';
 import PlayingCard from './PlayingCard';
@@ -350,9 +350,9 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
               key={`${i}-${c.rank}-${c.suit}`}
               layout
               initial={isFlipReveal
-                ? { rotateY: -90, opacity: 1, x: 0, y: 0, rotate: 0 }
-                : { x: 90, y: -70, opacity: 0, rotate: 14, rotateY: 0 }}
-              animate={{ x: 0, y: 0, opacity: 1, rotate: 0, rotateY: 0 }}
+                ? { opacity: 1, x: 0, y: 0, rotate: 0 }
+                : { x: 90, y: -70, opacity: 0, rotate: 14 }}
+              animate={{ x: 0, y: 0, opacity: 1, rotate: 0 }}
               exit={hidden
                 ? { opacity: 0, transition: { duration: 0 } }
                 : { opacity: 0, scale: 0.8 }}
@@ -363,9 +363,17 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
                 delay: faceDownDeal ? i * 0.18 : (isFlipReveal ? 0 : (i < n - 1 ? 0 : 0.05)),
                 layout: { type: 'spring', stiffness: 320, damping: 28 },
               }}
-              style={{ position: 'absolute', left: i * step, top: 0, zIndex: i }}
+              style={{ position: 'absolute', left: i * step, top: 0, zIndex: i, width: cardW, height: cardH }}
             >
-              <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} className={cls} compact />
+              {/* Rotación aislada en elemento interno → layout mide el tamaño completo, no la carta girada (evita carta "pequeñita") */}
+              <motion.div
+                initial={isFlipReveal ? { rotateY: -90 } : false}
+                animate={{ rotateY: 0 }}
+                transition={{ type: 'spring', stiffness: 280, damping: 24 }}
+                style={{ width: cardW, height: cardH, transformStyle: 'preserve-3d' }}
+              >
+                <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} className={cls} compact />
+              </motion.div>
             </motion.div>
           );
         })}
@@ -581,8 +589,26 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     setShowRebuyModal(false);
   };
 
+  // --- Reparto secuencial: cuántas cartas mostrar por actor ---
+  // dealDone=true → mostrar todas (hits, fin de reparto). Mientras false, se muestran revealedX cartas.
+  const [revealedPlayer, setRevealedPlayer] = useState(0);
+  const [revealedDealer, setRevealedDealer] = useState(0);
+  const [dealDone, setDealDone] = useState(true);
+  const dealingRef = useRef(false);
+
+  // --- Resolve: dealer roba carta a carta; el resultado solo se muestra tras la última ---
+  const [resolveReady, setResolveReady] = useState(false);
+  const [dealerResolveCount, setDealerResolveCount] = useState(99);
+  const showResult = phase === 'resolve' && resolveReady;
+
   const myCards = (phase === 'betting' || phase === 'waiting') ? [] : (myPlayer?.cards || []);
-  const myTotals = myPlayer ? handTotalDisplay(myCards) : null;
+  // Sliced versions for sequential deal animation (dealDone → show all)
+  const displayMyCards = dealDone ? myCards : myCards.slice(0, revealedPlayer);
+  const displayDealerCards = phase === 'resolve'
+    ? dealer.cards.slice(0, dealerResolveCount)
+    : (dealDone ? dealer.cards : dealer.cards.slice(0, revealedDealer));
+  const myTotals = myPlayer ? handTotalDisplay(displayMyCards) : null;
+  const displayDealerTotals = handTotalDisplay(displayDealerCards);
 
   const canDouble = canAct && myCards.length === 2 && myChips >= myBet * 2;
   const canRebuy = !!myPlayer && myChips <= 0 && phase === 'betting';
@@ -610,9 +636,29 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const dealerCardsRef = useRef<HTMLDivElement>(null);
   const playerCardsRef = useRef<HTMLDivElement>(null);
 
-  // Al entrar en 'resolve': pierde → fichas al dealer. Gana/bj → dealer empuja premio al círculo.
+  // Resolve: el dealer roba sus cartas una a una; al revelar la última, marca resolveReady → se muestra el resultado.
+  // useLayoutEffect: clampa dealerResolveCount a 2 ANTES del primer paint → no se ve el total final un instante.
+  useLayoutEffect(() => {
+    if (phase !== 'resolve') { setResolveReady(false); setDealerResolveCount(99); return; }
+    const total = dealer.cards.length;
+    const startCount = Math.min(2, total); // hole + up ya visibles desde dealerAction
+    setDealerResolveCount(startCount);
+    setResolveReady(false);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let delay = 500;
+    for (let c = startCount + 1; c <= total; c++) {
+      const cc = c;
+      timers.push(setTimeout(() => { setDealerResolveCount(cc); vibrate(15); }, delay));
+      delay += 650;
+    }
+    timers.push(setTimeout(() => setResolveReady(true), delay + 150));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, room.id, myPlayer?.id, dealer.cards.length]);
+
+  // Al revelar la última carta del dealer (resolveReady): pierde → fichas al dealer. Gana/bj → dealer empuja premio al círculo.
   useEffect(() => {
-    if (phase !== 'resolve' || !myPlayer) { if (phase !== 'resolve') lastResolveRef.current = ''; return; }
+    if (phase !== 'resolve' || !myPlayer || !resolveReady) { if (phase !== 'resolve') lastResolveRef.current = ''; return; }
     const key = `${room.id}:${myPlayer.bjResult}:${myBet}:${myPlayer.bjDelta}`;
     if (lastResolveRef.current === key) return;
     lastResolveRef.current = key;
@@ -653,11 +699,41 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     }
     // push: sin animación (solo se devuelve la apuesta, sin fichas nuevas)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, myPlayer?.bjResult, room.id]);
+  }, [phase, myPlayer?.bjResult, room.id, resolveReady]);
 
   useEffect(() => {
     if (phase !== 'resolve') setCollecting(false);
   }, [phase]);
+
+  // Pre-armar el gate en betting/waiting: cartas ocultas ANTES de entrar a playerAction → sin flash.
+  // useLayoutEffect para que se aplique antes del paint en la transición de fase.
+  useLayoutEffect(() => {
+    if (phase === 'betting' || phase === 'waiting') {
+      dealingRef.current = false;
+      setDealDone(false);
+      setRevealedPlayer(0);
+      setRevealedDealer(0);
+    }
+  }, [phase]);
+
+  // Sequential deal: P1 → D1 → P2 → D2 (orden real del blackjack).
+  useEffect(() => {
+    const fullHand = (myPlayer?.cards || []).filter(c => (c.rank as unknown as string) !== '?');
+    if (fullHand.length < 2) return;
+    if (phase !== 'playerAction' && phase !== 'dealerAction') return;
+    if (dealingRef.current) return;
+    dealingRef.current = true;
+    setDealDone(false);
+    setRevealedPlayer(0);
+    setRevealedDealer(0);
+    const t1 = setTimeout(() => setRevealedPlayer(1),  200);  // P1
+    const t2 = setTimeout(() => setRevealedDealer(1), 750);   // D1
+    const t3 = setTimeout(() => setRevealedPlayer(2), 1300);  // P2
+    const t4 = setTimeout(() => setRevealedDealer(2), 1850);  // D2
+    const t5 = setTimeout(() => setDealDone(true), 2300);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, myPlayer?.id]);
 
   return (
     <div
@@ -733,10 +809,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             <div className="w-[72px] h-[108px] rounded-xl border-2 border-dashed border-white/12" />
           ) : (
             <>
-              <CardFan cards={dealer.cards} big faceDownDeal />
-              <div className="self-start mt-1">
-                <TotalPill total={dealer.total} soft={dealer.soft} bust={dealer.bust} hasHidden={dealer.hasHidden} accent="amber" />
-              </div>
+              {/* CardFan SIEMPRE montado (aunque vacío) → AnimatePresence anima la PRIMERA carta al añadirse */}
+              <CardFan cards={displayDealerCards} big faceDownDeal />
+              {displayDealerCards.length >= 2 && (
+                <motion.div layout transition={{ layout: { type: 'spring', stiffness: 320, damping: 30 } }} className="self-start mt-1">
+                  <TotalPill total={displayDealerTotals.total} soft={displayDealerTotals.soft} bust={displayDealerTotals.bust} hasHidden={displayDealerTotals.hasHidden} accent="amber" />
+                </motion.div>
+              )}
             </>
           )}
         </motion.div>
@@ -750,7 +829,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               const isTurn = phase === 'playerAction' && p.bjStatus === 'playing';
               const t = handTotalDisplay(p.cards || []);
               const isBust = p.bjStatus === 'bust' || t.bust;
-              const result = phase === 'resolve' ? p.bjResult : undefined;
+              const result = showResult ? p.bjResult : undefined;
               const opacity = p.isOnline === false ? 0.5 : 1;
               return (
                 <motion.div
@@ -793,7 +872,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                         {result === 'blackjack' ? 'BJ' : result === 'win' ? 'GANA' : result === 'push' ? '=' : 'PIERDE'}
                       </span>
                     )}
-                    {p.bjDelta != null && p.bjDelta !== 0 && phase === 'resolve' && (
+                    {p.bjDelta != null && p.bjDelta !== 0 && showResult && (
                       <span className={`text-[8px] font-mono font-bold ${p.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
                         {p.bjDelta > 0 ? '+' : ''}{fmtChips(p.bjDelta)}
                       </span>
@@ -819,15 +898,17 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       >
         {myPlayer && myCards.length > 0 ? (
           <>
-            <CardFan cards={myCards} big />
-            {myTotals && (
+            {/* CardFan SIEMPRE montado (aunque vacío) → AnimatePresence anima la PRIMERA carta al añadirse */}
+            <CardFan cards={displayMyCards} big />
+            {myTotals && displayMyCards.length >= 2 && (
               <AnimatePresence>
                 <motion.div
                   key="player-total"
+                  layout
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 20, layout: { type: 'spring', stiffness: 320, damping: 30 } }}
                   className="self-start mt-1"
                 >
                   <TotalPill total={myTotals.total} soft={myTotals.soft} bust={myTotals.bust} hasHidden={false}
@@ -872,7 +953,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                 </div>
 
                 <AnimatePresence>
-                  {phase === 'resolve' && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer.bjDelta || 0) > 0 && (
+                  {showResult && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer.bjDelta || 0) > 0 && (
                     <motion.div
                       key="prize-chips"
                       layout
@@ -941,7 +1022,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           {/* Bet pill — centrada absolutamente en la fila */}
           <div className="absolute inset-x-0 flex justify-center pointer-events-none">
             <AnimatePresence>
-              {(circleAmount > 0 || (phase === 'resolve' && myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0)) && (
+              {(circleAmount > 0 || (showResult && myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0)) && (
                 <motion.div
                   key="bet-pill"
                   initial={{ scale: 0, opacity: 0 }}
@@ -949,14 +1030,14 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                   exit={{ scale: 0, opacity: 0 }}
                   transition={{ type: 'spring', stiffness: 380, damping: 22 }}
                   className={`px-2.5 py-1 rounded-full font-mono font-bold text-[11px] border ${
-                    phase === 'resolve' && myPlayer?.bjDelta != null
+                    showResult && myPlayer?.bjDelta != null
                       ? myPlayer.bjDelta > 0
                         ? 'bg-emerald-400/20 border-emerald-300/50 text-emerald-200'
                         : 'bg-rose-500/20 border-rose-400/50 text-rose-200'
                       : 'bg-yellow-400/20 border-yellow-300/40 text-yellow-100'
                   }`}
                 >
-                  {phase === 'resolve' && myPlayer?.bjDelta != null
+                  {showResult && myPlayer?.bjDelta != null
                     ? `${myPlayer.bjDelta > 0 ? '+' : ''}${fmtChips(myPlayer.bjDelta)}`
                     : fmtChips(circleAmount)}
                 </motion.div>
@@ -1024,10 +1105,10 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               {myPlayer?.bjStatus === 'bust' ? 'Te pasaste · esperando al dealer' : 'Plantado · esperando a los demás'}
             </div>
           )}
-          {phase === 'dealerAction' && (
+          {(phase === 'dealerAction' || (phase === 'resolve' && !resolveReady)) && (
             <div className="flex-1 flex items-center justify-center text-[11px] text-amber-200/80 font-semibold tracking-wide">El dealer juega...</div>
           )}
-          {phase === 'resolve' && (
+          {showResult && (
             <button onClick={continueRound}
               className={`flex-1 w-full font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95 flex flex-col items-center justify-center gap-0.5 ${
                 myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack'
