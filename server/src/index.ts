@@ -4,13 +4,33 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import { getRooms, createRoom, getRoom, evictAll, leaveRoom } from './roomManager';
 import { STAKE_TIERS } from './pokerEngine';
-import { setIo, clearTurnTimer, broadcastRoom, hasOnlinePlayers } from './socketHelpers';
+import { setIo, clearTurnTimer, broadcastRoom, hasOnlinePlayers, turnWatchdog } from './socketHelpers';
 import { registerAllHandlers } from './handlers';
 import { applyBalanceDelta } from './db';
+
+// --- Handlers globales para que un fallo aislado no tumbe el server ---
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const SERVER_STARTED_AT = Date.now();
+app.get('/health', (_req, res) => {
+  const rooms = getRooms();
+  res.json({
+    ok: true,
+    uptimeMs: Date.now() - SERVER_STARTED_AT,
+    rooms: rooms.length,
+    activePlayers: rooms.reduce((s, r) => s + r.playerCount, 0),
+    memMB: Math.round(process.memoryUsage().rss / 1024 / 1024)
+  });
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -117,4 +137,27 @@ setInterval(async () => {
   }
 }, SWEEP_INTERVAL);
 
-bootServer();
+// --- Watchdog de turnos: re-arma timers muertos cada 3s ---
+const WATCHDOG_INTERVAL = 3 * 1000;
+setInterval(() => {
+  try { turnWatchdog(); }
+  catch (e) { console.error('[Watchdog] error:', e); }
+}, WATCHDOG_INTERVAL);
+
+// --- Shutdown graceful ---
+const shutdown = (signal: string) => {
+  console.log(`Recibido ${signal}, cerrando server...`);
+  server.close(() => {
+    console.log('HTTP cerrado, saliendo.');
+    process.exit(0);
+  });
+  // Salvavidas: si algo no cierra en 5s, forzamos.
+  setTimeout(() => process.exit(1), 5000).unref();
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+bootServer().catch(err => {
+  console.error('Fallo arrancando server:', err);
+  process.exit(1);
+});

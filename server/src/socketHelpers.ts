@@ -13,6 +13,14 @@ export const TURN_TIME = 15000;
 export const GRACE_TIME = 5000;
 export const OFFLINE_REDUCED_TIME = 8000;
 
+// Wrapper para que un error dentro de un setTimeout no rompa la cadena de turnos en silencio.
+export const safeTimeout = (fn: () => void, ms: number, label = 'timeout'): NodeJS.Timeout => {
+  return setTimeout(() => {
+    try { fn(); }
+    catch (err) { console.error(`[safeTimeout:${label}] error:`, err); }
+  }, ms);
+};
+
 import { Room } from './pokerEngine';
 import { getRoom, handlePlayerAction, endRound, gatherBetsToPot, advanceStreet, bettingClosed, contenders } from './roomManager';
 import { sessions, SESSION_TTL_MS, turnTimers, TurnTimer } from './state';
@@ -133,8 +141,36 @@ export const armTurnTimer = (roomId: string, force = false) => {
   room.graceDuration = online ? GRACE_TIME : 0;
 
   const timer: TurnTimer = { userId: p.userId, turnIndex: idx };
-  timer.base = setTimeout(() => onBaseExpire(roomId, p.userId), base);
+  timer.base = safeTimeout(() => onBaseExpire(roomId, p.userId), base, 'baseExpire');
   turnTimers.set(roomId, timer);
+};
+
+// Watchdog: detecta turnos donde el timer murió o nunca se armó y los re-arma.
+// Se llama periódicamente desde index.ts para impedir salas "colgadas".
+export const turnWatchdog = () => {
+  // Importamos lazy para evitar ciclo de imports al cargar el módulo.
+  const { getRooms } = require('./roomManager') as typeof import('./roomManager');
+  const now = Date.now();
+  for (const r of getRooms()) {
+    const room = getRoom(r.id);
+    if (!room) continue;
+    if (!isBettingPhase(room)) continue;
+    if (room.currentTurnIndex < 0) continue;
+    const p = room.players[room.currentTurnIndex];
+    if (!p || !p.isActive || p.hasFolded || p.isSpectating || p.chips <= 0) continue;
+    if (!hasOnlinePlayers(room)) continue;
+
+    const timer = turnTimers.get(r.id);
+    const total = (room.turnDuration || 0) + (room.graceDuration || 0);
+    const started = room.turnStartedAt || 0;
+    const overdue = started > 0 && total > 0 && (now - started) > (total + 2000);
+
+    if (!timer || overdue) {
+      console.warn(`[Watchdog] sala ${r.id} sin timer activo (overdue=${overdue}), re-armando turno.`);
+      armTurnTimer(r.id, true);
+      broadcastRoom(r.id);
+    }
+  }
 };
 
 export const onBaseExpire = (roomId: string, userId: string) => {
@@ -149,7 +185,7 @@ export const onBaseExpire = (roomId: string, userId: string) => {
     room.inGrace = true;
     room.graceStartedAt = Date.now();
     const timer = turnTimers.get(roomId) || { userId, turnIndex: idx };
-    timer.grace = setTimeout(() => applyDefaultAction(roomId, userId), room.graceDuration);
+    timer.grace = safeTimeout(() => applyDefaultAction(roomId, userId), room.graceDuration || GRACE_TIME, 'graceExpire');
     turnTimers.set(roomId, timer);
     if (io) io.to(p.id).emit('turnWarning');
     broadcastRoom(roomId);
@@ -188,7 +224,7 @@ export const processAction = (roomId: string, userId: string, action: string, am
     clearTurnTimer(roomId);
     room.currentTurnIndex = -1;
     broadcastRoom(roomId);
-    setTimeout(() => resolveRound(roomId), REVEAL_DELAY);
+    safeTimeout(() => resolveRound(roomId), REVEAL_DELAY, 'resolveRound');
   }
   return true;
 };
@@ -213,7 +249,7 @@ export const resolveRound = (roomId: string) => {
   gatherBetsToPot(room);
   broadcastRoom(roomId);
 
-  setTimeout(() => {
+  safeTimeout(() => {
     const room2 = getRoom(roomId);
     if (!room2 || room2.phase === 'showdown') { broadcastRoom(roomId); return; }
 
@@ -231,10 +267,10 @@ export const resolveRound = (roomId: string) => {
       clearTurnTimer(roomId);
       room2.currentTurnIndex = -1;
       broadcastRoom(roomId);
-      setTimeout(() => resolveRound(roomId), REVEAL_DELAY);
+      safeTimeout(() => resolveRound(roomId), REVEAL_DELAY, 'resolveRound');
     } else {
       armTurnTimer(roomId, true);
       broadcastRoom(roomId);
     }
-  }, COLLECT_DELAY);
+  }, COLLECT_DELAY, 'collectBets');
 };
