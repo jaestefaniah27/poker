@@ -370,6 +370,20 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   useEffect(() => { if (canAct) vibrate([200]); }, [canAct]);
 
+  // Reset auto-place flag at the start of each betting round
+  useEffect(() => {
+    if (phase === 'betting' && myBet === 0) autoPlacedRef.current = false;
+  }, [phase, myBet]);
+  // Auto-place pending chips when betting deadline expires
+  useEffect(() => {
+    if (!room.bettingDeadline || now < room.bettingDeadline) return;
+    if (!canBet || pendingTotal < minBet || autoPlacedRef.current) return;
+    autoPlacedRef.current = true;
+    setPlacedComposition([...pendingChips]);
+    socket.emit('bjPlaceBet', { roomId: room.id, amount: pendingTotal });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, room.bettingDeadline]);
+
   const dealer = useMemo(() => {
     const cards = room.dealerCards || [];
     return { cards, ...handTotalDisplay(cards) };
@@ -426,6 +440,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const [flyChips, setFlyChips] = useState<{ id: number; x: number; y: number; tx: number; ty: number; d: ChipDenom; delay: number }[]>([]);
   const flyIdRef = useRef(0);
   const lastResolveRef = useRef<string>('');
+  const autoPlacedRef = useRef(false);
 
   // Al entrar en 'resolve': lanza fichas del círculo a tu cuenta (ganas/empate) o al dealer (pierdes).
   useEffect(() => {
@@ -648,28 +663,22 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
           transition={{ duration: 1.4, repeat: canBet && pendingTotal > 0 ? Infinity : 0 }}
         >
-          {circleChips.length > 0 && phase !== 'resolve' ? (
+          {phase === 'resolve' && myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0 ? (
+            <span
+              className={`font-mono font-extrabold text-xl ${myPlayer.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}
+              style={{ textShadow: '0 2px 6px rgba(0,0,0,0.9)' }}
+            >
+              {myPlayer.bjDelta > 0 ? '+' : ''}{fmtChips(myPlayer.bjDelta)}
+            </span>
+          ) : circleChips.length > 0 && phase !== 'resolve' ? (
             <ChipStack chips={circleChips} size={34} />
           ) : (
             <span className="text-[9px] text-white/30 uppercase tracking-[0.25em] font-bold">Apuesta</span>
           )}
-          {/* Banner de resultado sobre el círculo */}
-          {phase === 'resolve' && myPlayer?.bjResult && (
-            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none" style={{ top: -16 }}>
-              <ResultBadge result={myPlayer.bjResult} big />
-            </div>
-          )}
         </motion.div>
         {/* Línea de importe: altura fija reservada siempre (el círculo nunca se mueve) */}
         <div className="h-6 flex items-center justify-center mt-1">
-          {phase === 'resolve' ? (
-            myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0 ? (
-              <span className={`font-mono font-extrabold text-base ${myPlayer.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}
-                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-                {myPlayer.bjDelta > 0 ? '+' : ''}{fmtChips(myPlayer.bjDelta)}
-              </span>
-            ) : null
-          ) : circleAmount > 0 ? (
+          {phase !== 'resolve' && circleAmount > 0 ? (
             <span className="text-yellow-200 font-mono font-bold text-sm">
               {fmtChips(circleAmount)}{myPlayer?.bjDoubled ? ' ×2' : ''}
             </span>
@@ -772,8 +781,20 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           )}
           {phase === 'resolve' && (
             <button onClick={continueRound}
-              className="flex-1 w-full bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95">
-              CONTINUAR
+              className={`flex-1 w-full font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95 flex flex-col items-center justify-center gap-0.5 ${
+                myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack'
+                  ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 text-white'
+                  : myPlayer?.bjResult === 'lose'
+                  ? 'bg-gradient-to-b from-slate-500 to-slate-700 text-white'
+                  : myPlayer?.bjResult === 'push'
+                  ? 'bg-gradient-to-b from-sky-400 to-sky-600 text-white'
+                  : 'bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950'
+              }`}>
+              {myPlayer?.bjResult === 'blackjack' && <span className="text-sm font-black leading-none">BLACKJACK!</span>}
+              {myPlayer?.bjResult === 'win' && <span className="text-sm font-black leading-none">GANAS</span>}
+              {myPlayer?.bjResult === 'lose' && <span className="text-sm font-black leading-none">PIERDES</span>}
+              {myPlayer?.bjResult === 'push' && <span className="text-sm font-black leading-none">EMPATE</span>}
+              <span className="text-base leading-none">CONTINUAR</span>
             </button>
           )}
           {phase === 'dealing' && (

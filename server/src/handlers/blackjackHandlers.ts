@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  getRoom, getRooms,
+  getRoom, getRooms, leaveRoom,
   startBlackjackRound, placeBlackjackBet, allBlackjackBetsIn, dealBlackjackHands,
   blackjackPlayerAction, finishBlackjackHand, forceStandRemaining, rebuyBlackjack,
   BJ_BETTING_DURATION, BJ_DEALER_REVEAL_DELAY,
@@ -73,7 +73,7 @@ const onBettingDeadline = (roomId: string) => {
   proceedDeal(roomId);
 };
 
-const proceedDeal = (roomId: string) => {
+const proceedDeal = async (roomId: string) => {
   const room = getRoom(roomId);
   if (!room) return;
   if (!hasOnlinePlayers(room)) {
@@ -83,6 +83,15 @@ const proceedDeal = (roomId: string) => {
     return;
   }
   room.paused = false;
+  // Echar jugadores offline sin apuesta antes de repartir
+  const toKick = room.players.filter(
+    p => p.isActive && !p.hasCashedOut && p.isOnline === false && (p.bet || 0) === 0
+  );
+  for (const p of toKick) {
+    const cashOut = leaveRoom(roomId, p.id);
+    if (cashOut) applyBalanceDelta(cashOut.userId, cashOut.chips).catch(() => {});
+  }
+  if (toKick.length > 0) io.emit('roomsUpdated', getRooms());
   const next = dealBlackjackHands(roomId);
   if (next === 'betting') {
     // nadie apostó — reabrimos timer
