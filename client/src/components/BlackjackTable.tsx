@@ -354,7 +354,7 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
                 : { x: 90, y: -70, opacity: 0, rotate: 14, rotateY: 0 }}
               animate={{ x: 0, y: 0, opacity: 1, rotate: 0, rotateY: 0 }}
               exit={hidden
-                ? { rotateY: 90, opacity: 1, transition: { duration: 0.18, ease: 'easeIn' } }
+                ? { opacity: 0, transition: { duration: 0 } }
                 : { opacity: 0, scale: 0.8 }}
               transition={{
                 type: 'spring',
