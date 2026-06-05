@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips, vibrate } from '../utils';
+import { socket, fmtChips, vibrate, STAKE_TIERS } from '../utils';
 import PlayingCard from './PlayingCard';
+import Slider from './Slider';
 import Avatar from './Avatar';
 import AnimatedNumber from './AnimatedNumber';
 import type { Room, Player, Card } from '../../../shared/types';
@@ -35,7 +36,7 @@ const handTotalDisplay = (cards: Card[]): { total: number; soft: boolean; bust: 
 // Chip catalogue. Rounds (<1000) are circles; plaques (>=1000) are rectangles.
 // Border: striped/dashed ("rallado") < 100k, smooth/solid >= 100k.
 // Physical size scales with denomination (small value -> smaller chip).
-type ChipDenom = { v: number; color: string; ring: string; label: string };
+type ChipDenom = { v: number; color: string; ring: string; label: string; premium?: 'carbon' | 'silver' | 'gold' | 'diamond' };
 
 const CHIP_DEFS: ChipDenom[] = [
   { v: 25,     color: '#10b981', ring: '#064e3b', label: '25'   },
@@ -49,10 +50,10 @@ const CHIP_DEFS: ChipDenom[] = [
   { v: 10000,  color: '#06b6d4', ring: '#155e63', label: '10k'  },
   { v: 25000,  color: '#84cc16', ring: '#3f6212', label: '25k'  },
   { v: 50000,  color: '#f97316', ring: '#7c2d12', label: '50k'  },
-  { v: 100000, color: '#d946ef', ring: '#701a75', label: '100k' },
-  { v: 200000, color: '#14b8a6', ring: '#115e59', label: '200k' },
-  { v: 250000, color: '#facc15', ring: '#854d0e', label: '250k' },
-  { v: 500000, color: '#fb7185', ring: '#9f1239', label: '500k' },
+  { v: 100000, color: '#18181b', ring: '#71717a', label: '100k', premium: 'carbon'  },
+  { v: 200000, color: '#c0c0c0', ring: '#6b7280', label: '200k', premium: 'silver'  },
+  { v: 250000, color: '#eab308', ring: '#92400e', label: '250k', premium: 'gold'    },
+  { v: 500000, color: '#e0f2fe', ring: '#93c5fd', label: '500k', premium: 'diamond' },
 ];
 
 const defByValue = (v: number): ChipDenom => CHIP_DEFS.find(d => d.v === v) || CHIP_DEFS[0];
@@ -62,7 +63,7 @@ const CHIP_PAGE_VALUES: number[][] = [
   [25, 50, 100, 250, 500],
   [500, 1000, 2500, 5000, 10000],
   [5000, 10000, 25000, 50000, 100000],
-  [50000, 100000, 200000, 250000, 500000],
+  [100000, 200000, 250000, 500000],
 ];
 const CHIP_PAGES = CHIP_PAGE_VALUES.length;
 
@@ -80,25 +81,88 @@ const isSmooth = (v: number) => v >= 100000; // smooth border, no stripes
 
 // Physical diameter/height by denomination.
 const sizeForValue = (v: number): number => {
-  if (v < 100) return 30;
-  if (v < 500) return 33;
   if (v < 1000) return 35;
   if (v < 10000) return 38;
   if (v < 100000) return 41;
-  return 45;
+  if (v >= 100000) return 58; // Premium — todas del mismo tamaño
 };
 
 const Chip = ({ d, size }: { d: ChipDenom; size?: number }) => {
-  const h = size ?? sizeForValue(d.v);
+  const naturalH = sizeForValue(d.v);
+  // Premium chips ignore small size overrides — always at least their natural size
+  const h = d.premium ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
   const plaque = isPlaque(d.v);
-  const smooth = isSmooth(d.v);
   const w = plaque ? Math.round(h * 1.28) : h;
-  const radius = plaque ? 6 : 9999;
-  const innerRadius = plaque ? 3 : 9999;
+  const radius = plaque ? Math.round(h * 0.13) : 9999;
+  const innerRadius = plaque ? Math.round(h * 0.07) : 9999;
   const fontSize = d.label.length >= 4 ? h * 0.26 : h * 0.3;
+
+  if (d.premium) {
+    const p = d.premium;
+    const bg =
+      p === 'carbon'
+        ? `repeating-linear-gradient(45deg, transparent 0px, transparent 3px, rgba(255,255,255,0.04) 3px, rgba(255,255,255,0.04) 4px),
+           repeating-linear-gradient(-45deg, transparent 0px, transparent 3px, rgba(255,255,255,0.04) 3px, rgba(255,255,255,0.04) 4px),
+           linear-gradient(150deg, #2d2d30 0%, #0d0d0f 55%, #222225 100%)`
+      : p === 'silver'
+        ? `linear-gradient(150deg, #f8f8f8 0%, #d0d0d0 18%, #808080 42%, #b0b0b0 65%, #efefef 100%)`
+      : p === 'gold'
+        ? `linear-gradient(150deg, #fffacd 0%, #f5c518 18%, #8b5e00 48%, #c4870a 68%, #fde06a 100%)`
+        : /* diamond */
+          `linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(186,230,253,0.88) 22%, rgba(255,255,255,0.96) 42%, rgba(224,242,254,0.82) 62%, rgba(255,255,255,0.97) 78%, rgba(186,230,253,0.9) 100%)`;
+
+    const border =
+      p === 'carbon'  ? '2px solid #71717a'
+      : p === 'silver' ? '2px solid #9ca3af'
+      : p === 'gold'   ? '2.5px solid #92400e'
+                       : '2.5px solid rgba(147,197,253,0.85)';
+
+    const shadow =
+      p === 'carbon'
+        ? '0 6px 18px rgba(0,0,0,0.75), inset 0 -4px 8px rgba(0,0,0,0.55), inset 0 3px 5px rgba(255,255,255,0.09)'
+      : p === 'silver'
+        ? '0 6px 16px rgba(0,0,0,0.4), inset 0 -3px 6px rgba(0,0,0,0.15), inset 0 4px 8px rgba(255,255,255,0.65)'
+      : p === 'gold'
+        ? '0 4px 10px rgba(0,0,0,0.4), inset 0 -3px 6px rgba(100,50,0,0.3), inset 0 4px 8px rgba(255,220,80,0.45)'
+        : '0 6px 22px rgba(100,180,255,0.45), 0 0 14px rgba(200,240,255,0.25), inset 0 -3px 6px rgba(100,150,200,0.2), inset 0 4px 10px rgba(255,255,255,0.8)';
+
+    const textColor =
+      p === 'carbon'  ? '#d4d4d8'
+      : p === 'silver' ? '#1a1a1a'
+      : p === 'gold'   ? '#3d1500'
+                       : '#0369a1';
+    const innerBorder =
+      p === 'carbon'  ? 'rgba(255,255,255,0.12)'
+      : p === 'silver' ? 'rgba(180,180,180,0.5)'
+      : p === 'gold'   ? 'rgba(255,195,0,0.45)'
+                       : 'rgba(147,197,253,0.5)';
+
+    return (
+      <div
+        className="flex items-center justify-center font-extrabold relative shrink-0"
+        style={{ width: w, height: h, borderRadius: radius, background: bg, boxShadow: shadow, border, color: textColor }}
+      >
+        <div
+          className="absolute flex items-center justify-center"
+          style={{ inset: 4, borderRadius: innerRadius, border: `1px solid ${innerBorder}` }}
+        >
+          <span style={{
+            fontSize, fontWeight: 900, letterSpacing: '-0.02em',
+            textShadow:
+              p === 'carbon'  ? '0 1px 3px rgba(0,0,0,0.9)'
+              : p === 'silver' ? '0 1px 0 rgba(255,255,255,0.85), 0 -1px 0 rgba(0,0,0,0.35)'
+              : p === 'gold'   ? '0 1px 0 rgba(255,210,60,0.7), 0 -1px 0 rgba(100,40,0,0.5)'
+                               : '0 0 10px rgba(56,189,248,0.85), 0 0 4px rgba(186,230,253,0.9), 0 1px 0 rgba(255,255,255,0.95), 0 -1px 0 rgba(14,165,233,0.6), 1px 0 0 rgba(125,211,252,0.5), -1px 0 0 rgba(125,211,252,0.5)',
+          }}>{d.label}</span>
+        </div>
+      </div>
+    );
+  }
+
+  const smooth = isSmooth(d.v);
   return (
     <div
-      className="flex items-center justify-center font-extrabold text-white relative"
+      className="flex items-center justify-center font-extrabold text-white relative shrink-0"
       style={{
         width: w,
         height: h,
@@ -194,17 +258,20 @@ const chipsFromAmount = (amount: number): ChipDenom[] => {
 
 // One vertical pile of same-shape chips.
 const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
-  const chipW = (v: number) => (v >= 1000 ? Math.round(size * 1.28) : size);
-  const pileW = Math.max(size, ...items.map(d => chipW(d.v)));
+  // Premium chips ignore the size prop — use their natural size for layout
+  const actualH = (d: ChipDenom) => d.premium ? sizeForValue(d.v) : size;
+  const actualW = (d: ChipDenom) => { const h = actualH(d); return isPlaque(d.v) ? Math.round(h * 1.28) : h; };
+  const pileW = Math.max(...items.map(d => actualW(d)));
+  const pileH = Math.max(...items.map(d => actualH(d)));
   return (
-    <div className="relative" style={{ width: pileW, height: size + items.length * 4 }}>
+    <div className="relative" style={{ width: pileW, height: pileH + items.length * 4 }}>
       {items.map((d, i) => (
         <motion.div
           key={i}
           initial={{ y: -40, opacity: 0, scale: 0.7 }}
           animate={{ y: -(i * 4), opacity: 1, scale: 1 }}
           transition={{ type: 'spring', stiffness: 360, damping: 22 }}
-          style={{ position: 'absolute', left: (pileW - chipW(d.v)) / 2, bottom: 0, zIndex: i }}
+          style={{ position: 'absolute', left: (pileW - actualW(d)) / 2, bottom: 0, zIndex: i }}
         >
           <Chip d={d} size={size} />
         </motion.div>
@@ -213,14 +280,16 @@ const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
   );
 };
 
-// Betting circle stack: round chips and square plaques go in SEPARATE piles (never mixed).
+// Betting circle stack: rounds / plaques / premium in SEPARATE piles (never mixed).
 const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: number }) => {
-  const rounds = chips.filter(c => c.v < 1000);
-  const plaques = chips.filter(c => c.v >= 1000);
+  const rounds   = chips.filter(c => !c.premium && c.v < 1000);
+  const plaques  = chips.filter(c => !c.premium && c.v >= 1000);
+  const premiums = chips.filter(c => !!c.premium);
   return (
     <div className="flex items-end justify-center gap-1.5">
-      {rounds.length > 0 && <ChipPile items={rounds} size={size} />}
-      {plaques.length > 0 && <ChipPile items={plaques} size={size} />}
+      {rounds.length > 0   && <ChipPile items={rounds}   size={size} />}
+      {plaques.length > 0  && <ChipPile items={plaques}  size={size} />}
+      {premiums.length > 0 && <ChipPile items={premiums} size={size} />}
     </div>
   );
 };
@@ -247,31 +316,54 @@ const TotalPill = ({ total, soft, bust, hasHidden, accent = 'sky', size = 'sm' }
 
 // Linear card row — cards laid out left-to-right with controlled overlap.
 // Each card's top-left rank stays visible (overlap eats only right side).
+// Step decreases as n grows → existing cards slide together to make room for the new one.
 const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; big?: boolean; faceDownDeal?: boolean }) => {
   const cardW = big ? 72 : 50;
   const cardH = big ? 108 : 72;
   const cls = big ? 'w-[72px] h-[108px]' : 'w-[50px] h-[72px]';
   const n = cards.length;
-  const step = n <= 1 ? cardW : Math.round(cardW * 0.62);
+  const step = n <= 1 ? cardW
+    : n === 2 ? Math.round(cardW * 0.74)
+    : n === 3 ? Math.round(cardW * 0.62)
+    : n === 4 ? Math.round(cardW * 0.50)
+    : n <= 5  ? Math.round(cardW * 0.43)
+    : Math.round(cardW * 0.37);
   const containerW = cardW + step * (n - 1);
+
+  // Track which positions had hidden cards in the PREVIOUS render to detect flip reveals
+  const wasHiddenRef = useRef<Record<number, boolean>>({});
+  const prevWasHidden = wasHiddenRef.current;
+  useEffect(() => {
+    const next: Record<number, boolean> = {};
+    cards.forEach((c, i) => { next[i] = (c.rank as unknown as string) === '?'; });
+    wasHiddenRef.current = next;
+  }); // runs after every render — keeps ref in sync
+
   return (
-    <div className="relative" style={{ width: Math.max(cardW, containerW), height: cardH }}>
+    <div className="relative" style={{ width: Math.max(cardW, containerW), height: cardH, perspective: 800 }}>
       <AnimatePresence initial={false}>
         {cards.map((c, i) => {
           const hidden = (c.rank as unknown as string) === '?';
+          const isFlipReveal = prevWasHidden[i] === true && !hidden;
           return (
             <motion.div
               key={`${i}-${c.rank}-${c.suit}`}
-              initial={{ x: -120, y: -160, opacity: 0, rotate: -15 }}
-              animate={{ x: 0, y: 0, opacity: 1, rotate: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 230, damping: 22, delay: faceDownDeal ? i * 0.18 : i * 0.1 }}
-              style={{
-                position: 'absolute',
-                left: i * step,
-                top: 0,
-                zIndex: i,
+              layout
+              initial={isFlipReveal
+                ? { rotateY: -90, opacity: 1, x: 0, y: 0, rotate: 0 }
+                : { x: 90, y: -70, opacity: 0, rotate: 14, rotateY: 0 }}
+              animate={{ x: 0, y: 0, opacity: 1, rotate: 0, rotateY: 0 }}
+              exit={hidden
+                ? { rotateY: 90, opacity: 1, transition: { duration: 0.18, ease: 'easeIn' } }
+                : { opacity: 0, scale: 0.8 }}
+              transition={{
+                type: 'spring',
+                stiffness: isFlipReveal ? 280 : 230,
+                damping: isFlipReveal ? 24 : 22,
+                delay: faceDownDeal ? i * 0.18 : (isFlipReveal ? 0 : (i < n - 1 ? 0 : 0.05)),
+                layout: { type: 'spring', stiffness: 320, damping: 28 },
               }}
+              style={{ position: 'absolute', left: i * step, top: 0, zIndex: i }}
             >
               <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} className={cls} compact />
             </motion.div>
@@ -324,6 +416,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const [placedComposition, setPlacedComposition] = useState<ChipDenom[]>([]);
   
   const [hideLostChips, setHideLostChips] = useState(false);
+  const [showRebuyModal, setShowRebuyModal] = useState(false);
+  const [rebuyTierIndex, setRebuyTierIndex] = useState(1);
 
   useEffect(() => {
     if (phase === 'betting' && myBet === 0) { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
@@ -431,6 +525,19 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const continueRound = () => {
     const result = myPlayer?.bjResult;
     setHideLostChips(true); // Forzar que desaparezcan de la mesa ya mismo
+
+    // Calcular offsets para animación de recogida de cartas hacia el zapato
+    const shoeRect = shoeRef.current?.getBoundingClientRect();
+    if (shoeRect) {
+      const sx = shoeRect.left + shoeRect.width / 2;
+      const sy = shoeRect.top + shoeRect.height / 2;
+      const dc = dealerCardsRef.current?.getBoundingClientRect();
+      if (dc) setDealerCollectTarget({ x: sx - (dc.left + dc.width / 2), y: sy - (dc.top + dc.height / 2) });
+      const pc = playerCardsRef.current?.getBoundingClientRect();
+      if (pc) setPlayerCollectTarget({ x: sx - (pc.left + pc.width / 2), y: sy - (pc.top + pc.height / 2) });
+    }
+    setCollecting(true);
+
     if ((result === 'win' || result === 'blackjack' || result === 'push') && myBet > 0) {
       const circle = circleRef.current?.getBoundingClientRect();
       const count = countRef.current?.getBoundingClientRect();
@@ -455,18 +562,30 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         const ids = spawned.map(s => s.id);
         setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
       }
-      setTimeout(() => socket.emit('bjContinue', { roomId: room.id }), 500);
+      setTimeout(() => socket.emit('bjContinue', { roomId: room.id }), 600);
     } else {
-      socket.emit('bjContinue', { roomId: room.id });
+      setTimeout(() => socket.emit('bjContinue', { roomId: room.id }), 500);
     }
   };
-  const rebuy = () => { socket.emit('bjRebuy', { roomId: room.id }); vibrate(20); };
+  const openRebuyModal = () => {
+    // Preseleccionar tier más cercano al lastBuyIn anterior
+    const last = myPlayer?.lastBuyIn || 0;
+    const idx = last > 0 ? Math.max(0, STAKE_TIERS.findIndex(t => t >= last)) : 1;
+    setRebuyTierIndex(idx === -1 ? STAKE_TIERS.length - 1 : idx);
+    setShowRebuyModal(true);
+    vibrate(20);
+  };
+  const confirmRebuy = () => {
+    const amount = STAKE_TIERS[rebuyTierIndex];
+    socket.emit('bjRebuy', { roomId: room.id, amount });
+    setShowRebuyModal(false);
+  };
 
   const myCards = (phase === 'betting' || phase === 'waiting') ? [] : (myPlayer?.cards || []);
   const myTotals = myPlayer ? handTotalDisplay(myCards) : null;
 
   const canDouble = canAct && myCards.length === 2 && myChips >= myBet * 2;
-  const canRebuy = !!myPlayer && myChips <= 0 && (phase === 'waiting' || phase === 'betting' || phase === 'resolve');
+  const canRebuy = !!myPlayer && myChips <= 0 && phase === 'betting';
 
   // Fichas disponibles mostradas: restan la apuesta en mesa (ves cuánto te queda en todo momento).
   // En 'resolve' el servidor ya liquidó, así que mostramos el stack real.
@@ -482,6 +601,14 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const flyIdRef = useRef(0);
   const lastResolveRef = useRef<string>('');
   const autoPlacedRef = useRef(false);
+
+  // --- Recogida de cartas al Continuar ---
+  const [collecting, setCollecting] = useState(false);
+  const [dealerCollectTarget, setDealerCollectTarget] = useState({ x: 0, y: 0 });
+  const [playerCollectTarget, setPlayerCollectTarget] = useState({ x: 0, y: 0 });
+  const shoeRef = useRef<HTMLDivElement>(null);
+  const dealerCardsRef = useRef<HTMLDivElement>(null);
+  const playerCardsRef = useRef<HTMLDivElement>(null);
 
   // Al entrar en 'resolve': pierde → fichas al dealer. Gana/bj → dealer empuja premio al círculo.
   useEffect(() => {
@@ -527,6 +654,10 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     // push: sin animación (solo se devuelve la apuesta, sin fichas nuevas)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, myPlayer?.bjResult, room.id]);
+
+  useEffect(() => {
+    if (phase !== 'resolve') setCollecting(false);
+  }, [phase]);
 
   return (
     <div
@@ -581,7 +712,23 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       {/* Dealer (slot fijo) */}
       <div ref={dealerRef} className="relative flex flex-col items-center pt-1 z-10 shrink-0" style={{ height: 130 }}>
         <div className="text-[9px] uppercase tracking-[0.4em] text-amber-200/70 font-bold mb-1">Dealer</div>
-        <div className="relative flex items-center justify-center gap-2" style={{ height: 110 }}>
+        {/* Zapato — ancla para la recogida de cartas */}
+        <div ref={shoeRef} className="absolute right-3 top-1/2 -translate-y-1/2 z-20 pointer-events-none opacity-70">
+          <div className="relative" style={{ width: 42, height: 58 }}>
+            {[4, 3, 2, 1, 0].map(i => (
+              <div key={i} className="absolute" style={{ left: i * 2.5, top: i * 1.5, zIndex: 5 - i }}>
+                <PlayingCard hidden className="w-8" style={{ height: 48 }} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <motion.div
+          ref={dealerCardsRef}
+          className="relative flex items-center justify-center gap-2"
+          style={{ height: 110 }}
+          animate={collecting ? { x: dealerCollectTarget.x, y: dealerCollectTarget.y, opacity: 0, scale: 0.3 } : { x: 0, y: 0, opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 1, 1] }}
+        >
           {dealer.cards.length === 0 ? (
             <div className="w-[72px] h-[108px] rounded-xl border-2 border-dashed border-white/12" />
           ) : (
@@ -592,7 +739,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               </div>
             </>
           )}
-        </div>
+        </motion.div>
       </div>
 
       {/* ===== Oponentes: entre dealer y mis cartas (Altura reservada permanentemente) ===== */}
@@ -663,7 +810,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       <div className="flex-1 min-h-0" />
 
       {/* Cartas del jugador (slot fijo SIEMPRE reservado: placeholder cuando no hay cartas) */}
-      <div className="relative z-10 px-4 shrink-0 flex items-center justify-center gap-2" style={{ height: 110 }}>
+      <motion.div
+        ref={playerCardsRef}
+        className="relative z-10 px-4 shrink-0 flex items-center justify-center gap-2"
+        style={{ height: 110 }}
+        animate={collecting ? { x: playerCollectTarget.x, y: playerCollectTarget.y, opacity: 0, scale: 0.3 } : { x: 0, y: 0, opacity: 1, scale: 1 }}
+        transition={{ duration: 0.45, delay: 0.07, ease: [0.4, 0, 1, 1] }}
+      >
         {myPlayer && myCards.length > 0 ? (
           <>
             <CardFan cards={myCards} big />
@@ -686,19 +839,19 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         ) : (
           <div className="w-[72px] h-[108px] rounded-xl border-2 border-dashed border-white/10" />
         )}
-      </div>
+      </motion.div>
 
       {/* Spacer constante para mantener la distancia idéntica a cuando el texto de estado estaba aquí arriba */}
       <div className="relative z-10 shrink-0 pointer-events-none" style={{ height: 16 }} />
 
       {/* Rectángulo de apuesta (slot fijo: área de apuesta + texto de estado integrado SIEMPRE reservado → no salta) */}
-      <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 120 }}>
+      <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 130 }}>
         <motion.div
           ref={circleRef}
           className="relative rounded-[24px] flex items-center justify-center shrink-0 transition-colors duration-500"
           style={{
-            width: 200,
-            height: 90,
+            width: 270,
+            height: 100,
             border: (phase === 'betting' || circleChips.length > 0) ? '2px dashed rgba(255,215,140,0.25)' : '2px dashed transparent',
           }}
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
@@ -817,9 +970,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         <div style={{ height: 132 }} className="flex flex-col">
           {/* Sin fichas → recompra (prioritario). */}
           {canRebuy && (
-            <button onClick={rebuy}
+            <button onClick={openRebuyModal}
               className="flex-1 w-full bg-gradient-to-b from-rose-400 to-rose-600 text-white font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95">
-              RECOMPRAR {fmtChips(myPlayer?.lastBuyIn || 1000)}
+              RECOMPRAR
             </button>
           )}
           {!canRebuy && phase === 'waiting' && !myPlayer?.isSpectating && myChips > 0 && (
@@ -915,6 +1068,47 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           ))}
         </AnimatePresence>
       </div>
+      {/* ===== Modal recompra ===== */}
+      <AnimatePresence>
+        {showRebuyModal && (
+          <motion.div
+            className="fixed inset-0 z-[60] bg-black/80 flex items-end justify-center pb-safe"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowRebuyModal(false)}
+          >
+            <motion.div
+              className="w-full max-w-sm bg-[#1a2a1a] rounded-t-3xl p-6 border-t border-white/10"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <p className="text-center text-xs text-white/50 mb-4 uppercase tracking-wider">¿Con cuánto recompras?</p>
+              <div className="text-center mb-5">
+                <p className="text-5xl font-extrabold text-rose-300">{fmtChips(STAKE_TIERS[rebuyTierIndex])}</p>
+                <p className="text-xs text-white/40 mt-1">fichas</p>
+              </div>
+              <Slider min={0} max={STAKE_TIERS.length - 1} step={1} value={rebuyTierIndex} onChange={v => setRebuyTierIndex(v)} accent="rose" formatLabel={v => fmtChips(STAKE_TIERS[v])} />
+              <div className="flex justify-between px-1 mb-6 mt-1">
+                {STAKE_TIERS.map((t, i) => (
+                  <button key={i} onClick={() => setRebuyTierIndex(i)} className={`text-[9px] ${i === rebuyTierIndex ? 'text-white font-bold' : 'text-white/35'}`}>{fmtChips(t)}</button>
+                ))}
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowRebuyModal(false)} className="flex-1 py-3 rounded-2xl border border-white/20 text-white/60 font-bold text-sm active:scale-95">
+                  Cancelar
+                </button>
+                <button onClick={confirmRebuy} className="flex-1 py-3 rounded-2xl bg-gradient-to-b from-rose-400 to-rose-600 text-white font-extrabold text-sm shadow-lg active:scale-95">
+                  RECOMPRAR
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

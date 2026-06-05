@@ -256,14 +256,14 @@ export const blackjackHandlers = (socket: Socket) => {
   });
 
   // Recompra: repite el último buy-in cuando te quedas sin fichas.
-  socket.on('bjRebuy', async ({ roomId }) => {
+  socket.on('bjRebuy', async ({ roomId, amount }) => {
     const room = getRoom(roomId);
     if (!room || room.gameType !== 'blackjack') return;
     const seat = room.players.find(p => p.id === socket.id);
     if (!seat) return;
-    const amount = rebuyBlackjack(roomId, seat.userId);
-    if (amount <= 0) return;
-    const newBalance = await applyBalanceDelta(seat.userId, -amount);
+    const reboughtAmount = rebuyBlackjack(roomId, seat.userId, Number(amount) || 0);
+    if (reboughtAmount <= 0) return;
+    const newBalance = await applyBalanceDelta(seat.userId, -reboughtAmount);
     socket.emit('balanceUpdated', { balance: newBalance });
     broadcastRoom(roomId);
     io.emit('roomsUpdated', getRooms());

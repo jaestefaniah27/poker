@@ -970,16 +970,17 @@ export const forceStandRemaining = (roomId: string): boolean => {
   return changed;
 };
 
-// Recompra en blackjack: repite el último buy-in del jugador (saldo solo indicativo).
+// Recompra en blackjack: usa el importe indicado (o el último buy-in si no se especifica).
 // Devuelve el importe recomprado, o 0 si no procede.
-export const rebuyBlackjack = (roomId: string, userId: string): number => {
+export const rebuyBlackjack = (roomId: string, userId: string, requestedAmount?: number): number => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack') return 0;
   const player = room.players.find(p => p.userId === userId);
   if (!player || !player.isActive || player.chips > 0) return 0;
-  const amount = player.lastBuyIn && player.lastBuyIn > 0 ? player.lastBuyIn : 1000;
+  const amount = requestedAmount && requestedAmount > 0 ? requestedAmount : (player.lastBuyIn && player.lastBuyIn > 0 ? player.lastBuyIn : 1000);
   player.chips = amount;
   player.balance -= amount;
+  player.lastBuyIn = amount;
   player.isSpectating = false;
   player.sessionBuyIn = (player.sessionBuyIn ?? 0) + amount;
   if (amount > (player.sessionMaxChips ?? 0)) player.sessionMaxChips = amount;
