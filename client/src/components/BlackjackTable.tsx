@@ -717,9 +717,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           style={{
             width: 200,
             height: 90,
-            border: '2px dashed rgba(255,215,140,0.4)',
-            background: 'rgba(0,0,0,0.25)',
-            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)',
+            border: '2px dashed rgba(255,215,140,0.25)',
           }}
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
           transition={{ duration: 1.4, repeat: canBet && pendingTotal > 0 ? Infinity : 0 }}
