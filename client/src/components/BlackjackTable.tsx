@@ -276,7 +276,7 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
                 zIndex: i,
               }}
             >
-              <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} className={cls} compact={!big} />
+              <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} className={cls} compact />
             </motion.div>
           );
         })}
@@ -449,13 +449,12 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   return (
     <div
-      className="w-full overflow-hidden text-white flex flex-col relative select-none"
+      className="text-white select-none overflow-hidden"
       style={{
-        // 100dvh sigue la altura visible real en móvil (barra de URL dinámica). Fallback 100vh/100%.
-        height: '100dvh',
-        minHeight: '100%',
+        // Capa de fondo a PANTALLA COMPLETA (cubre safe-areas: sin franjas negras en standalone).
+        position: 'fixed',
+        inset: 0,
         background: 'radial-gradient(ellipse 130% 80% at 50% 35%, #14743f 0%, #0d4f2c 40%, #07321b 75%, #02110a 100%)',
-        paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
       {/* Felt micro-texture */}
@@ -468,6 +467,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         className="absolute inset-3 rounded-[40px] pointer-events-none"
         style={{ boxShadow: 'inset 0 0 0 2px rgba(217,164,65,0.18), inset 0 0 60px rgba(0,0,0,0.5)' }}
       />
+
+      {/* Contenido a 100dvh (altura visible real): deja la barra de URL del navegador fuera,
+          y en standalone el fondo de arriba cubre toda la pantalla. */}
+      <div
+        className="relative w-full flex flex-col"
+        style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      >
 
       {/* Header */}
       <div className="relative flex justify-between items-center px-4 py-2 z-20">
@@ -579,14 +585,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         )}
       </div>
 
-      {/* Flex spacer — empuja el área del jugador hacia abajo (deja felt arriba) */}
-      <div className="flex-1 relative min-h-0">
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-[8px] uppercase tracking-[0.5em] text-white/8 font-bold whitespace-nowrap">
-            Blackjack pays 3 to 2
-          </div>
-        </div>
-      </div>
+      {/* Flex spacer — empuja el área del jugador hacia abajo (felt limpio) */}
+      <div className="flex-1 min-h-0" />
 
       {/* ===== Player cards (above circle). Colapsa cuando no hay cartas (no malgasta espacio) ===== */}
       {myPlayer && (myPlayer.cards?.length || 0) > 0 && (
@@ -682,7 +682,6 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         className="relative z-10 px-4 pt-2 shrink-0"
         style={{
           background: 'linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.65))',
-          minHeight: 165,
           paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))',
         }}
       >
@@ -706,8 +705,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           </div>
         </div>
 
-        {/* Action area — stable footprint, content swaps */}
-        <div style={{ minHeight: 150 }} className="flex flex-col justify-end">
+        {/* Action area — altura CONSTANTE (cabe el rail de apuestas) para que tu nombre/fichas
+            no salten entre fases. En fases sin rail los botones se centran en este espacio. */}
+        <div style={{ minHeight: 132 }} className="flex flex-col justify-center">
           {/* Sin fichas → recompra (repite tu último buy-in). Prioritario sobre el resto. */}
           {canRebuy && (
             <button
@@ -812,6 +812,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           )}
         </div>
       </div>
+      </div>{/* fin contenido 100dvh */}
 
       {/* ===== Capa de vuelo de fichas (win→cuenta / lose→dealer) ===== */}
       <div className="fixed inset-0 pointer-events-none z-50">
