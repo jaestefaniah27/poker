@@ -706,23 +706,27 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
           transition={{ duration: 1.4, repeat: canBet && pendingTotal > 0 ? Infinity : 0 }}
         >
-          {phase === 'resolve' && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 ? (
+          {circleChips.length > 0 ? (
             <div className="flex items-end justify-center gap-1.5">
-              <ChipStack chips={circleChips} size={34} />
-              {(myPlayer.bjDelta || 0) > 0 && (
-                <motion.div
-                  initial={{ y: -40, opacity: 0, scale: 0.6 }}
-                  animate={{ y: 0, opacity: 1, scale: 1 }}
-                  transition={{ type: 'spring', stiffness: 280, damping: 22, delay: 0.25 }}
-                >
-                  <ChipStack chips={myPlayer.bjResult === 'win' ? circleChips : chipsFromAmount(Math.abs(myPlayer.bjDelta))} size={34} />
-                </motion.div>
-              )}
+              <motion.div layout transition={{ type: 'spring', stiffness: 300, damping: 25 }}>
+                <ChipStack chips={circleChips} size={34} />
+              </motion.div>
+
+              <AnimatePresence>
+                {phase === 'resolve' && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer.bjDelta || 0) > 0 && (
+                  <motion.div
+                    key="prize-chips"
+                    layout
+                    initial={{ x: -20, y: -40, opacity: 0, scale: 0.6 }}
+                    animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.6 }}
+                    transition={{ type: 'spring', stiffness: 280, damping: 22, delay: 0.25 }}
+                  >
+                    <ChipStack chips={myPlayer.bjResult === 'win' ? circleChips : chipsFromAmount(Math.abs(myPlayer.bjDelta))} size={34} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          ) : phase === 'resolve' && myPlayer?.bjResult === 'push' && myBet > 0 ? (
-            <ChipStack chips={circleChips} size={34} />
-          ) : circleChips.length > 0 && phase !== 'resolve' ? (
-            <ChipStack chips={circleChips} size={34} />
           ) : (
             <span className="text-[9px] text-white/30 uppercase tracking-[0.25em] font-bold">Apuesta</span>
           )}
