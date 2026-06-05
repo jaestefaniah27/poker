@@ -29,9 +29,19 @@ export interface Player {
   sessionMaxChips?: number; // Pico de fichas durante la sesión
   sessionStartedAt?: number; // Timestamp del primer buy-in de la sesión
   offlineSince?: number; // Timestamp en que pasó a offline (para expulsión automática)
+  // --- BlackJack ---
+  bet?: number; // Apuesta de la mano actual de blackjack
+  bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack';
+  bjDoubled?: boolean;
+  bjResult?: 'win' | 'lose' | 'push' | 'blackjack'; // Resultado de la última mano
+  bjDelta?: number; // Cambio de chips de la última mano (para mostrar +N/-N)
+  lastBuyIn?: number; // Último buy-in elegido (para recompra rápida en blackjack)
+  bjHasContinued?: boolean; // True si el jugador ha pulsado continuar y está listo para la siguiente ronda
 }
 
+export type GameType = 'poker' | 'blackjack';
 export type GamePhase = 'waiting' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
+export type BlackjackPhase = 'waiting' | 'betting' | 'dealing' | 'playerAction' | 'dealerAction' | 'resolve';
 
 export interface Room {
   id: string;
@@ -68,6 +78,14 @@ export interface Room {
   startingBigBlind?: number;
   tournamentEnded?: boolean;       // true cuando un solo jugador conserva fichas
   bustCounter?: number;            // contador interno para asignar bustedSeq
+  // --- BlackJack ---
+  gameType?: GameType;             // 'poker' (default) | 'blackjack'
+  bjPhase?: BlackjackPhase;        // Fase específica blackjack (paralela a phase)
+  dealerCards?: Card[];            // Mano del dealer (primera carta hidden hasta dealerAction)
+  bettingDeadline?: number;        // Timestamp fin de fase betting (cliente muestra cuenta atrás)
+  minBet?: number;
+  maxBet?: number;
+  bjTurnUserId?: string;           // Quién está actuando en playerAction (en lugar de currentTurnIndex)
 }
 
 export interface HandHistoryPlayer {

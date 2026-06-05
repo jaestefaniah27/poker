@@ -12,6 +12,7 @@ import HandRankingsModal from './components/HandRankingsModal';
 import HandHistoryModal from './components/HandHistoryModal';
 import TournamentResults from './components/TournamentResults';
 import Slider from './components/Slider';
+import BlackjackTable from './components/BlackjackTable';
 import type { Room, Player, PublicUser } from '../../shared/types';
 
 const ConnectionOverlay = ({ isConnected }: { isConnected: boolean }) => {
@@ -366,7 +367,7 @@ function App() {
     setToken(t);
     setUser(u);
     if (activeRoomId) {
-      joinRoom(activeRoomId, t);
+      joinRoom(activeRoomId, undefined, t);
     }
   };
 
@@ -378,9 +379,9 @@ function App() {
     setToken(null);
   };
 
-  const joinRoom = (roomId: string, explicitToken?: string) => {
+  const joinRoom = (roomId: string, buyInAmount?: number, explicitToken?: string) => {
     getStorage().setItem('pokerRoomId', roomId);
-    socket.emit('joinRoom', { roomId, token: explicitToken || token });
+    socket.emit('joinRoom', { roomId, token: explicitToken || token, buyInAmount });
   };
 
   const leaveRoom = () => {
@@ -440,6 +441,16 @@ function App() {
           onLogout={handleLogout}
           onUpdateUser={(u) => setUser(u)}
         />
+      </>
+    );
+  }
+
+  // --- BlackJack ---
+  if (currentRoom.gameType === 'blackjack') {
+    return (
+      <>
+        <ConnectionOverlay isConnected={isConnected} />
+        <BlackjackTable room={currentRoom} user={user} onLeave={leaveRoom} />
       </>
     );
   }

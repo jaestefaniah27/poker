@@ -5,27 +5,37 @@ import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR } from '../pokerEngi
 import { authUser, broadcastRoom, armTurnTimer, clearTurnTimer, io } from '../socketHelpers';
 import { applyBalanceDelta } from '../db';
 import { sanitizeInput } from '../security';
+import { maybeStartBlackjack, handleBlackjackLeave, clearBlackjackTimers } from './blackjackHandlers';
 
 export const roomHandlers = (socket: Socket) => {
-  socket.on('createRoom', ({ roomName, tierIndex, blindDivisor, blindLevelDuration }, callback) => {
+  socket.on('createRoom', ({ roomName, tierIndex, blindDivisor, blindLevelDuration, gameType, minBet, maxBet }, callback) => {
     const cleanRoomName = sanitizeInput(roomName?.trim() || 'Sala sin nombre');
     const idx = Number.isInteger(tierIndex) && tierIndex >= 0 && tierIndex < STAKE_TIERS.length ? tierIndex : 0;
     const div = BLIND_DIVISORS.includes(blindDivisor) ? blindDivisor : DEFAULT_BLIND_DIVISOR;
     const dur = Number.isFinite(blindLevelDuration) && blindLevelDuration > 0 ? Math.floor(blindLevelDuration) : 0;
+    const gt = gameType === 'blackjack' ? 'blackjack' : 'poker';
+    const safeMin = Number.isFinite(minBet) && minBet > 0 ? Math.floor(minBet) : undefined;
+    const safeMax = Number.isFinite(maxBet) && maxBet > 0 ? Math.floor(maxBet) : undefined;
     const roomId = uuidv4();
-    createRoom(roomId, cleanRoomName, false, idx, div, dur);
+    createRoom(roomId, cleanRoomName, false, idx, div, dur, gt, safeMin, safeMax);
     callback({ roomId });
     io.emit('roomsUpdated', getRooms());
   });
 
-  socket.on('joinRoom', async ({ roomId, token }) => {
+  socket.on('joinRoom', async ({ roomId, token, buyInAmount }) => {
     const room = getRoom(roomId);
     if (!room) return;
 
     const dbUser = await authUser(token);
     if (!dbUser) return;
 
-    const buyIn = room.buyIn;
+    // BlackJack: buy-in elegido por el jugador (saldo solo indicativo, puede quedar negativo).
+    // Poker: buy-in fijo de la mesa.
+    const isBJ = room.gameType === 'blackjack';
+    const reqBuyIn = Math.floor(Number(buyInAmount));
+    const buyIn = isBJ
+      ? (Number.isFinite(reqBuyIn) && reqBuyIn > 0 ? reqBuyIn : 1000)
+      : room.buyIn;
     const offTableBalance = dbUser.balance - buyIn;
 
     const result = joinRoom(roomId, {
@@ -40,7 +50,8 @@ export const roomHandlers = (socket: Socket) => {
       hasFolded: false,
       hasActed: false,
       isActive: true,
-      totalContribution: 0
+      totalContribution: 0,
+      lastBuyIn: isBJ ? buyIn : undefined
     });
 
     if (!result) return;
@@ -65,16 +76,30 @@ export const roomHandlers = (socket: Socket) => {
 
     broadcastRoom(roomId);
     io.emit('roomsUpdated', getRooms());
+
+    // BlackJack: si la sala está parada, arrancar primera ronda
+    const room3 = getRoom(roomId);
+    if (room3?.gameType === 'blackjack') {
+      maybeStartBlackjack(roomId);
+    }
   });
 
   socket.on('leaveRoom', async ({ roomId }) => {
+    const before = getRoom(roomId);
+    const wasBlackjack = before?.gameType === 'blackjack';
     const cashOut = leaveRoom(roomId, socket.id);
     socket.leave(roomId);
     if (cashOut) {
       const newBalance = await applyBalanceDelta(cashOut.userId, cashOut.chips);
       socket.emit('balanceUpdated', { balance: newBalance });
     }
-    armTurnTimer(roomId, true);
+    if (wasBlackjack) {
+      const after = getRoom(roomId);
+      if (after) handleBlackjackLeave(roomId);
+      else clearBlackjackTimers(roomId);
+    } else {
+      armTurnTimer(roomId, true);
+    }
     broadcastRoom(roomId);
     io.emit('roomsUpdated', getRooms());
   });

@@ -4,9 +4,10 @@ interface PlayingCardProps {
   hidden?: boolean;
   className?: string;
   style?: React.CSSProperties;
+  compact?: boolean; // oculta el rank invertido de abajo (cartas pequeñas en blackjack)
 }
 
-const PlayingCard = ({ rank, suit, hidden = false, className = '', style }: PlayingCardProps) => {
+const PlayingCard = ({ rank, suit, hidden = false, className = '', style, compact = false }: PlayingCardProps) => {
   const isMini = className.includes('w-10') || className.includes('w-8');
   const isSmall = className.includes('w-16') || className.includes('w-14');
 
@@ -34,7 +35,7 @@ const PlayingCard = ({ rank, suit, hidden = false, className = '', style }: Play
     <div className={`bg-white ${roundedClass} shadow-md flex flex-col justify-between ${pClass} ${colorClass} ${className}`} style={style}>
       <div className={`text-left font-bold leading-none ${rankClass}`}>{displayRank}</div>
       <div className={`text-center flex-1 flex items-center justify-center ${suitClass}`}>{suitSymbol}</div>
-      <div className={`text-left font-bold leading-none rotate-180 ${rankClass}`}>{displayRank}</div>
+      {!compact && <div className={`text-left font-bold leading-none rotate-180 ${rankClass}`}>{displayRank}</div>}
     </div>
   );
 };

@@ -71,6 +71,13 @@ const bootServer = async () => {
     room.paused = true;
     room.turnStartedAt = undefined;
     room.inGrace = false;
+    if (room.gameType === 'blackjack') {
+      room.bjPhase = 'waiting';
+      room.bjTurnUserId = undefined;
+      room.bettingDeadline = undefined;
+      room.dealerCards = [];
+      room.players.forEach(p => { p.bet = 0; p.bjStatus = 'idle'; p.cards = []; });
+    }
     restoreRoom(room);
   }
   
@@ -82,6 +89,12 @@ const bootServer = async () => {
   if (!getRoom('sala-taberna')) createRoom('sala-taberna', 'La Taberna', true, 0);
   if (!getRoom('sala-casino')) createRoom('sala-casino', 'Casino Real', true, 4);
   if (!getRoom('sala-presidencial')) createRoom('sala-presidencial', 'Sala Presidencial', true, STAKE_TIERS.length - 1);
+  // Mesa de blackjack permanente: buy-in libre por jugador. Apuesta mín 25, sin tope (cap = tu stack).
+  const BJ_NO_CAP = Number.MAX_SAFE_INTEGER;
+  if (!getRoom('sala-blackjack')) createRoom('sala-blackjack', 'BlackJack', true, 0, undefined, undefined, 'blackjack', 25, BJ_NO_CAP);
+  // Forzar límites actuales aunque la sala venga restaurada de la BD con valores antiguos
+  const bjRoom = getRoom('sala-blackjack');
+  if (bjRoom) { bjRoom.minBet = 25; bjRoom.maxBet = BJ_NO_CAP; }
 
   server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
