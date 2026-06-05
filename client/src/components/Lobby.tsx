@@ -26,7 +26,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const [showHistory, setShowHistory] = useState(false);
 
   // Create section (poker only)
-  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
   const [showStakeSlider, setShowStakeSlider] = useState(false);
   const [createTierIndex, setCreateTierIndex] = useState(STAKE_TIERS.length - 1);
   const [createBlindDivisor, setCreateBlindDivisor] = useState(DEFAULT_BLIND_DIVISOR);
