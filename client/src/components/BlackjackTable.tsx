@@ -349,6 +349,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   useEffect(() => {
     if (phase === 'betting' && myBet === 0) { setPendingChips([]); setPlacedComposition([]); }
     else if (phase === 'waiting') { setPendingChips([]); setPlacedComposition([]); }
+    else if (phase !== 'betting') { setPendingChips([]); } // liberar pending al salir de betting → circleAmount usa myBet
   }, [phase, room.id, myBet]);
   // Remember last placed bet for one-tap REBET in the next round
   const [lastBet, setLastBet] = useState(0);
@@ -619,10 +620,19 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           <>
             <CardFan cards={myPlayer.cards || []} big />
             {myTotals && (
-              <div className="self-start mt-1">
-                <TotalPill total={myTotals.total} soft={myTotals.soft} bust={myTotals.bust} hasHidden={false}
-                  accent={myPlayer.bjStatus === 'blackjack' ? 'amber' : 'sky'} />
-              </div>
+              <AnimatePresence>
+                <motion.div
+                  key="player-total"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                  className="self-start mt-1"
+                >
+                  <TotalPill total={myTotals.total} soft={myTotals.soft} bust={myTotals.bust} hasHidden={false}
+                    accent={myPlayer.bjStatus === 'blackjack' ? 'amber' : 'sky'} />
+                </motion.div>
+              </AnimatePresence>
             )}
           </>
         ) : (
@@ -663,27 +673,27 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
           transition={{ duration: 1.4, repeat: canBet && pendingTotal > 0 ? Infinity : 0 }}
         >
-          {phase === 'resolve' && myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0 ? (
-            <span
-              className={`font-mono font-extrabold text-xl ${myPlayer.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}
-              style={{ textShadow: '0 2px 6px rgba(0,0,0,0.9)' }}
-            >
-              {myPlayer.bjDelta > 0 ? '+' : ''}{fmtChips(myPlayer.bjDelta)}
-            </span>
-          ) : circleChips.length > 0 && phase !== 'resolve' ? (
-            <ChipStack chips={circleChips} size={34} />
+          {circleChips.length > 0 && phase !== 'resolve' ? (
+            myPlayer?.bjDoubled ? (
+              <div className="flex items-end justify-center gap-1.5">
+                <ChipStack chips={circleChips} size={34} />
+                <motion.div
+                  initial={{ y: -40, opacity: 0, scale: 0.6 }}
+                  animate={{ y: 0, opacity: 1, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+                >
+                  <ChipStack chips={chipsFromAmount(myBet / 2)} size={34} />
+                </motion.div>
+              </div>
+            ) : (
+              <ChipStack chips={circleChips} size={34} />
+            )
           ) : (
             <span className="text-[9px] text-white/30 uppercase tracking-[0.25em] font-bold">Apuesta</span>
           )}
         </motion.div>
-        {/* Línea de importe: altura fija reservada siempre (el círculo nunca se mueve) */}
-        <div className="h-6 flex items-center justify-center mt-1">
-          {phase !== 'resolve' && circleAmount > 0 ? (
-            <span className="text-yellow-200 font-mono font-bold text-sm">
-              {fmtChips(circleAmount)}{myPlayer?.bjDoubled ? ' ×2' : ''}
-            </span>
-          ) : null}
-        </div>
+        {/* Espacio reservado para que el círculo no salte */}
+        <div className="h-2" />
       </div>
 
       </div>{/* fin columna central */}
@@ -698,8 +708,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         }}
       >
         {/* compact player row */}
-        <div className="flex items-center gap-2 mb-2">
-          <div className="relative">
+        <div className="relative flex items-center gap-2 mb-2">
+          <div className="relative shrink-0">
             <Avatar seed={user.avatar} size={32} />
             {canAct && (
               <motion.div
@@ -714,6 +724,31 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             <div ref={countRef} className="text-[11px] text-amber-200 font-mono font-bold inline-flex items-center gap-1">
               <AnimatedNumber value={displayedChips} maxDurationMs={650} baseStepMs={6} /> fichas
             </div>
+          </div>
+          {/* Bet pill — centrada absolutamente en la fila */}
+          <div className="absolute inset-x-0 flex justify-center pointer-events-none">
+            <AnimatePresence>
+              {(circleAmount > 0 || (phase === 'resolve' && myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0)) && (
+                <motion.div
+                  key="bet-pill"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                  className={`px-2.5 py-1 rounded-full font-mono font-bold text-[11px] border ${
+                    phase === 'resolve' && myPlayer?.bjDelta != null
+                      ? myPlayer.bjDelta > 0
+                        ? 'bg-emerald-400/20 border-emerald-300/50 text-emerald-200'
+                        : 'bg-rose-500/20 border-rose-400/50 text-rose-200'
+                      : 'bg-yellow-400/20 border-yellow-300/40 text-yellow-100'
+                  }`}
+                >
+                  {phase === 'resolve' && myPlayer?.bjDelta != null
+                    ? `${myPlayer.bjDelta > 0 ? '+' : ''}${fmtChips(myPlayer.bjDelta)}`
+                    : fmtChips(circleAmount)}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
