@@ -65,6 +65,16 @@ const MIGRATIONS = [
   {
     name: '007_match_history_user_idx',
     sql: 'CREATE INDEX IF NOT EXISTS idx_match_history_user ON match_history (user_id, played_at DESC)'
+  },
+  {
+    name: '008_bonus_claims',
+    sql: 'ALTER TABLE users ADD COLUMN last_daily_claim TEXT',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '009_hourly_claim',
+    sql: 'ALTER TABLE users ADD COLUMN last_hourly_claim INTEGER',
+    ignoreError: 'duplicate column'
   }
 ];
 
@@ -131,6 +141,8 @@ export interface UserRow {
   balance: number;
   password_hash: string | null;
   avatar: string | null;
+  last_daily_claim: string | null;
+  last_hourly_claim: number | null;
 }
 
 import { PublicUser } from '../../shared/types';
@@ -139,8 +151,10 @@ export const toPublicUser = (row: UserRow): PublicUser => ({
   id: row.id,
   name: row.name,
   balance: row.balance,
-  avatar: row.avatar || row.id, // por defecto el avatar se siembra con el id
+  avatar: row.avatar || row.id,
   hasPassword: !!row.password_hash,
+  lastDailyClaim: row.last_daily_claim ?? null,
+  lastHourlyClaim: row.last_hourly_claim ?? null,
 });
 
 export const getAllUsersRanked = async (): Promise<UserRow[]> => {
@@ -201,6 +215,32 @@ export const applyBalanceDelta = async (id: string, delta: number): Promise<numb
   await dbRun('UPDATE users SET balance = balance + ? WHERE id = ?', [delta, id]);
   const row = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   return row?.balance ?? 0;
+};
+
+const DAILY_AMOUNT = 10_000;
+const HOURLY_AMOUNT = 1_000;
+const HOURLY_COOLDOWN_MS = 30 * 60 * 1000;
+
+export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: number }> => {
+  const row = await dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
+  if (!row) return { ok: false, error: 'Usuario no encontrado' };
+  const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  if (row.last_daily_claim === today) return { ok: false, error: 'Ya recogiste el bono hoy' };
+  await dbRun('UPDATE users SET balance = balance + ?, last_daily_claim = ? WHERE id = ?', [DAILY_AMOUNT, today, id]);
+  const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
+  return { ok: true, newBalance: updated?.balance ?? 0 };
+};
+
+export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: number; nextClaimAt?: number }> => {
+  const row = await dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
+  if (!row) return { ok: false, error: 'Usuario no encontrado' };
+  const now = Date.now();
+  const last = row.last_hourly_claim ?? 0;
+  const nextAt = last + HOURLY_COOLDOWN_MS;
+  if (now < nextAt) return { ok: false, error: 'Demasiado pronto', nextClaimAt: nextAt };
+  await dbRun('UPDATE users SET balance = balance + ?, last_hourly_claim = ? WHERE id = ?', [HOURLY_AMOUNT, now, id]);
+  const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
+  return { ok: true, newBalance: updated?.balance ?? 0, nextClaimAt: now + HOURLY_COOLDOWN_MS };
 };
 
 // --- Persistencia de Salas (Reconexión Robusta) ---

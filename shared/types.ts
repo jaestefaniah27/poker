@@ -113,6 +113,8 @@ export interface PublicUser {
   balance: number;
   avatar: string;
   hasPassword: boolean;
+  lastDailyClaim: string | null;  // "YYYY-MM-DD"
+  lastHourlyClaim: number | null; // ms timestamp
 }
 
 export const STAKE_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000];

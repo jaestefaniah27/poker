@@ -7,7 +7,7 @@ import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABEL
 import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
 
 interface LobbyProps {
-  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean };
+  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean; lastDailyClaim: string | null; lastHourlyClaim: number | null };
   token: string | null;
   rooms: any[];
   onJoinRoom: (roomId: string, buyInAmount?: number) => void;
@@ -38,6 +38,42 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
 
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+
+  // Bonos
+  const [now, setNow] = useState(Date.now());
+  const [claimingDaily, setClaimingDaily] = useState(false);
+  const [claimingHourly, setClaimingHourly] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const dailyAvailable = user.lastDailyClaim !== todayStr;
+  const hourlyNextAt = user.lastHourlyClaim ? user.lastHourlyClaim + 30 * 60 * 1000 : 0;
+  const hourlyAvailable = now >= hourlyNextAt;
+  const hourlySecs = hourlyAvailable ? 0 : Math.ceil((hourlyNextAt - now) / 1000);
+  const hourlyMM = String(Math.floor(hourlySecs / 60)).padStart(2, '0');
+  const hourlySS = String(hourlySecs % 60).padStart(2, '0');
+
+  const handleClaimDaily = () => {
+    if (!dailyAvailable || claimingDaily) return;
+    setClaimingDaily(true);
+    socket.emit('claimDaily', { token }, (res: any) => {
+      setClaimingDaily(false);
+      if (res?.ok && res.user) onUpdateUser(res.user);
+    });
+  };
+
+  const handleClaimHourly = () => {
+    if (!hourlyAvailable || claimingHourly) return;
+    setClaimingHourly(true);
+    socket.emit('claimHourly', { token }, (res: any) => {
+      setClaimingHourly(false);
+      if (res?.ok && res.user) onUpdateUser(res.user);
+    });
+  };
 
   useEffect(() => {
     socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
@@ -118,6 +154,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 </span>
               )}
             </button>
+            <button onClick={() => window.location.reload()} title="Recargar" className="text-gray-500 hover:text-white transition-colors">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
             <button onClick={onLogout} title="Cerrar sesión" className="text-gray-500 hover:text-white transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -127,6 +168,36 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
         </header>
 
         <div className="space-y-5">
+          {/* ---- Bonos ---- */}
+          <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
+            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Bonos</h2>
+            <div className="flex gap-3">
+              {/* Diario */}
+              <button
+                onClick={handleClaimDaily}
+                disabled={!dailyAvailable || claimingDaily}
+                className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
+                style={{ borderColor: dailyAvailable ? '#f59e0b' : '#374151', background: dailyAvailable ? 'rgba(245,158,11,0.1)' : 'transparent' }}
+              >
+                <span className="text-2xl">🏆</span>
+                <span className="text-xs font-bold text-amber-400">+10.000</span>
+                <span className="text-[10px] text-gray-400">{dailyAvailable ? 'Bono diario' : 'Vuelve mañana'}</span>
+              </button>
+
+              {/* Cada 30 min */}
+              <button
+                onClick={handleClaimHourly}
+                disabled={!hourlyAvailable || claimingHourly}
+                className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
+                style={{ borderColor: hourlyAvailable ? '#34d399' : '#374151', background: hourlyAvailable ? 'rgba(52,211,153,0.1)' : 'transparent' }}
+              >
+                <span className="text-2xl">⏰</span>
+                <span className="text-xs font-bold text-emerald-400">+1.000</span>
+                <span className="text-[10px] text-gray-400">{hourlyAvailable ? 'Cada 30 min' : `${hourlyMM}:${hourlySS}`}</span>
+              </button>
+            </div>
+          </div>
+
           {/* ---- Create Game ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
             <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Crear partida</h2>

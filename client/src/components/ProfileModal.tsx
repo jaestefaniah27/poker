@@ -60,7 +60,7 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }} onClick={onClose}>
       <div
         className="bg-[#1a1a1a] rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto scrollbar-hide"
         onClick={(e) => e.stopPropagation()}

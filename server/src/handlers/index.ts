@@ -3,6 +3,7 @@ import { authHandlers } from './authHandlers';
 import { roomHandlers } from './roomHandlers';
 import { gameHandlers } from './gameHandlers';
 import { blackjackHandlers } from './blackjackHandlers';
+import { minigameHandlers } from './minigameHandlers';
 
 const MAX_EVENTS_PER_SEC = 20;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -66,4 +67,5 @@ export const registerAllHandlers = (socket: Socket) => {
   roomHandlers(socket);
   gameHandlers(socket);
   blackjackHandlers(socket);
+  minigameHandlers(socket);
 };
