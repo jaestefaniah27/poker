@@ -10,7 +10,7 @@ interface LobbyProps {
   user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean };
   token: string | null;
   rooms: any[];
-  onJoinRoom: (roomId: string) => void;
+  onJoinRoom: (roomId: string, buyInAmount?: number) => void;
   onLogout: () => void;
   onUpdateUser: (u: any) => void;
 }
@@ -25,12 +25,16 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  // Create section
+  // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState('');
   const [showStakeSlider, setShowStakeSlider] = useState(false);
   const [createTierIndex, setCreateTierIndex] = useState(STAKE_TIERS.length - 1);
   const [createBlindDivisor, setCreateBlindDivisor] = useState(DEFAULT_BLIND_DIVISOR);
   const [createBlindDuration, setCreateBlindDuration] = useState(0); // ms; 0 = mesa cash
+
+  // Blackjack buy-in modal: el jugador elige con cuánto entra
+  const [buyInRoom, setBuyInRoom] = useState<{ id: string; name: string } | null>(null);
+  const [buyInTierIndex, setBuyInTierIndex] = useState(1); // default 5000
 
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -56,12 +60,30 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
       tierIndex: createTierIndex,
       blindDivisor: createBlindDivisor,
       blindLevelDuration: createBlindDuration,
+      gameType: 'poker',
     }, (res: any) => {
       if (!res?.roomId) return;
       setShowStakeSlider(false);
       getStorage().setItem('pokerRoomId', res.roomId);
       socket.emit('joinRoom', { roomId: res.roomId, token });
     });
+  };
+
+  // Click en una sala: BJ abre modal de buy-in; poker entra directo.
+  const handleRoomClick = (room: any) => {
+    if (room.gameType === 'blackjack') {
+      setBuyInTierIndex(1);
+      setBuyInRoom({ id: room.id, name: room.name });
+    } else {
+      onJoinRoom(room.id);
+    }
+  };
+
+  const confirmBuyIn = () => {
+    if (!buyInRoom) return;
+    const amount = STAKE_TIERS[buyInTierIndex];
+    onJoinRoom(buyInRoom.id, amount);
+    setBuyInRoom(null);
   };
 
   const medals = ['🥇', '🥈', '🥉'];
@@ -128,13 +150,26 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
               <p className="text-gray-500 text-center py-4 text-sm">No hay partidas activas.</p>
             ) : (
               <div className="space-y-2">
-                {rooms.map(room => (
-                  <button key={room.id} onClick={() => onJoinRoom(room.id)}
-                    className={`w-full flex justify-between items-center bg-background p-4 rounded-2xl border transition-colors text-left ${room.isTournament ? 'border-amber-900/40 hover:border-amber-600/60' : 'border-gray-800 hover:border-gray-500'}`}>
+                {rooms.map(room => {
+                  const isBJ = room.gameType === 'blackjack';
+                  return (
+                  <button key={room.id} onClick={() => handleRoomClick(room)}
+                    className={`w-full flex justify-between items-center bg-background p-4 rounded-2xl border transition-colors text-left ${isBJ ? 'border-sky-900/40 hover:border-sky-600/60' : room.isTournament ? 'border-amber-900/40 hover:border-amber-600/60' : 'border-gray-800 hover:border-gray-500'}`}>
                     <div>
-                      <h3 className="font-semibold text-base">{room.name}</h3>
-                      <p className="text-xs text-gray-500">{room.playerCount}/8 jugadores • {room.phase}</p>
-                      {room.bigBlind != null && (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isBJ ? 'bg-sky-500/20 text-sky-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                          {isBJ ? 'BJ' : 'PK'}
+                        </span>
+                        <h3 className="font-semibold text-base">{room.name}</h3>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">{room.playerCount}/8 jugadores • {isBJ ? (room.phase || 'waiting') : room.phase}</p>
+                      {isBJ ? (
+                        <p className="text-xs mt-0.5">
+                          <span className="text-sky-300/80 font-semibold">Apuesta desde {fmtChips(room.minBet || 25)} · sin tope</span>
+                          <span className="text-gray-600"> • </span>
+                          <span className="text-emerald-300/80 font-semibold">Buy-in libre</span>
+                        </p>
+                      ) : room.bigBlind != null && (
                         <p className="text-xs mt-0.5">
                           <span className="text-emerald-300/80 font-semibold">{fmtChips(room.smallBlind)}/{fmtChips(room.bigBlind)}</span>
                           <span className="text-gray-600"> • </span>
@@ -148,13 +183,14 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                         </p>
                       )}
                     </div>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${room.isTournament ? 'bg-amber-500/20' : 'bg-surfaceLight'}`}>
-                      <svg className={`w-4 h-4 ${room.isTournament ? 'text-amber-400' : 'text-white'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isBJ ? 'bg-sky-500/20' : room.isTournament ? 'bg-amber-500/20' : 'bg-surfaceLight'}`}>
+                      <svg className={`w-4 h-4 ${isBJ ? 'text-sky-400' : room.isTournament ? 'text-amber-400' : 'text-white'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </div>
                   </button>
-                ))}
+                );
+                })}
               </div>
             )}
           </div>
@@ -215,7 +251,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
         </div>
       </div>
 
-      {/* Stake + blind-speed modal */}
+      {/* Stake + blind-speed modal (poker) */}
       {showStakeSlider && (() => {
         const buyIn = STAKE_TIERS[createTierIndex];
         const { smallBlind, bigBlind } = blindsFor(buyIn, createBlindDivisor);
@@ -223,7 +259,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setShowStakeSlider(false)}>
             <div className="w-full max-w-md bg-surface rounded-3xl p-6 border border-surfaceLight max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               <h2 className="text-center text-lg font-bold mb-1 truncate">{newRoomName}</h2>
-              <p className="text-center text-xs text-gray-500 mb-6 uppercase tracking-wider">Configura la partida</p>
+              <p className="text-center text-xs text-gray-500 mb-4 uppercase tracking-wider">Configura la partida</p>
 
               <div className="text-center mb-4">
                 <p className="text-sm text-emerald-300/80 font-semibold">Ciegas iniciales</p>
@@ -271,6 +307,43 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
               <div className="flex gap-2">
                 <button onClick={() => setShowStakeSlider(false)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
                 <button onClick={confirmCreateRoom} className="flex-1 bg-white text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Crear</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Blackjack buy-in modal */}
+      {buyInRoom && (() => {
+        const amount = STAKE_TIERS[buyInTierIndex];
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setBuyInRoom(null)}>
+            <div className="w-full max-w-md bg-surface rounded-3xl p-6 border border-surfaceLight" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300">BJ</span>
+                <h2 className="text-lg font-bold truncate">{buyInRoom.name}</h2>
+              </div>
+              <p className="text-center text-xs text-gray-500 mb-6 uppercase tracking-wider">¿Con cuánto quieres entrar?</p>
+
+              <div className="text-center mb-6">
+                <p className="text-sm text-emerald-300/80 font-semibold">Buy-in</p>
+                <p className="text-5xl font-extrabold text-emerald-200">{fmtChips(amount)}</p>
+              </div>
+
+              <Slider min={0} max={STAKE_TIERS.length - 1} step={1} value={buyInTierIndex} onChange={v => setBuyInTierIndex(v)} accent="emerald" formatLabel={v => fmtChips(STAKE_TIERS[v])} />
+              <div className="flex justify-between px-1 mb-5 mt-1">
+                {STAKE_TIERS.map((b, i) => (
+                  <button key={i} onClick={() => setBuyInTierIndex(i)} className={`text-[9px] ${i === buyInTierIndex ? 'text-white font-bold' : 'text-gray-600'}`}>{fmtChips(b)}</button>
+                ))}
+              </div>
+
+              <p className="text-[10px] text-gray-600 mb-6 px-1">
+                Entras con estas fichas. Tu saldo es solo indicativo: puedes apostar lo que quieras y quedar en negativo. Al salir, tus fichas vuelven al saldo.
+              </p>
+
+              <div className="flex gap-2">
+                <button onClick={() => setBuyInRoom(null)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
+                <button onClick={confirmBuyIn} className="flex-1 bg-sky-500 text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Entrar con {fmtChips(amount)}</button>
               </div>
             </div>
           </div>

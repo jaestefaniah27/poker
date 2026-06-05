@@ -48,6 +48,14 @@ export const authUser = async (token: string | undefined): Promise<UserRow | und
 };
 
 export const buildRoomView = (room: Room, socketId: string) => {
+  if (room.gameType === 'blackjack') {
+    // En blackjack todas las cartas son públicas; sólo ocultamos la primera del dealer hasta dealerAction/resolve.
+    const hideDealerHole = room.bjPhase === 'dealing' || room.bjPhase === 'playerAction';
+    const dealerCards = hideDealerHole && room.dealerCards && room.dealerCards.length > 0
+      ? [{ rank: '?' as any, suit: '?' as any }, ...room.dealerCards.slice(1)]
+      : room.dealerCards;
+    return { ...room, deck: [], dealerCards };
+  }
   const wonByFold = room.winners?.[0]?.handName === 'Won by fold';
   return {
     ...room,

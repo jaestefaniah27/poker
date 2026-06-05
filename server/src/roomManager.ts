@@ -1,5 +1,6 @@
-import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds } from '../../shared/types';
+import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
+import { dealBlackjack, dealerPlay as bjDealerPlay, resolveBlackjack, resetBlackjackHand, handValue as bjHandValue } from './blackjackEngine';
 import { deleteRoomFromDB, recordMatchHistory } from './db';
 import { broadcastRoom } from './socketHelpers';
 import { v4 as uuidv4 } from 'uuid';
@@ -55,13 +56,17 @@ export const getRooms = () => {
       smallBlind: r.smallBlind,
       bigBlind: r.bigBlind,
       isTournament: !!r.isTournament,
-      blindLevelDuration: r.blindLevelDuration || 0
+      blindLevelDuration: r.blindLevelDuration || 0,
+      gameType: r.gameType || 'poker',
+      minBet: r.minBet,
+      maxBet: r.maxBet
     }));
 };
 
 export const createRoom = (
   id: string, name: string, persistent = false, tierIndex = 0,
-  blindDivisor = DEFAULT_BLIND_DIVISOR, blindLevelDuration = 0
+  blindDivisor = DEFAULT_BLIND_DIVISOR, blindLevelDuration = 0,
+  gameType: GameType = 'poker', minBet?: number, maxBet?: number
 ): Room => {
   const buyIn = STAKE_TIERS[tierIndex] ?? STAKE_TIERS[0];
   const { smallBlind, bigBlind } = blindsFor(buyIn, blindDivisor);
@@ -82,12 +87,17 @@ export const createRoom = (
     winners: [],
     persistent,
     lastActivityAt: Date.now(),
-    isTournament: blindLevelDuration > 0,
-    blindLevelDuration,
+    isTournament: gameType === 'poker' && blindLevelDuration > 0,
+    blindLevelDuration: gameType === 'poker' ? blindLevelDuration : 0,
     blindLevel: 0,
     startingChips: buyIn,
     startingSmallBlind: smallBlind,
-    startingBigBlind: bigBlind
+    startingBigBlind: bigBlind,
+    gameType,
+    bjPhase: gameType === 'blackjack' ? 'waiting' : undefined,
+    dealerCards: gameType === 'blackjack' ? [] : undefined,
+    minBet: gameType === 'blackjack' ? Math.max(1, minBet || 1) : undefined,
+    maxBet: gameType === 'blackjack' ? Math.max(1, maxBet || Math.floor(buyIn / 4)) : undefined
   };
   rooms.set(id, newRoom);
   return newRoom;
@@ -138,6 +148,13 @@ export const evictAll = (roomId: string): { userId: string; chips: number }[] =>
   room.inGrace = false;
   room.paused = false;
   room.lastActivityAt = Date.now();
+  // Blackjack: resetear su máquina de estados para que arranque limpio al volver alguien
+  if (room.gameType === 'blackjack') {
+    room.bjPhase = 'waiting';
+    room.bjTurnUserId = undefined;
+    room.bettingDeadline = undefined;
+    room.dealerCards = [];
+  }
   return cashOuts;
 };
 
@@ -149,7 +166,9 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
   if (!room) return false;
   room.lastActivityAt = Date.now();
 
-  const isGameActive = room.phase !== 'waiting' && room.phase !== 'showdown';
+  const isGameActive = room.gameType === 'blackjack'
+    ? (room.bjPhase != null && room.bjPhase !== 'waiting' && room.bjPhase !== 'betting')
+    : (room.phase !== 'waiting' && room.phase !== 'showdown');
   const existing = room.players.find(p => p.userId === player.userId);
 
   if (existing && !existing.hasCashedOut) {
@@ -173,6 +192,7 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     existing.avatar = player.avatar;
     existing.chips = player.chips;
     existing.balance = player.balance;
+    if (player.lastBuyIn) existing.lastBuyIn = player.lastBuyIn;
     existing.hasCashedOut = false;
     existing.hasFolded = false;
     existing.hasActed = false;
@@ -202,7 +222,9 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     isSpectating: isGameActive, // Wait for next hand if joining mid-game
     sessionBuyIn: player.chips,
     sessionMaxChips: player.chips,
-    sessionStartedAt: Date.now()
+    sessionStartedAt: Date.now(),
+    bet: room.gameType === 'blackjack' ? 0 : undefined,
+    bjStatus: room.gameType === 'blackjack' ? 'idle' : undefined
   });
   return 'joined';
 };
@@ -224,9 +246,17 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
   const cashOut = { userId: player.userId, chips: player.chips };
   closePlayerSession(room, player, player.chips);
 
-  const isInHand = room.phase !== 'waiting' && room.phase !== 'showdown' && !player.isSpectating;
-  if (isInHand) {
+  const isInHand = room.gameType === 'blackjack'
+    ? (room.bjPhase != null && room.bjPhase !== 'waiting' && room.bjPhase !== 'betting' && room.bjPhase !== 'resolve')
+    : (room.phase !== 'waiting' && room.phase !== 'showdown' && !player.isSpectating);
+  if (isInHand && room.gameType !== 'blackjack') {
     player.hasFolded = true;
+  }
+  if (isInHand && room.gameType === 'blackjack') {
+    // En blackjack, el jugador que se va abandona la mano: bet a 0, status idle.
+    // Si era su turno, hay que avanzar al siguiente actor (lo hace el handler tras leaveRoom).
+    player.bet = 0;
+    player.bjStatus = 'idle';
   }
 
   // Retiramos sus fichas (se devuelven al saldo) y marcamos el asiento como liberado
@@ -234,7 +264,7 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
   player.isActive = false;
   player.hasCashedOut = true;
 
-  if (isInHand) {
+  if (isInHand && room.gameType !== 'blackjack') {
     const signal = checkRoundEnd(room);
     // 'continue' ya avanzó el turno dentro de checkRoundEnd; si la ronda se cerró, resolvemos en síncrono
     if (signal !== 'continue') {
@@ -744,3 +774,183 @@ export const resumeBlindTimers = () => {
     }
   }
 };
+
+// ============================================================
+// BLACKJACK
+// ============================================================
+
+export const BJ_BETTING_DURATION = 15_000;
+export const BJ_PLAYER_ACTION_DURATION = 15_000;
+export const BJ_RESOLVE_DURATION = 7_000;
+export const BJ_DEALER_REVEAL_DELAY = 1_400; // dealer pause before flipping/playing
+
+// Arranca una nueva ronda de blackjack: limpia mano previa, abre fase betting.
+// Devuelve false si no hay al menos 1 jugador activo con fichas.
+export const startBlackjackRound = (roomId: string): boolean => {
+  const room = rooms.get(roomId);
+  if (!room || room.gameType !== 'blackjack') return false;
+  // Activar de espectador a participante a los que entraron en la ronda anterior
+  room.players.forEach(p => {
+    if (p.isActive && p.isSpectating) p.isSpectating = false;
+    if (p.isActive) p.reducedTime = p.isOnline === false;
+  });
+  const eligibles = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
+  if (eligibles.length < 1) return false;
+  resetBlackjackHand(room);
+  room.bjPhase = 'betting';
+  room.bettingDeadline = Date.now() + BJ_BETTING_DURATION;
+  room.bjTurnUserId = undefined;
+  room.dealerCards = [];
+  room.lastActivityAt = Date.now();
+  return true;
+};
+
+// Coloca apuesta del jugador. Devuelve true si la apuesta queda registrada.
+export const placeBlackjackBet = (roomId: string, userId: string, amount: number): boolean => {
+  const room = rooms.get(roomId);
+  if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'betting') return false;
+  const player = room.players.find(p => p.userId === userId);
+  if (!player || !player.isActive || player.isSpectating || player.chips <= 0) return false;
+  const min = room.minBet || 1;
+  const max = Math.min(room.maxBet || player.chips, player.chips);
+  const safe = Math.floor(Math.max(min, Math.min(max, amount)));
+  if (!Number.isFinite(safe) || safe <= 0) return false;
+  player.bet = safe;
+  player.bjStatus = 'playing'; // se mantendrá hasta deal; deal sobrescribe a blackjack si procede
+  room.lastActivityAt = Date.now();
+  return true;
+};
+
+// ¿Todos los jugadores activos con fichas ya apostaron?
+export const allBlackjackBetsIn = (room: Room): boolean => {
+  const eligibles = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
+  return eligibles.length > 0 && eligibles.every(p => (p.bet || 0) > 0);
+};
+
+// Reparte. Si NADIE apostó, vuelve a betting (skip ronda). Si todos tienen blackjack/bust, salta a resolve.
+// Devuelve siguiente bjPhase resultante.
+export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerAction' | 'betting' | null => {
+  const room = rooms.get(roomId);
+  if (!room || room.gameType !== 'blackjack') return null;
+  const bettors = room.players.filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0);
+  if (bettors.length === 0) {
+    // Nadie apostó → reabrir betting
+    room.bjPhase = 'betting';
+    room.bettingDeadline = Date.now() + BJ_BETTING_DURATION;
+    return 'betting';
+  }
+  // Asegurar mazo fresco al inicio de cada ronda
+  room.deck = createDeck();
+  shuffleDeck(room.deck);
+  room.bjPhase = 'dealing';
+  dealBlackjack(room);
+  // Si todos los que apostaron sacaron blackjack → directo a dealer
+  const stillPlaying = bettors.filter(p => p.bjStatus === 'playing');
+  if (stillPlaying.length === 0) {
+    room.bjPhase = 'dealerAction';
+    room.bjTurnUserId = undefined;
+    return 'dealerAction';
+  }
+  // Modelo concurrente: todos juegan su mano a la vez (sin turno). bjTurnUserId no se usa.
+  room.bjPhase = 'playerAction';
+  room.bjTurnUserId = undefined;
+  return 'playerAction';
+};
+
+// ¿Queda algún jugador con mano viva ('playing')?
+const anyStillPlaying = (room: Room): boolean =>
+  room.players.some(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0 && p.bjStatus === 'playing');
+
+// Acción de jugador. Devuelve la nueva bjPhase ('playerAction' | 'dealerAction').
+export const blackjackPlayerAction = (
+  roomId: string, userId: string, action: 'Hit' | 'Stand' | 'Double'
+): 'playerAction' | 'dealerAction' | null => {
+  const room = rooms.get(roomId);
+  if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'playerAction') return null;
+  // Concurrente: cada jugador actúa sobre SU mano cuando quiera (no hay turno).
+  const player = room.players.find(p => p.userId === userId);
+  if (!player || player.bjStatus !== 'playing') return null;
+
+  if (action === 'Hit') {
+    if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+    player.cards.push(room.deck.pop()!);
+    const v = bjHandValue(player.cards);
+    if (v.total > 21) player.bjStatus = 'bust';
+    else if (v.total === 21) player.bjStatus = 'stand';
+  } else if (action === 'Stand') {
+    player.bjStatus = 'stand';
+  } else if (action === 'Double') {
+    // Solo con 2 cartas iniciales y fichas suficientes para CUBRIR la 2ª apuesta.
+    // La 1ª apuesta ya está comprometida en mesa → necesitas chips >= 2×bet (no puedes
+    // jugar con más fichas de las que tienes dentro de la mesa).
+    if (player.cards.length !== 2) return null;
+    if (player.chips < (player.bet || 0) * 2) return null;
+    player.bjDoubled = true;
+    player.bet = (player.bet || 0) * 2;
+    if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+    player.cards.push(room.deck.pop()!);
+    const v = bjHandValue(player.cards);
+    player.bjStatus = v.total > 21 ? 'bust' : 'stand';
+  } else {
+    return null;
+  }
+
+  room.lastActivityAt = Date.now();
+  // ¿Quedan manos vivas? Si sí, seguimos en playerAction. Si no, juega el dealer.
+  if (anyStillPlaying(room)) return 'playerAction';
+  room.bjPhase = 'dealerAction';
+  room.bjTurnUserId = undefined;
+  return 'dealerAction';
+};
+
+// Fuerza plantarse a todos los que sigan vivos (timeout de fase). Devuelve true si había alguno.
+export const forceStandRemaining = (roomId: string): boolean => {
+  const room = rooms.get(roomId);
+  if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'playerAction') return false;
+  let changed = false;
+  room.players.forEach(p => {
+    if (p.isActive && !p.isSpectating && (p.bet || 0) > 0 && p.bjStatus === 'playing') {
+      p.bjStatus = 'stand';
+      changed = true;
+    }
+  });
+  room.bjPhase = 'dealerAction';
+  room.bjTurnUserId = undefined;
+  return changed;
+};
+
+// Recompra en blackjack: repite el último buy-in del jugador (saldo solo indicativo).
+// Devuelve el importe recomprado, o 0 si no procede.
+export const rebuyBlackjack = (roomId: string, userId: string): number => {
+  const room = rooms.get(roomId);
+  if (!room || room.gameType !== 'blackjack') return 0;
+  const player = room.players.find(p => p.userId === userId);
+  if (!player || !player.isActive || player.chips > 0) return 0;
+  const amount = player.lastBuyIn && player.lastBuyIn > 0 ? player.lastBuyIn : 1000;
+  player.chips = amount;
+  player.balance -= amount;
+  player.isSpectating = false;
+  player.sessionBuyIn = (player.sessionBuyIn ?? 0) + amount;
+  if (amount > (player.sessionMaxChips ?? 0)) player.sessionMaxChips = amount;
+  room.lastActivityAt = Date.now();
+  return amount;
+};
+
+// Ejecuta dealerPlay + resolve. Pasa a fase 'resolve'.
+export const finishBlackjackHand = (roomId: string) => {
+  const room = rooms.get(roomId);
+  if (!room || room.gameType !== 'blackjack') return;
+  // Si nadie quedó vivo (todos bust), dealer no necesita jugar pero igual revelamos
+  const anyStanding = room.players.some(p =>
+    p.isActive && (p.bet || 0) > 0 && (p.bjStatus === 'stand' || p.bjStatus === 'blackjack')
+  );
+  if (anyStanding) bjDealerPlay(room);
+  resolveBlackjack(room);
+  room.bjPhase = 'resolve';
+  room.showdownAt = Date.now();
+  bumpMaxChips(room);
+};
+
+// Devuelve true si el bjPhase y la fecha indican que el dealer debe revelar/jugar.
+export const shouldRunDealer = (room: Room): boolean =>
+  room.gameType === 'blackjack' && room.bjPhase === 'dealerAction';
