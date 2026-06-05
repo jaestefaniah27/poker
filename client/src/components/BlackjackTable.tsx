@@ -753,18 +753,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                   )}
                 </AnimatePresence>
               </motion.div>
-            ) : (
-              <motion.span
-                key="apuesta-text"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="text-[9px] text-white/30 uppercase tracking-[0.25em] font-bold"
-              >
-                Apuesta
-              </motion.span>
-            )}
+            ) : null}
           </AnimatePresence>
         </motion.div>
 
