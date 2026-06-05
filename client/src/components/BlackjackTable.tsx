@@ -1095,9 +1095,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
           {phase === 'playerAction' && canAct && (
             <div className="flex-1 grid grid-cols-3 gap-2 items-stretch">
-              <ActionBtn label="CARTA" onClick={() => sendAction('Hit')} from="#34d399" to="#059669" />
-              <ActionBtn label="PLANTAR" onClick={() => sendAction('Stand')} from="#f87171" to="#b91c1c" />
-              <ActionBtn label="DOBLAR" onClick={() => sendAction('Double')} disabled={!canDouble} from="#fbbf24" to="#b45309" />
+              <ActionBtn label="CARTA" onClick={() => sendAction('Hit')} disabled={!dealDone} from="#34d399" to="#059669" />
+              <ActionBtn label="PLANTAR" onClick={() => sendAction('Stand')} disabled={!dealDone} from="#f87171" to="#b91c1c" />
+              <ActionBtn label="DOBLAR" onClick={() => sendAction('Double')} disabled={!dealDone || !canDouble} from="#fbbf24" to="#b45309" />
             </div>
           )}
           {phase === 'playerAction' && !canAct && (
