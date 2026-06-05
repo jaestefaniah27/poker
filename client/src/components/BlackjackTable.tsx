@@ -84,7 +84,7 @@ const sizeForValue = (v: number): number => {
   if (v < 1000) return 35;
   if (v < 10000) return 38;
   if (v < 100000) return 41;
-  if (v >= 100000) return 58; // Premium — todas del mismo tamaño
+  return 58; // Premium — todas del mismo tamaño
 };
 
 const Chip = ({ d, size }: { d: ChipDenom; size?: number }) => {
