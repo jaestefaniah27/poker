@@ -352,7 +352,11 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   useEffect(() => {
     if (phase === 'betting' && myBet === 0) { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
     else if (phase === 'waiting') { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
-    else if (phase !== 'betting') { setPendingChips([]); } // liberar pending al salir de betting → circleAmount usa myBet
+    else if (phase !== 'betting') { 
+      setPendingChips([]); 
+      // Si la fase avanza pero el servidor dice que no apostamos, limpiamos la mesa para no quedar atascados en estado zombie
+      if (myBet === 0) setPlacedComposition([]); 
+    } 
     if (phase !== 'resolve') setHideLostChips(false);
   }, [phase, room.id, myBet]);
 

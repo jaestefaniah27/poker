@@ -46,7 +46,8 @@ const eligibleCount = (room: Room) =>
 const armBettingTimer = (roomId: string) => {
   const t = getTimers(roomId);
   if (t.betting) clearTimeout(t.betting);
-  t.betting = setTimeout(() => onBettingDeadline(roomId), BJ_BETTING_DURATION);
+  // Añadimos 2s de gracia para que los auto-place de los clientes (con posibles desajustes de reloj) lleguen antes de cerrar las apuestas
+  t.betting = setTimeout(() => onBettingDeadline(roomId), BJ_BETTING_DURATION + 2000);
 };
 
 // Timer de FASE (concurrente): tras X s, planta a quien siga vivo y pasa al dealer.
