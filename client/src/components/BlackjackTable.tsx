@@ -346,11 +346,27 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const pendingTotal = useMemo(() => pendingChips.reduce((s, c) => s + c.v, 0), [pendingChips]);
   // Composición EXACTA apostada (no se reordena al repartir): se muestra tal cual durante la mano.
   const [placedComposition, setPlacedComposition] = useState<ChipDenom[]>([]);
+  
+  const [hideLostChips, setHideLostChips] = useState(false);
+
   useEffect(() => {
-    if (phase === 'betting' && myBet === 0) { setPendingChips([]); setPlacedComposition([]); }
-    else if (phase === 'waiting') { setPendingChips([]); setPlacedComposition([]); }
+    if (phase === 'betting' && myBet === 0) { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
+    else if (phase === 'waiting') { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
     else if (phase !== 'betting') { setPendingChips([]); } // liberar pending al salir de betting → circleAmount usa myBet
+    if (phase !== 'resolve') setHideLostChips(false);
   }, [phase, room.id, myBet]);
+
+  // Ocultar fichas automáticamente si se pierde la mano
+  useEffect(() => {
+    if (phase === 'resolve' && myPlayer && myBet > 0) {
+      if (myPlayer.bjResult === 'lose' || myPlayer.bjResult === 'bust') {
+        // Un pequeño timeout para que el usuario vea el resultado un instante antes de que desaparezcan
+        const t = setTimeout(() => setHideLostChips(true), 1200);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [phase, myPlayer?.bjResult, myBet]);
+
   // Remember last placed bet for one-tap REBET in the next round
   const [lastBet, setLastBet] = useState(0);
   useEffect(() => { if (myBet > 0) setLastBet(myBet); }, [myBet]);
@@ -420,11 +436,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       ? chipsFromAmount(myPlayer?.bjDoubled ? myBet / 2 : myBet)
       : [];
 
-  const circleChips = pendingChips.length > 0
+  const _circleChips = pendingChips.length > 0
     ? pendingChips
     : myPlayer?.bjDoubled
       ? [...basePlacedChips, ...basePlacedChips]
       : basePlacedChips;
+
+  const circleChips = hideLostChips ? [] : _circleChips;
 
   const circleAmount = pendingChips.length > 0 ? pendingTotal : myBet;
 
