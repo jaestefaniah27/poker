@@ -412,18 +412,56 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     vibrate(15);
   };
   const startRound = () => socket.emit('bjStartRound', { roomId: room.id });
-  const continueRound = () => socket.emit('bjContinue', { roomId: room.id });
+
+  // Chips visibles en el círculo: pendientes mientras apuestas, o la composición exacta apostada.
+  const basePlacedChips = placedComposition.length > 0
+    ? placedComposition
+    : myBet > 0
+      ? chipsFromAmount(myPlayer?.bjDoubled ? myBet / 2 : myBet)
+      : [];
+
+  const circleChips = pendingChips.length > 0
+    ? pendingChips
+    : myPlayer?.bjDoubled
+      ? [...basePlacedChips, ...basePlacedChips]
+      : basePlacedChips;
+
+  const circleAmount = pendingChips.length > 0 ? pendingTotal : myBet;
+
+  const continueRound = () => {
+    const result = myPlayer?.bjResult;
+    if ((result === 'win' || result === 'blackjack' || result === 'push') && myBet > 0) {
+      const circle = circleRef.current?.getBoundingClientRect();
+      const count = countRef.current?.getBoundingClientRect();
+      if (circle && count) {
+        let glyphs: ChipDenom[] = [];
+        if (result === 'push') glyphs = circleChips;
+        else if (result === 'win') glyphs = [...circleChips, ...circleChips];
+        else {
+          const amount = myBet + Math.abs(myPlayer?.bjDelta || myBet);
+          glyphs = chipsFromAmount(amount);
+        }
+        const fromX = circle.left + circle.width / 2;
+        const fromY = circle.top + circle.height / 2;
+        const toX = count.left + count.width / 2;
+        const toY = count.top + count.height / 2;
+        const spawned = glyphs.map((d, i) => ({
+          id: ++flyIdRef.current, x: fromX, y: fromY, tx: toX, ty: toY, d, delay: i * 0.08,
+        }));
+        setFlyChips(fc => [...fc, ...spawned]);
+        vibrate([60, 40, 120]);
+        const ttl = 700 + glyphs.length * 80 + 400;
+        const ids = spawned.map(s => s.id);
+        setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
+      }
+      setTimeout(() => socket.emit('bjContinue', { roomId: room.id }), 500);
+    } else {
+      socket.emit('bjContinue', { roomId: room.id });
+    }
+  };
   const rebuy = () => { socket.emit('bjRebuy', { roomId: room.id }); vibrate(20); };
 
   const myTotals = myPlayer ? handTotalDisplay(myPlayer.cards || []) : null;
-
-  // Chips visibles en el círculo: pendientes mientras apuestas, o la composición exacta apostada.
-  const circleChips = pendingChips.length > 0
-    ? pendingChips
-    : myBet > 0
-      ? (placedComposition.length > 0 ? placedComposition : chipsFromAmount(myBet))
-      : [];
-  const circleAmount = pendingChips.length > 0 ? pendingTotal : myBet;
 
   const canDouble = canAct && (myPlayer?.cards?.length || 0) === 2 && myChips >= myBet * 2;
   const canRebuy = !!myPlayer && myChips <= 0 && (phase === 'waiting' || phase === 'betting' || phase === 'resolve');
@@ -443,7 +481,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const lastResolveRef = useRef<string>('');
   const autoPlacedRef = useRef(false);
 
-  // Al entrar en 'resolve': lanza fichas del círculo a tu cuenta (ganas/empate) o al dealer (pierdes).
+  // Al entrar en 'resolve': pierde → fichas al dealer. Gana/bj → dealer empuja premio al círculo.
   useEffect(() => {
     if (phase !== 'resolve' || !myPlayer) { if (phase !== 'resolve') lastResolveRef.current = ''; return; }
     const key = `${room.id}:${myPlayer.bjResult}:${myBet}:${myPlayer.bjDelta}`;
@@ -452,29 +490,39 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     const result = myPlayer.bjResult;
     if (!result) return;
     const circle = circleRef.current?.getBoundingClientRect();
-    const count = countRef.current?.getBoundingClientRect();
     const dealerEl = dealerRef.current?.getBoundingClientRect();
-    if (!circle) return;
-    const toDealer = result === 'lose';
-    const targetRect = toDealer ? dealerEl : count;
-    if (!targetRect) return;
-    // Importe que se mueve: gano = apuesta + ganancia; empate = apuesta; pierdo = apuesta.
-    const amount = result === 'lose' ? myBet
-      : result === 'push' ? myBet
-      : myBet + Math.abs(myPlayer.bjDelta || myBet); // win/blackjack: vuelve apuesta + premio
-    const glyphs = chipsFromAmount(amount);
-    const fromX = circle.left + circle.width / 2;
-    const fromY = circle.top + circle.height / 2;
-    const toX = targetRect.left + targetRect.width / 2;
-    const toY = targetRect.top + targetRect.height / 2;
-    const spawned = glyphs.map((d, i) => ({
-      id: ++flyIdRef.current, x: fromX, y: fromY, tx: toX, ty: toY, d, delay: i * 0.08,
-    }));
-    setFlyChips(fc => [...fc, ...spawned]);
-    if (result !== 'lose') vibrate([60, 40, 120]);
-    const ttl = 700 + glyphs.length * 80 + 400;
-    const ids = spawned.map(s => s.id);
-    setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
+    if (!circle || !dealerEl) return;
+
+    if (result === 'lose') {
+      // Fichas del jugador vuelan al dealer
+      const glyphs = circleChips.length > 0 ? circleChips : chipsFromAmount(myBet);
+      const spawned = glyphs.map((d, i) => ({
+        id: ++flyIdRef.current,
+        x: circle.left + circle.width / 2, y: circle.top + circle.height / 2,
+        tx: dealerEl.left + dealerEl.width / 2, ty: dealerEl.top + dealerEl.height / 2,
+        d, delay: i * 0.08,
+      }));
+      setFlyChips(fc => [...fc, ...spawned]);
+      const ttl = 700 + glyphs.length * 80 + 400;
+      const ids = spawned.map(s => s.id);
+      setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
+    } else if ((result === 'win' || result === 'blackjack') && (myPlayer.bjDelta || 0) > 0) {
+      // Dealer empuja fichas de premio hacia el círculo
+      const prizeAmount = Math.abs(myPlayer.bjDelta);
+      const glyphs = result === 'win' ? circleChips : chipsFromAmount(prizeAmount);
+      const spawned = glyphs.map((d, i) => ({
+        id: ++flyIdRef.current,
+        x: dealerEl.left + dealerEl.width / 2, y: dealerEl.top + dealerEl.height / 2,
+        tx: circle.left + circle.width / 2, ty: circle.top + circle.height / 2,
+        d, delay: 0.2 + i * 0.08,
+      }));
+      setFlyChips(fc => [...fc, ...spawned]);
+      vibrate([30, 20, 80]);
+      const ttl = 300 + 700 + glyphs.length * 80 + 400;
+      const ids = spawned.map(s => s.id);
+      setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
+    }
+    // push: sin animación (solo se devuelve la apuesta, sin fichas nuevas)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, myPlayer?.bjResult, room.id]);
 
@@ -673,21 +721,23 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
           transition={{ duration: 1.4, repeat: canBet && pendingTotal > 0 ? Infinity : 0 }}
         >
-          {circleChips.length > 0 && phase !== 'resolve' ? (
-            myPlayer?.bjDoubled ? (
-              <div className="flex items-end justify-center gap-1.5">
-                <ChipStack chips={circleChips} size={34} />
+          {phase === 'resolve' && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 ? (
+            <div className="flex items-end justify-center gap-1.5">
+              <ChipStack chips={circleChips} size={34} />
+              {(myPlayer.bjDelta || 0) > 0 && (
                 <motion.div
                   initial={{ y: -40, opacity: 0, scale: 0.6 }}
                   animate={{ y: 0, opacity: 1, scale: 1 }}
-                  transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+                  transition={{ type: 'spring', stiffness: 280, damping: 22, delay: 0.25 }}
                 >
-                  <ChipStack chips={chipsFromAmount(myBet / 2)} size={34} />
+                  <ChipStack chips={myPlayer.bjResult === 'win' ? circleChips : chipsFromAmount(Math.abs(myPlayer.bjDelta))} size={34} />
                 </motion.div>
-              </div>
-            ) : (
-              <ChipStack chips={circleChips} size={34} />
-            )
+              )}
+            </div>
+          ) : phase === 'resolve' && myPlayer?.bjResult === 'push' && myBet > 0 ? (
+            <ChipStack chips={circleChips} size={34} />
+          ) : circleChips.length > 0 && phase !== 'resolve' ? (
+            <ChipStack chips={circleChips} size={34} />
           ) : (
             <span className="text-[9px] text-white/30 uppercase tracking-[0.25em] font-bold">Apuesta</span>
           )}
