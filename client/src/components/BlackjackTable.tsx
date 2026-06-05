@@ -452,6 +452,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   const continueRound = () => {
     const result = myPlayer?.bjResult;
+    setHideLostChips(true); // Forzar que desaparezcan de la mesa ya mismo
     if ((result === 'win' || result === 'blackjack' || result === 'push') && myBet > 0) {
       const circle = circleRef.current?.getBoundingClientRect();
       const count = countRef.current?.getBoundingClientRect();
@@ -715,11 +716,11 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 120 }}>
         <motion.div
           ref={circleRef}
-          className="relative rounded-[24px] flex items-center justify-center shrink-0"
+          className="relative rounded-[24px] flex items-center justify-center shrink-0 transition-colors duration-500"
           style={{
             width: 200,
             height: 90,
-            border: '2px dashed rgba(255,215,140,0.25)',
+            border: (phase === 'betting' || circleChips.length > 0) ? '2px dashed rgba(255,215,140,0.25)' : '2px dashed transparent',
           }}
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
           transition={{ duration: 1.4, repeat: canBet && pendingTotal > 0 ? Infinity : 0 }}
@@ -734,9 +735,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                 transition={{ duration: 0.2 }}
                 className="flex items-end justify-center gap-1.5"
               >
-                <motion.div layout transition={{ type: 'spring', stiffness: 300, damping: 25 }}>
+                <div className="flex items-end justify-center gap-1.5 transition-transform duration-300">
                   <ChipStack chips={circleChips} size={34} />
-                </motion.div>
+                </div>
 
                 <AnimatePresence>
                   {phase === 'resolve' && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer.bjDelta || 0) > 0 && (

@@ -445,7 +445,7 @@ function App() {
     );
   }
 
-  // --- Blackjack ---
+  // --- BlackJack ---
   if (currentRoom.gameType === 'blackjack') {
     return (
       <>

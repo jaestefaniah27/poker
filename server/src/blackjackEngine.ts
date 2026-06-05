@@ -77,7 +77,7 @@ export const dealerPlay = (room: Room) => {
   }
 };
 
-// Aplica payouts. Blackjack natural paga 3:2 (gana 1.5x), win normal 1:1, push devuelve apuesta.
+// Aplica payouts. BlackJack natural paga 3:2 (gana 1.5x), win normal 1:1, push devuelve apuesta.
 // Bust del jugador pierde la apuesta. Si el dealer revienta, paga a todos los no-bust.
 export const resolveBlackjack = (room: Room) => {
   if (!room.dealerCards) return;

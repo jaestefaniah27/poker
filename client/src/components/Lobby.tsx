@@ -32,7 +32,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const [createBlindDivisor, setCreateBlindDivisor] = useState(DEFAULT_BLIND_DIVISOR);
   const [createBlindDuration, setCreateBlindDuration] = useState(0); // ms; 0 = mesa cash
 
-  // Blackjack buy-in modal: el jugador elige con cuánto entra
+  // BlackJack buy-in modal: el jugador elige con cuánto entra
   const [buyInRoom, setBuyInRoom] = useState<{ id: string; name: string } | null>(null);
   const [buyInTierIndex, setBuyInTierIndex] = useState(1); // default 5000
 
@@ -313,7 +313,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
         );
       })()}
 
-      {/* Blackjack buy-in modal */}
+      {/* BlackJack buy-in modal */}
       {buyInRoom && (() => {
         const amount = STAKE_TIERS[buyInTierIndex];
         return (

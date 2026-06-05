@@ -148,7 +148,7 @@ export const evictAll = (roomId: string): { userId: string; chips: number }[] =>
   room.inGrace = false;
   room.paused = false;
   room.lastActivityAt = Date.now();
-  // Blackjack: resetear su máquina de estados para que arranque limpio al volver alguien
+  // BlackJack: resetear su máquina de estados para que arranque limpio al volver alguien
   if (room.gameType === 'blackjack') {
     room.bjPhase = 'waiting';
     room.bjTurnUserId = undefined;

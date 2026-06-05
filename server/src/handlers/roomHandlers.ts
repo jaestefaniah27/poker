@@ -29,7 +29,7 @@ export const roomHandlers = (socket: Socket) => {
     const dbUser = await authUser(token);
     if (!dbUser) return;
 
-    // Blackjack: buy-in elegido por el jugador (saldo solo indicativo, puede quedar negativo).
+    // BlackJack: buy-in elegido por el jugador (saldo solo indicativo, puede quedar negativo).
     // Poker: buy-in fijo de la mesa.
     const isBJ = room.gameType === 'blackjack';
     const reqBuyIn = Math.floor(Number(buyInAmount));
@@ -77,7 +77,7 @@ export const roomHandlers = (socket: Socket) => {
     broadcastRoom(roomId);
     io.emit('roomsUpdated', getRooms());
 
-    // Blackjack: si la sala está parada, arrancar primera ronda
+    // BlackJack: si la sala está parada, arrancar primera ronda
     const room3 = getRoom(roomId);
     if (room3?.gameType === 'blackjack') {
       maybeStartBlackjack(roomId);

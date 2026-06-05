@@ -29,7 +29,7 @@ export interface Player {
   sessionMaxChips?: number; // Pico de fichas durante la sesión
   sessionStartedAt?: number; // Timestamp del primer buy-in de la sesión
   offlineSince?: number; // Timestamp en que pasó a offline (para expulsión automática)
-  // --- Blackjack ---
+  // --- BlackJack ---
   bet?: number; // Apuesta de la mano actual de blackjack
   bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack';
   bjDoubled?: boolean;
@@ -77,7 +77,7 @@ export interface Room {
   startingBigBlind?: number;
   tournamentEnded?: boolean;       // true cuando un solo jugador conserva fichas
   bustCounter?: number;            // contador interno para asignar bustedSeq
-  // --- Blackjack ---
+  // --- BlackJack ---
   gameType?: GameType;             // 'poker' (default) | 'blackjack'
   bjPhase?: BlackjackPhase;        // Fase específica blackjack (paralela a phase)
   dealerCards?: Card[];            // Mano del dealer (primera carta hidden hasta dealerAction)
