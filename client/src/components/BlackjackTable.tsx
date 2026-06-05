@@ -252,10 +252,7 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
   const cardH = big ? 108 : 72;
   const cls = big ? 'w-[72px] h-[108px]' : 'w-[50px] h-[72px]';
   const n = cards.length;
-  // 2 cards: no overlap, comfortable gap. 3+: progressive overlap so total fits.
-  const gap = n <= 2 ? 6 : 4;
-  const overlap = n <= 2 ? 0 : Math.min(cardW * 0.4, (cardW + gap) - (cardW + gap) * 0.65);
-  const step = cardW + gap - overlap;
+  const step = n <= 1 ? cardW : Math.round(cardW * 0.62);
   const containerW = cardW + step * (n - 1);
   return (
     <div className="relative" style={{ width: Math.max(cardW, containerW), height: cardH }}>
@@ -309,6 +306,24 @@ const ResultBadge = ({ result, big = false }: { result?: string; big?: boolean }
     >
       {m.txt}
     </motion.div>
+  );
+};
+
+// Mano compacta para oponentes: cartas pequeñas muy superpuestas (estilo escritorio).
+const MiniHand = ({ cards }: { cards: Card[] }) => {
+  const n = cards.length;
+  const cw = 32, ch = 44, step = 16;
+  return (
+    <div className="relative" style={{ width: cw + step * Math.max(0, n - 1), height: ch }}>
+      {cards.map((c, i) => {
+        const hidden = (c.rank as unknown as string) === '?';
+        return (
+          <div key={i} className="absolute" style={{ left: i * step, top: 0, zIndex: i }}>
+            <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} compact className="w-8 h-11" />
+          </div>
+        );
+      })}
+    </div>
   );
 };
 
@@ -494,13 +509,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         </div>
       </div>
 
-      {/* ===== Zona media flexible: absorbe/recorta por el centro, nunca empuja la barra inferior ===== */}
+      {/* ===== Columna central: SLOTS DE ALTURA FIJA. Nada cambia de tamaño entre fases → nada salta. ===== */}
       <div className="relative z-10 flex-1 min-h-0 flex flex-col overflow-hidden">
 
-      {/* ===== Top: Dealer ===== */}
-      <div ref={dealerRef} className="relative flex flex-col items-center pt-1 z-10 shrink-0" style={{ minHeight: 138 }}>
+      {/* Dealer (slot fijo) */}
+      <div ref={dealerRef} className="relative flex flex-col items-center pt-1 z-10 shrink-0" style={{ height: 130 }}>
         <div className="text-[9px] uppercase tracking-[0.4em] text-amber-200/70 font-bold mb-1">Dealer</div>
-        <div className="relative flex items-center justify-center gap-2" style={{ minHeight: 118 }}>
+        <div className="relative flex items-center justify-center gap-2" style={{ height: 110 }}>
           {dealer.cards.length === 0 ? (
             <div className="w-[72px] h-[108px] rounded-xl border-2 border-dashed border-white/12" />
           ) : (
@@ -514,12 +529,12 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         </div>
       </div>
 
-      {/* Opponents — compact cards + total + bet + status. Scrolls horizontally. */}
-      <div className="relative px-2 z-10 shrink-0" style={{ minHeight: opponents.length > 0 ? 116 : 0 }}>
-        {opponents.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1">
+      {/* ===== Oponentes: entre dealer y mis cartas ===== */}
+      {opponents.length > 0 && (
+        <div className="relative z-10 shrink-0 w-full flex justify-center py-1">
+          <div className="flex gap-1.5 overflow-x-auto scrollbar-hide px-2 items-start">
             {opponents.map((p: Player) => {
-              const isTurn = phase === 'playerAction' && p.bjStatus === 'playing'; // sigue decidiendo
+              const isTurn = phase === 'playerAction' && p.bjStatus === 'playing';
               const t = handTotalDisplay(p.cards || []);
               const isBust = p.bjStatus === 'bust' || t.bust;
               const result = phase === 'resolve' ? p.bjResult : undefined;
@@ -527,16 +542,15 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               return (
                 <motion.div
                   key={p.userId}
-                  animate={isTurn ? { boxShadow: ['0 0 0 0 rgba(251,191,36,0)', '0 0 22px rgba(251,191,36,0.55)', '0 0 0 0 rgba(251,191,36,0)'] } : {}}
+                  animate={isTurn ? { boxShadow: ['0 0 0 0 rgba(251,191,36,0)', '0 0 16px rgba(251,191,36,0.5)', '0 0 0 0 rgba(251,191,36,0)'] } : {}}
                   transition={{ duration: 1.5, repeat: isTurn ? Infinity : 0 }}
-                  className={`shrink-0 flex flex-col gap-1 px-1.5 pt-1 pb-1.5 rounded-xl border backdrop-blur ${isTurn ? 'bg-amber-400/15 border-amber-300/70' : 'bg-black/40 border-white/10'}`}
-                  style={{ opacity, width: 104 }}
+                  className={`shrink-0 flex flex-col items-center gap-0.5 px-1.5 pt-1 pb-1 rounded-xl border backdrop-blur ${isTurn ? 'bg-amber-400/20 border-amber-300/70' : 'bg-black/45 border-white/10'}`}
+                  style={{ opacity, minWidth: 88 }}
                 >
-                  {/* header: avatar + name + total pill */}
-                  <div className="flex items-center gap-1">
-                    <Avatar seed={p.avatar || p.userId} size={20} />
+                  <div className="flex items-center gap-1 self-stretch">
+                    <Avatar seed={p.avatar || p.userId} size={16} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-bold truncate leading-tight">{p.name}</div>
+                      <div className="text-[9px] font-bold truncate leading-tight">{p.name}</div>
                       <div className="text-[8px] text-white/50 font-mono leading-none">{fmtChips(p.chips)}</div>
                     </div>
                     {(p.cards?.length || 0) > 0 && (
@@ -544,27 +558,23 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                         accent={p.bjStatus === 'blackjack' ? 'amber' : 'sky'} size="xs" />
                     )}
                   </div>
-                  {/* cards row (scaled down) */}
-                  <div className="flex justify-center" style={{ height: 44 }}>
+                  <div className="flex justify-center items-center" style={{ height: 44 }}>
                     {(p.cards?.length || 0) > 0 ? (
-                      <div style={{ transform: 'scale(0.62)', transformOrigin: 'top center' }}>
-                        <CardFan cards={p.cards || []} />
-                      </div>
+                      <MiniHand cards={p.cards || []} />
                     ) : (
-                      <div className="text-[9px] text-white/35 uppercase tracking-wider self-center">
+                      <div className="text-[9px] text-white/35 uppercase tracking-wider">
                         {(p.bet || 0) > 0 ? '· apostado ·' : '· esperando ·'}
                       </div>
                     )}
                   </div>
-                  {/* bottom: bet + result + delta */}
-                  <div className="flex items-center gap-1 justify-center min-h-[14px]">
+                  <div className="flex items-center gap-1 justify-center min-h-[12px]">
                     {(p.bet || 0) > 0 && !result && (
-                      <span className="text-[9px] font-bold text-yellow-200 bg-yellow-400/10 border border-yellow-300/30 px-1.5 rounded-full leading-tight">
+                      <span className="text-[8px] font-bold text-yellow-200 bg-yellow-400/10 border border-yellow-300/30 px-1.5 rounded-full leading-tight">
                         {fmtChips(p.bet || 0)}{p.bjDoubled ? '×2' : ''}
                       </span>
                     )}
                     {result && (
-                      <span className={`text-[9px] font-extrabold px-1.5 rounded-full leading-tight ${
+                      <span className={`text-[8px] font-extrabold px-1.5 rounded-full leading-tight ${
                         result === 'blackjack' ? 'bg-amber-300 text-amber-950' :
                         result === 'win' ? 'bg-emerald-400 text-emerald-950' :
                         result === 'push' ? 'bg-sky-300 text-sky-950' : 'bg-rose-500 text-white'
@@ -573,7 +583,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                       </span>
                     )}
                     {p.bjDelta != null && p.bjDelta !== 0 && phase === 'resolve' && (
-                      <span className={`text-[9px] font-mono font-bold ${p.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                      <span className={`text-[8px] font-mono font-bold ${p.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
                         {p.bjDelta > 0 ? '+' : ''}{fmtChips(p.bjDelta)}
                       </span>
                     )}
@@ -582,34 +592,31 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               );
             })}
           </div>
-        )}
-      </div>
-
-      {/* Flex spacer — empuja el área del jugador hacia abajo (felt limpio) */}
-      <div className="flex-1 min-h-0" />
-
-      {/* ===== Player cards (above circle). Colapsa cuando no hay cartas (no malgasta espacio) ===== */}
-      {myPlayer && (myPlayer.cards?.length || 0) > 0 && (
-        <div className="relative z-10 px-4 shrink-0" style={{ minHeight: 112 }}>
-          <div className="flex items-center justify-center gap-2" style={{ minHeight: 108 }}>
-            <CardFan cards={myPlayer.cards || []} big />
-            {myTotals && (
-              <div className="self-start mt-1">
-                <TotalPill
-                  total={myTotals.total}
-                  soft={myTotals.soft}
-                  bust={myTotals.bust}
-                  hasHidden={false}
-                  accent={myPlayer.bjStatus === 'blackjack' ? 'amber' : 'sky'}
-                />
-              </div>
-            )}
-          </div>
         </div>
       )}
 
-      {/* Phase status — between cards and circle, hidden during resolve (banner takes over) */}
-      <div className="relative z-10 flex justify-center pointer-events-none shrink-0" style={{ minHeight: 14 }}>
+      {/* Spacer constante (todos los slots son fijos → este reparto es igual en toda fase) */}
+      <div className="flex-1 min-h-0" />
+
+      {/* Cartas del jugador (slot fijo SIEMPRE reservado: placeholder cuando no hay cartas) */}
+      <div className="relative z-10 px-4 shrink-0 flex items-center justify-center gap-2" style={{ height: 110 }}>
+        {myPlayer && (myPlayer.cards?.length || 0) > 0 ? (
+          <>
+            <CardFan cards={myPlayer.cards || []} big />
+            {myTotals && (
+              <div className="self-start mt-1">
+                <TotalPill total={myTotals.total} soft={myTotals.soft} bust={myTotals.bust} hasHidden={false}
+                  accent={myPlayer.bjStatus === 'blackjack' ? 'amber' : 'sky'} />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="w-[72px] h-[108px] rounded-xl border-2 border-dashed border-white/10" />
+        )}
+      </div>
+
+      {/* Estado (slot fijo) */}
+      <div className="relative z-10 flex justify-center items-center pointer-events-none shrink-0" style={{ height: 16 }}>
         {phase === 'waiting' && <div className="text-[10px] text-white/40 uppercase tracking-widest">Esperando</div>}
         {phase === 'betting' && (
           <div className="text-[10px] text-amber-200/80 uppercase tracking-widest font-bold">
@@ -623,15 +630,14 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           </div>
         )}
         {phase === 'dealerAction' && <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">Dealer juega</div>}
+        {phase === 'resolve' && <div className="text-[10px] text-emerald-200/70 uppercase tracking-widest font-bold">Resultado</div>}
       </div>
 
-      {/* ===== Betting Circle (in front of player seat) ===== */}
-      <div className="relative flex flex-col items-center justify-center z-10 pb-2 pt-1 shrink-0" style={{ minHeight: 104 }}>
-
-        {/* THE betting circle — always present, focal point */}
+      {/* Círculo de apuesta (slot fijo: círculo + línea de importe SIEMPRE reservada → no salta al apostar) */}
+      <div className="relative flex flex-col items-center z-10 shrink-0 pb-2" style={{ height: 120 }}>
         <motion.div
           ref={circleRef}
-          className="relative rounded-full flex items-center justify-center"
+          className="relative rounded-full flex items-center justify-center shrink-0"
           style={{
             width: 100,
             height: 100,
@@ -642,39 +648,36 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
           transition={{ duration: 1.4, repeat: canBet && pendingTotal > 0 ? Infinity : 0 }}
         >
-          {/* En 'resolve' las fichas salen volando (capa de vuelo), el círculo queda vacío */}
           {circleChips.length > 0 && phase !== 'resolve' ? (
-            <ChipStack chips={circleChips} size={36} />
+            <ChipStack chips={circleChips} size={34} />
           ) : (
             <span className="text-[9px] text-white/30 uppercase tracking-[0.25em] font-bold">Apuesta</span>
           )}
+          {/* Banner de resultado sobre el círculo */}
+          {phase === 'resolve' && myPlayer?.bjResult && (
+            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none" style={{ top: -16 }}>
+              <ResultBadge result={myPlayer.bjResult} big />
+            </div>
+          )}
         </motion.div>
-        {circleAmount > 0 && phase !== 'resolve' && (
-          <div className="mt-1 text-yellow-200 font-mono font-bold text-sm">
-            {fmtChips(circleAmount)}{myPlayer?.bjDoubled ? ' ×2' : ''}
-          </div>
-        )}
-        {/* Delta during resolve — replaces bet amount text */}
-        {phase === 'resolve' && myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className={`mt-1 font-mono font-extrabold text-base ${myPlayer.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}
-            style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}
-          >
-            {myPlayer.bjDelta > 0 ? '+' : ''}{fmtChips(myPlayer.bjDelta)}
-          </motion.div>
-        )}
-        {/* Result banner — floats ABOVE circle */}
-        {phase === 'resolve' && myPlayer?.bjResult && (
-          <div className="absolute left-0 right-0 flex flex-col items-center pointer-events-none" style={{ top: -14 }}>
-            <ResultBadge result={myPlayer.bjResult} big />
-          </div>
-        )}
+        {/* Línea de importe: altura fija reservada siempre (el círculo nunca se mueve) */}
+        <div className="h-6 flex items-center justify-center mt-1">
+          {phase === 'resolve' ? (
+            myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0 ? (
+              <span className={`font-mono font-extrabold text-base ${myPlayer.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}
+                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                {myPlayer.bjDelta > 0 ? '+' : ''}{fmtChips(myPlayer.bjDelta)}
+              </span>
+            ) : null
+          ) : circleAmount > 0 ? (
+            <span className="text-yellow-200 font-mono font-bold text-sm">
+              {fmtChips(circleAmount)}{myPlayer?.bjDoubled ? ' ×2' : ''}
+            </span>
+          ) : null}
+        </div>
       </div>
 
-      </div>{/* fin zona media flexible */}
+      </div>{/* fin columna central */}
 
       {/* ===== Bottom bar: name + chips + actions ===== */}
       {/* shrink-0 + safe-area inferior: los botones nunca quedan bajo el home indicator / barra del navegador */}
@@ -705,110 +708,76 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           </div>
         </div>
 
-        {/* Action area — altura CONSTANTE (cabe el rail de apuestas) para que tu nombre/fichas
-            no salten entre fases. En fases sin rail los botones se centran en este espacio. */}
-        <div style={{ minHeight: 132 }} className="flex flex-col justify-center">
-          {/* Sin fichas → recompra (repite tu último buy-in). Prioritario sobre el resto. */}
+        {/* Action area — altura CONSTANTE (no salta). Los controles RELLENAN el espacio
+            (botones más grandes) para no desperdiciar el fondo. */}
+        <div style={{ height: 132 }} className="flex flex-col">
+          {/* Sin fichas → recompra (prioritario). */}
           {canRebuy && (
-            <button
-              onClick={rebuy}
-              className="w-full bg-gradient-to-b from-rose-400 to-rose-600 text-white font-extrabold py-3.5 rounded-2xl tracking-wider shadow-lg active:scale-95"
-            >
+            <button onClick={rebuy}
+              className="flex-1 w-full bg-gradient-to-b from-rose-400 to-rose-600 text-white font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95">
               RECOMPRAR {fmtChips(myPlayer?.lastBuyIn || 1000)}
             </button>
           )}
           {!canRebuy && phase === 'waiting' && !myPlayer?.isSpectating && myChips > 0 && (
-            <button
-              onClick={startRound}
-              className="w-full bg-gradient-to-b from-sky-400 to-sky-600 text-white font-extrabold py-3.5 rounded-2xl tracking-wider shadow-lg active:scale-95"
-            >
+            <button onClick={startRound}
+              className="flex-1 w-full bg-gradient-to-b from-sky-400 to-sky-600 text-white font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95">
               EMPEZAR
             </button>
           )}
 
-          {phase === 'betting' && canBet && (
-            <div className="flex flex-col gap-2">
-            <ChipRail
-              page={chipPage}
-              setPage={setChipPage}
-              onAdd={addChip}
-              maxBet={maxBet}
-              pendingTotal={pendingTotal}
-              canBet={!!canBet}
-            />
-            <div className="grid grid-cols-4 gap-1.5">
-              <button
-                onClick={clearBet}
-                disabled={pendingTotal === 0}
-                className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95 disabled:opacity-30"
-              >
-                BORRAR
-              </button>
-              <button
-                onClick={allInBet}
-                className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95"
-              >
-                MAX
-              </button>
-              {lastBet > 0 && lastBet <= maxBet ? (
-                <button
-                  onClick={() => setPendingChips(chipsFromAmount(lastBet))}
-                  className="py-3 rounded-2xl bg-yellow-400/20 border border-yellow-300/40 text-[11px] font-bold text-yellow-100 active:scale-95"
-                >
-                  REBET<br/><span className="text-[9px] opacity-80">{fmtChips(lastBet)}</span>
-                </button>
-              ) : (
-                <button
-                  onClick={halfBet}
-                  className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95"
-                >
-                  ½
-                </button>
-              )}
-              <button
-                onClick={placeBet}
-                disabled={pendingTotal < minBet}
-                className="py-3 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 text-white font-extrabold text-[12px] tracking-wider shadow-lg active:scale-95 disabled:active:scale-100"
-              >
-                REPARTIR
-              </button>
-            </div>
+          {!canRebuy && phase === 'betting' && canBet && (
+            <div className="flex-1 flex flex-col gap-2 justify-center">
+              <ChipRail page={chipPage} setPage={setChipPage} onAdd={addChip} maxBet={maxBet} pendingTotal={pendingTotal} canBet={!!canBet} />
+              <div className="grid grid-cols-4 gap-1.5">
+                <button onClick={clearBet} disabled={pendingTotal === 0}
+                  className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95 disabled:opacity-30">BORRAR</button>
+                <button onClick={allInBet}
+                  className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">MAX</button>
+                {lastBet > 0 && lastBet <= maxBet ? (
+                  <button onClick={() => setPendingChips(chipsFromAmount(lastBet))}
+                    className="py-3 rounded-2xl bg-yellow-400/20 border border-yellow-300/40 text-[11px] font-bold text-yellow-100 active:scale-95 leading-tight">
+                    REBET<br/><span className="text-[9px] opacity-80">{fmtChips(lastBet)}</span></button>
+                ) : (
+                  <button onClick={halfBet}
+                    className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">½</button>
+                )}
+                <button onClick={placeBet} disabled={pendingTotal < minBet}
+                  className="py-3 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 text-white font-extrabold text-[12px] tracking-wider shadow-lg active:scale-95 disabled:active:scale-100">REPARTIR</button>
+              </div>
             </div>
           )}
-          {phase === 'betting' && myBet > 0 && (
-            <div className="text-center text-[11px] text-white/50 pb-3">
+          {!canRebuy && phase === 'betting' && myBet > 0 && (
+            <div className="flex-1 flex items-center justify-center text-[11px] text-white/50">
               Apostado · esperando al resto{bettingLeft != null ? ` · ${bettingLeft}s` : ''}
             </div>
           )}
-          {phase === 'betting' && myPlayer?.isSpectating && (
-            <div className="text-center text-[11px] text-white/50 pb-3">Te unes en la próxima ronda</div>
+          {!canRebuy && phase === 'betting' && myPlayer?.isSpectating && (
+            <div className="flex-1 flex items-center justify-center text-[11px] text-white/50">Te unes en la próxima ronda</div>
           )}
 
           {phase === 'playerAction' && canAct && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex-1 grid grid-cols-3 gap-2 items-stretch">
               <ActionBtn label="CARTA" onClick={() => sendAction('Hit')} from="#34d399" to="#059669" />
               <ActionBtn label="PLANTAR" onClick={() => sendAction('Stand')} from="#f87171" to="#b91c1c" />
               <ActionBtn label="DOBLAR" onClick={() => sendAction('Double')} disabled={!canDouble} from="#fbbf24" to="#b45309" />
             </div>
           )}
-          {phase === 'playerAction' && !canAct && myBet > 0 && (
-            <div className="text-center text-[11px] text-white/40 pb-3">
+          {phase === 'playerAction' && !canAct && (
+            <div className="flex-1 flex items-center justify-center text-[11px] text-white/40">
               {myPlayer?.bjStatus === 'bust' ? 'Te pasaste · esperando al dealer' : 'Plantado · esperando a los demás'}
             </div>
           )}
           {phase === 'dealerAction' && (
-            <div className="text-center text-[11px] text-amber-200/80 pb-3 font-semibold tracking-wide">El dealer juega...</div>
+            <div className="flex-1 flex items-center justify-center text-[11px] text-amber-200/80 font-semibold tracking-wide">El dealer juega...</div>
           )}
           {phase === 'resolve' && (
-            <button
-              onClick={continueRound}
-              className="w-full bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 font-extrabold py-3.5 rounded-2xl tracking-wider shadow-lg active:scale-95"
-            >
+            <button onClick={continueRound}
+              className="flex-1 w-full bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95">
               CONTINUAR
             </button>
           )}
           {phase === 'dealing' && (
-            <div className="text-center text-[11px] text-white/50 pb-3">Repartiendo...</div>
+            <div className="flex-1 flex items-center justify-center text-[11px] text-white/50">Repartiendo...</div>
           )}
         </div>
       </div>
@@ -838,7 +807,7 @@ const ActionBtn = ({ label, onClick, disabled, from, to }: { label: string; onCl
   <button
     onClick={onClick}
     disabled={disabled}
-    className="py-3.5 rounded-2xl font-extrabold text-white shadow-lg active:scale-95 disabled:opacity-35 disabled:active:scale-100 text-[13px] tracking-wider"
+    className="h-full min-h-[52px] flex items-center justify-center rounded-2xl font-extrabold text-white shadow-lg active:scale-95 disabled:opacity-35 disabled:active:scale-100 text-[13px] tracking-wider"
     style={{ background: `linear-gradient(180deg, ${from}, ${to})` }}
   >
     {label}
