@@ -75,6 +75,18 @@ const MIGRATIONS = [
     name: '009_hourly_claim',
     sql: 'ALTER TABLE users ADD COLUMN last_hourly_claim INTEGER',
     ignoreError: 'duplicate column'
+  },
+  {
+    name: '010_jackpot_history',
+    sql: `CREATE TABLE IF NOT EXISTS jackpot_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      bet INTEGER NOT NULL,
+      symbols TEXT NOT NULL,
+      multiplier REAL NOT NULL,
+      win_amount INTEGER NOT NULL,
+      played_at INTEGER NOT NULL
+    )`
   }
 ];
 
@@ -241,6 +253,13 @@ export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error
   await dbRun('UPDATE users SET balance = balance + ?, last_hourly_claim = ? WHERE id = ?', [HOURLY_AMOUNT, now, id]);
   const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   return { ok: true, newBalance: updated?.balance ?? 0, nextClaimAt: now + HOURLY_COOLDOWN_MS };
+};
+
+export const recordJackpotSpin = async (userId: string, bet: number, symbols: string[], multiplier: number, winAmount: number): Promise<void> => {
+  await dbRun(
+    'INSERT INTO jackpot_history (user_id, bet, symbols, multiplier, win_amount, played_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [userId, bet, JSON.stringify(symbols), multiplier, winAmount, Date.now()]
+  );
 };
 
 // --- Persistencia de Salas (Reconexión Robusta) ---

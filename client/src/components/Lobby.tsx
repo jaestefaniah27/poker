@@ -3,6 +3,8 @@ import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import MatchHistoryModal from './MatchHistoryModal';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
+import JackpotModal from './JackpotModal';
+import { AnimatePresence } from 'framer-motion';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
 import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
@@ -26,6 +28,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showJackpot, setShowJackpot] = useState(false);
 
   // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
@@ -134,6 +137,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
       {showHistory && (
         <MatchHistoryModal token={token} onClose={() => setShowHistory(false)} />
       )}
+      <AnimatePresence>
+        {showJackpot && (
+          <JackpotModal user={user} token={token} onClose={() => setShowJackpot(false)} onUpdateUser={onUpdateUser} />
+        )}
+      </AnimatePresence>
 
       <div className="w-full max-w-md">
         {/* Header */}
@@ -196,6 +204,21 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 <span className="text-xs font-extrabold tracking-wider">DIETAS</span>
                 <span className="text-xs font-bold text-emerald-400">+1.000</span>
                 <span className="text-[10px] text-gray-400">{hourlyAvailable ? 'Cada 30 min' : `${hourlyMM}:${hourlySS}`}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ---- Mini-juegos ---- */}
+          <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
+            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Mini-juegos</h2>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowJackpot(true)}
+                className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border border-amber-900/40 hover:border-amber-600/60 bg-amber-500/8 active:scale-95 transition-all"
+              >
+                <span className="text-2xl">🎰</span>
+                <span className="text-xs font-bold text-amber-400">Jackpot</span>
+                <span className="text-[10px] text-gray-500">Tragaperras</span>
               </button>
             </div>
           </div>
