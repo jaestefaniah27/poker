@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import MatchHistoryModal from './MatchHistoryModal';
-import PrivacyPolicyModal from './PrivacyPolicyModal';
 import JackpotModal from './JackpotModal';
 import { AnimatePresence } from 'framer-motion';
 import Slider from './Slider';
@@ -27,7 +26,6 @@ interface LeaderboardEntry {
 const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: LobbyProps) => {
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
   const [showJackpot, setShowJackpot] = useState(false);
 
   // Create section (poker only)
@@ -450,15 +448,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
         <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">
           Creado por Jorge Alejandro Estefanía Hidalgo
         </p>
-        <button 
-          onClick={() => setShowPrivacy(true)} 
-          className="text-xs text-gray-500 hover:text-white transition-colors underline decoration-gray-700 underline-offset-4"
-        >
-          Política de Privacidad
-        </button>
       </div>
-
-      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   );
 };
