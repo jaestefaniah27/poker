@@ -79,7 +79,14 @@ export const authHandlers = (socket: Socket) => {
   socket.on('changeAvatar', async ({ token, avatar }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
-    const seed = sanitizeInput(String(avatar || '').trim().slice(0, 64)) || user.id;
+    const rawAvatar = String(avatar || '').trim();
+    let seed = user.id;
+    if (rawAvatar.startsWith('data:image/')) {
+      if (rawAvatar.length > 100000) { callback({ error: 'La imagen es demasiado grande' }); return; }
+      seed = rawAvatar;
+    } else {
+      seed = sanitizeInput(rawAvatar.slice(0, 64)) || user.id;
+    }
     await updateUserAvatar(user.id, seed);
     const updated = await getUser(user.id);
     callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });

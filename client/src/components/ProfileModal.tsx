@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { socket } from '../utils';
 
 interface ProfileModalProps {
@@ -59,6 +59,53 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
     });
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check file size limit (e.g., 5MB before compression to avoid browser crash)
+    if (file.size > 5 * 1024 * 1024) {
+      flash(false, 'La imagen debe ser menor de 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 150;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+          setAvatarSeed(dataUrl);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }} onClick={onClose}>
       <div
@@ -73,10 +120,16 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
         {/* Avatar */}
         <div className="flex flex-col items-center gap-3 mb-6">
           <div className="w-20 h-20 rounded-full overflow-hidden bg-surfaceLight flex items-center justify-center">
-            <img src={`https://api.dicebear.com/7.x/notionists/svg?seed=${avatarSeed}&backgroundColor=transparent`} alt="avatar" className="w-full h-full object-cover scale-125" />
+            <img 
+              src={avatarSeed.startsWith('data:image/') ? avatarSeed : `https://api.dicebear.com/7.x/notionists/svg?seed=${avatarSeed}&backgroundColor=transparent`} 
+              alt="avatar" 
+              className={`w-full h-full object-cover ${!avatarSeed.startsWith('data:image/') ? 'scale-125' : ''}`} 
+            />
           </div>
           <div className="flex gap-2">
             <button onClick={shuffleAvatar} className="bg-surfaceLight hover:bg-gray-700 text-gray-200 text-xs px-3 py-2 rounded-full transition-colors">🎲 Aleatorio</button>
+            <button onClick={() => fileInputRef.current?.click()} className="bg-surfaceLight hover:bg-gray-700 text-gray-200 text-xs px-3 py-2 rounded-full transition-colors">📷 Foto</button>
+            <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
             <button onClick={saveAvatar} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-full transition-colors">Guardar avatar</button>
           </div>
         </div>
