@@ -60,7 +60,7 @@ function weightedRandom(currentWeights: number[]): Sym {
   return SYMBOLS[0];
 }
 
-function getMultiplier(s: [Sym, Sym, Sym]): number {
+function getMultiplier(s: [Sym, Sym, Sym], isFreeSpin: boolean): number {
   const [a, b, c] = s;
   if (a === b && b === c) {
     if (a === 'ace') return 50;
@@ -68,11 +68,11 @@ function getMultiplier(s: [Sym, Sym, Sym]): number {
     if (a === 'chip') return 10;
     return 3;
   }
-  if (a === b || b === c || a === c) return 0;
+  if (a === b || b === c || a === c) return isFreeSpin ? 1.5 : 0;
   return 0;
 }
 
-export const spinJackpot = (playerName: string): { symbols: [string, string, string]; multiplier: number; state: JackpotState } => {
+export const spinJackpot = (playerName: string, isFreeSpin = false): { symbols: [string, string, string]; multiplier: number; state: JackpotState } => {
   globalSpins++;
   spinsSinceAce++;
   spinsSinceCrown++;
@@ -94,7 +94,7 @@ export const spinJackpot = (playerName: string): { symbols: [string, string, str
     weightedRandom(dynamicWeights)
   ];
 
-  const multiplier = getMultiplier(symbols);
+  const multiplier = getMultiplier(symbols, isFreeSpin);
 
   if (multiplier === 50) {
     spinsSinceAce = 0;

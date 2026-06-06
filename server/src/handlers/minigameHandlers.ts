@@ -64,7 +64,7 @@ export const minigameHandlers = (socket: Socket) => {
     const amount = hasFreeSpins ? dbUser.free_spin_value : Math.floor(Number(bet) || 0);
     if (amount <= 0) { callback({ error: 'Apuesta inválida' }); return; }
 
-    const { symbols, multiplier, state } = spinJackpot(dbUser.name);
+    const { symbols, multiplier, state } = spinJackpot(dbUser.name, hasFreeSpins);
     
     let delta = 0;
     const winAmount = Math.floor(amount * multiplier);

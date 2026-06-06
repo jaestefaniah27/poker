@@ -10,6 +10,7 @@ const MULTIPLIER_LABEL: Record<number, string> = {
   20: '¡CORONA! x20',
   10: '¡ESTRELLAS! x10',
   3:  '¡TRIPLE! x3',
+  1.5: 'PAR x1.5',
 };
 
 interface Props {
@@ -210,12 +211,13 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         {/* Tabla de premios */}
         <div className="mt-5 rounded-2xl bg-white/4 p-4 text-[11px] text-gray-500 space-y-1">
           <p className="text-gray-400 font-semibold mb-2 uppercase tracking-wider text-[10px]">Premios</p>
-          {[
+          {( [
             [['ace', 'ace', 'ace'], 'x50'],
             [['crown', 'crown', 'crown'], 'x20'],
             [['chip', 'chip', 'chip'], 'x10'],
             ['3 iguales', 'x3'],
-          ].map(([combo, pay]) => (
+            ...((user.freeSpinsLeft ?? 0) > 0 ? [['2 iguales', 'x1.5']] : [])
+          ] as [string | string[], string][] ).map(([combo, pay]) => (
             <div key={pay as string} className="flex justify-between items-center h-6">
               <span className="flex items-center gap-0.5">
                 {Array.isArray(combo) ? (
