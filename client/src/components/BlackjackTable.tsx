@@ -77,7 +77,7 @@ const pageForAmount = (amount: number): number => {
   if (amount <= 1000) return 0;
   if (amount <= 25000) return 1;
   if (amount <= 100000) return 2;
-  if (amount <= 250000) return 3;
+  if (amount <= 2000000) return 3;
   return 4;
 };
 
