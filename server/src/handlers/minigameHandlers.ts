@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
 
 export const minigameHandlers = (socket: Socket) => {
@@ -22,23 +22,78 @@ export const minigameHandlers = (socket: Socket) => {
     callback({ ok: true, newBalance: result.newBalance, nextClaimAt: result.nextClaimAt, user: updated ? toPublicUser(updated) : undefined });
   });
 
+  socket.on('claimFreeSpinsWheel', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    const dbUser = await getUser(user.id);
+    if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+    const now = Date.now();
+    const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+    const last = dbUser.last_free_spins_claim ?? 0;
+    const nextAt = last + COOLDOWN_MS;
+    if (now < nextAt) { callback({ error: 'Demasiado pronto', nextClaimAt: nextAt }); return; }
+
+    // Weighted random selection of spin value
+    const options = [100, 250, 500, 1000, 2500, 5000];
+    const weights = [40, 30, 15, 10, 4, 1];
+    let totalWeight = weights.reduce((a, b) => a + b, 0);
+    let r = Math.random() * totalWeight;
+    let chosenIndex = 0;
+    for (let i = 0; i < options.length; i++) {
+      r -= weights[i];
+      if (r <= 0) {
+        chosenIndex = i;
+        break;
+      }
+    }
+    const spinValue = options[chosenIndex];
+    await claimFreeSpins(dbUser.id, spinValue);
+    const updated = await getUser(dbUser.id);
+    callback({ ok: true, chosenIndex, chosenValue: spinValue, nextClaimAt: now + COOLDOWN_MS, user: updated ? toPublicUser(updated) : undefined });
+  });
+
   socket.on('playJackpot', async ({ token, bet }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
-    const amount = Math.floor(Number(bet) || 0);
+    
+    const dbUser = await getUser(user.id);
+    if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+
+    const hasFreeSpins = (dbUser.free_spins_left ?? 0) > 0;
+    const amount = hasFreeSpins ? dbUser.free_spin_value : Math.floor(Number(bet) || 0);
     if (amount <= 0) { callback({ error: 'Apuesta inválida' }); return; }
 
-    const { symbols, multiplier, state } = spinJackpot(user.name);
+    const { symbols, multiplier, state } = spinJackpot(dbUser.name);
+    
+    let delta = 0;
     const winAmount = Math.floor(amount * multiplier);
-    const delta = winAmount - amount;
-    const newBalance = await applyBalanceDelta(user.id, delta);
-    await recordJackpotSpin(user.id, amount, symbols, multiplier, winAmount);
+    
+    if (hasFreeSpins) {
+      // Free spin does not subtract the bet amount from balance!
+      delta = winAmount;
+      await useFreeSpin(dbUser.id);
+    } else {
+      delta = winAmount - amount;
+    }
+
+    const newBalance = await applyBalanceDelta(dbUser.id, delta);
+    await recordJackpotSpin(dbUser.id, amount, symbols, multiplier, winAmount);
+
+    const updatedUser = await getUser(dbUser.id);
 
     if (io) {
       io.emit('jackpotStateUpdated', state);
     }
 
-    callback({ ok: true, symbols, multiplier, winAmount, newBalance, state });
+    callback({ 
+      ok: true, 
+      symbols, 
+      multiplier, 
+      winAmount, 
+      newBalance, 
+      state, 
+      user: updatedUser ? toPublicUser(updatedUser) : undefined 
+    });
   });
 
   socket.on('getJackpotState', (callback) => {

@@ -87,6 +87,21 @@ const MIGRATIONS = [
       win_amount INTEGER NOT NULL,
       played_at INTEGER NOT NULL
     )`
+  },
+  {
+    name: '011_free_spins',
+    sql: 'ALTER TABLE users ADD COLUMN free_spins_left INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '012_free_spins_val',
+    sql: 'ALTER TABLE users ADD COLUMN free_spin_value INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '013_free_spins_claim',
+    sql: 'ALTER TABLE users ADD COLUMN last_free_spins_claim INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
   }
 ];
 
@@ -155,6 +170,9 @@ export interface UserRow {
   avatar: string | null;
   last_daily_claim: string | null;
   last_hourly_claim: number | null;
+  free_spins_left: number;
+  free_spin_value: number;
+  last_free_spins_claim: number;
 }
 
 import { PublicUser } from '../../shared/types';
@@ -167,6 +185,9 @@ export const toPublicUser = (row: UserRow): PublicUser => ({
   hasPassword: !!row.password_hash,
   lastDailyClaim: row.last_daily_claim ?? null,
   lastHourlyClaim: row.last_hourly_claim ?? null,
+  freeSpinsLeft: row.free_spins_left ?? 0,
+  freeSpinValue: row.free_spin_value ?? 0,
+  lastFreeSpinsClaim: row.last_free_spins_claim ?? 0,
 });
 
 export const getAllUsersRanked = async (): Promise<UserRow[]> => {
@@ -329,3 +350,15 @@ export const getMatchHistoryForUser = async (userId: string, limit = 30): Promis
     [userId, limit]
   );
 };
+
+export const claimFreeSpins = async (id: string, value: number): Promise<void> => {
+  await dbRun(
+    'UPDATE users SET free_spins_left = 10, free_spin_value = ?, last_free_spins_claim = ? WHERE id = ?',
+    [value, Date.now(), id]
+  );
+};
+
+export const useFreeSpin = async (id: string): Promise<void> => {
+  await dbRun('UPDATE users SET free_spins_left = MAX(0, free_spins_left - 1) WHERE id = ?', [id]);
+};
+

@@ -8,9 +8,21 @@ import { AnimatePresence } from 'framer-motion';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
 import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
+import { WheelModal } from './WheelModal';
 
 interface LobbyProps {
-  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean; lastDailyClaim: string | null; lastHourlyClaim: number | null };
+  user: { 
+    id: string; 
+    name: string; 
+    balance: number; 
+    avatar: string; 
+    hasPassword: boolean; 
+    lastDailyClaim: string | null; 
+    lastHourlyClaim: number | null;
+    freeSpinsLeft?: number;
+    freeSpinValue?: number;
+    lastFreeSpinsClaim?: number | null;
+  };
   token: string | null;
   rooms: any[];
   onJoinRoom: (roomId: string, buyInAmount?: number) => void;
@@ -50,6 +62,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const [now, setNow] = useState(Date.now());
   const [claimingDaily, setClaimingDaily] = useState(false);
   const [claimingHourly, setClaimingHourly] = useState(false);
+  const [showWheelModal, setShowWheelModal] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -63,6 +76,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const hourlySecs = hourlyAvailable ? 0 : Math.ceil((hourlyNextAt - now) / 1000);
   const hourlyMM = String(Math.floor(hourlySecs / 60)).padStart(2, '0');
   const hourlySS = String(hourlySecs % 60).padStart(2, '0');
+
+  const freeSpinsNextAt = user.lastFreeSpinsClaim ? user.lastFreeSpinsClaim + 60 * 60 * 1000 : 0;
+  const freeSpinsAvailable = now >= freeSpinsNextAt;
+  const freeSpinsSecs = freeSpinsAvailable ? 0 : Math.ceil((freeSpinsNextAt - now) / 1000);
+  const freeSpinsMM = String(Math.floor(freeSpinsSecs / 60)).padStart(2, '0');
+  const freeSpinsSS = String(freeSpinsSecs % 60).padStart(2, '0');
 
   const handleClaimDaily = () => {
     if (!dailyAvailable || claimingDaily) return;
@@ -143,6 +162,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
 
   return (
     <div className="h-full w-full overflow-y-auto scrollbar-hide bg-background text-primary flex flex-col items-center font-sans" style={{ padding: 'max(1.5rem, env(safe-area-inset-top, 0px)) 1.5rem max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
+      {showWheelModal && (
+        <WheelModal user={user} token={token} onClose={() => setShowWheelModal(false)} onUpdateUser={onUpdateUser} />
+      )}
       {showProfile && (
         <ProfileModal user={user} token={token} onClose={() => setShowProfile(false)} onUpdate={onUpdateUser} />
       )}
@@ -193,29 +215,45 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
           {/* ---- MINISTERIO DE DERECHOS SOCIALES ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
             <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Ministerio de Derechos Sociales</h2>
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               {/* Diario */}
               <button
                 onClick={handleClaimDaily}
                 disabled={!dailyAvailable || claimingDaily}
-                className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
+                className="flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
                 style={{ borderColor: dailyAvailable ? '#f59e0b' : '#374151', background: dailyAvailable ? 'rgba(245,158,11,0.1)' : 'transparent' }}
               >
-                <span className="text-xs font-extrabold tracking-wider">PAGUITA</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-center">PAGUITA</span>
                 <span className="text-xs font-bold text-amber-400">+10.000</span>
-                <span className="text-[10px] text-gray-400">{dailyAvailable ? 'Bono diario' : 'Vuelve mañana'}</span>
+                <span className="text-[9px] text-gray-400 text-center">{dailyAvailable ? 'Bono diario' : 'Mañana'}</span>
               </button>
 
               {/* Cada 30 min */}
               <button
                 onClick={handleClaimHourly}
                 disabled={!hourlyAvailable || claimingHourly}
-                className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
+                className="flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
                 style={{ borderColor: hourlyAvailable ? '#34d399' : '#374151', background: hourlyAvailable ? 'rgba(52,211,153,0.1)' : 'transparent' }}
               >
-                <span className="text-xs font-extrabold tracking-wider">DIETAS</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-center">DIETAS</span>
                 <span className="text-xs font-bold text-emerald-400">+1.000</span>
-                <span className="text-[10px] text-gray-400">{hourlyAvailable ? 'Cada 30 min' : `${hourlyMM}:${hourlySS}`}</span>
+                <span className="text-[9px] text-gray-400 text-center">{hourlyAvailable ? '30 min' : `${hourlyMM}:${hourlySS}`}</span>
+              </button>
+
+              {/* Ruleta */}
+              <button
+                onClick={() => setShowWheelModal(true)}
+                disabled={!freeSpinsAvailable && !((user.freeSpinsLeft ?? 0) > 0)}
+                className="flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
+                style={{ borderColor: freeSpinsAvailable ? '#a855f7' : (user.freeSpinsLeft ?? 0) > 0 ? '#ec4899' : '#374151', background: freeSpinsAvailable ? 'rgba(168,85,247,0.1)' : (user.freeSpinsLeft ?? 0) > 0 ? 'rgba(236,72,153,0.1)' : 'transparent' }}
+              >
+                <span className="text-[10px] font-extrabold tracking-wider text-center">RULETA</span>
+                <span className={`text-xs font-bold ${(user.freeSpinsLeft ?? 0) > 0 ? 'text-pink-400' : 'text-purple-400'}`}>
+                  {(user.freeSpinsLeft ?? 0) > 0 ? `${user.freeSpinsLeft} Gs` : '10 Gs'}
+                </span>
+                <span className="text-[9px] text-gray-400 text-center">
+                  {(user.freeSpinsLeft ?? 0) > 0 ? `Valor: $${fmtChips(user.freeSpinValue || 0)}` : freeSpinsAvailable ? 'Girar' : `${freeSpinsMM}:${freeSpinsSS}`}
+                </span>
               </button>
             </div>
           </div>

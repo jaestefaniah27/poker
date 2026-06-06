@@ -115,6 +115,9 @@ export interface PublicUser {
   hasPassword: boolean;
   lastDailyClaim: string | null;  // "YYYY-MM-DD"
   lastHourlyClaim: number | null; // ms timestamp
+  freeSpinsLeft?: number;
+  freeSpinValue?: number;
+  lastFreeSpinsClaim?: number | null;
 }
 
 export const STAKE_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000];

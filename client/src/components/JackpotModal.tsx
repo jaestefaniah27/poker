@@ -13,7 +13,11 @@ const MULTIPLIER_LABEL: Record<number, string> = {
 };
 
 interface Props {
-  user: { balance: number };
+  user: { 
+    balance: number;
+    freeSpinsLeft?: number;
+    freeSpinValue?: number;
+  };
   token: string | null;
   onClose: () => void;
   onUpdateUser: (u: any) => void;
@@ -32,7 +36,8 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
     timersRef.current.forEach(clearTimeout);
   }, []);
 
-  const bet = STAKE_TIERS[betIndex];
+  const hasFreeSpins = (user.freeSpinsLeft ?? 0) > 0;
+  const bet = hasFreeSpins ? (user.freeSpinValue || 0) : STAKE_TIERS[betIndex];
 
   const handleSpin = () => {
     if (spinning) return;
@@ -75,7 +80,11 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
             const t2 = setTimeout(() => {
               setResult(res);
               setSpinning(false);
-              onUpdateUser({ ...user, balance: res.newBalance });
+              if (res.user) {
+                onUpdateUser(res.user);
+              } else {
+                onUpdateUser({ ...user, balance: res.newBalance });
+              }
               if (res.multiplier >= 5) vibrate([80, 40, 80, 40, 200]);
               else if (res.multiplier > 0) vibrate([60, 30, 60]);
             }, 250);
@@ -157,18 +166,24 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         {/* Selector de apuesta */}
         <div className="mb-5">
           <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
-          <div className="flex gap-1.5 flex-wrap justify-center">
-            {STAKE_TIERS.slice(0, 8).map((t, i) => (
-              <button
-                key={i}
-                onClick={() => setBetIndex(i)}
-                disabled={spinning}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${betIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}
-              >
-                {fmtChips(t)}
-              </button>
-            ))}
-          </div>
+          {hasFreeSpins ? (
+            <div className="bg-pink-950/20 border border-pink-500/20 rounded-xl py-2 px-3 text-center text-xs font-bold text-pink-400 animate-pulse">
+              🎰 Usando tirada gratis (Valor: ${fmtChips(user.freeSpinValue || 0)}) — Quedan {user.freeSpinsLeft}
+            </div>
+          ) : (
+            <div className="flex gap-1.5 flex-wrap justify-center">
+              {STAKE_TIERS.slice(0, 8).map((t, i) => (
+                <button
+                  key={i}
+                  onClick={() => setBetIndex(i)}
+                  disabled={spinning}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${betIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}
+                >
+                  {fmtChips(t)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Botón girar */}
@@ -176,9 +191,20 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
           onClick={handleSpin}
           disabled={spinning}
           className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-50 disabled:active:scale-100"
-          style={{ background: spinning ? '#333' : 'linear-gradient(180deg, #f59e0b, #b45309)', color: spinning ? '#888' : '#000' }}
+          style={{ 
+            background: spinning 
+              ? '#333' 
+              : hasFreeSpins 
+                ? 'linear-gradient(180deg, #ec4899, #be185d)' 
+                : 'linear-gradient(180deg, #f59e0b, #b45309)', 
+            color: spinning ? '#888' : '#000' 
+          }}
         >
-          {spinning ? 'Girando…' : `GIRAR — ${fmtChips(bet)}`}
+          {spinning 
+            ? 'Girando…' 
+            : hasFreeSpins 
+              ? `GIRAR — ¡GRATIS! (${user.freeSpinsLeft})` 
+              : `GIRAR — ${fmtChips(bet)}`}
         </button>
 
         {/* Tabla de premios */}
@@ -206,3 +232,4 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
     </div>
   );
 }
+
