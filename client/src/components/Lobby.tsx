@@ -101,6 +101,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
     });
   };
 
+  const handleAdminAddBalance = () => {
+    socket.emit('adminAddBalance', { token }, (res: any) => {
+      if (res?.user) onUpdateUser(res.user);
+    });
+  };
+
   useEffect(() => {
     socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
       if (Array.isArray(data)) setLeaderboard(data);
@@ -151,9 +157,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
     }
   };
 
-  const confirmBuyIn = () => {
+  const confirmBuyIn = (overrideAmount?: number) => {
     if (!buyInRoom) return;
-    const amount = STAKE_TIERS[buyInTierIndex];
+    const amount = overrideAmount ?? STAKE_TIERS[buyInTierIndex];
     onJoinRoom(buyInRoom.id, amount);
     setBuyInRoom(null);
   };
@@ -256,6 +262,14 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 </span>
               </button>
             </div>
+            {user.name === 'Jorge' && (
+              <button
+                onClick={handleAdminAddBalance}
+                className="mt-3 w-full py-2 rounded-2xl text-xs font-bold text-red-400 border border-red-900/40 bg-red-500/8 active:scale-95 transition-all"
+              >
+                💸 +20M (Admin)
+              </button>
+            )}
           </div>
 
           {/* ---- Mini-juegos ---- */}
@@ -509,10 +523,15 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 Entras con estas fichas. Tu saldo es solo indicativo: puedes apostar lo que quieras y quedar en negativo. Al salir, tus fichas vuelven al saldo.
               </p>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-2">
                 <button onClick={() => setBuyInRoom(null)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
-                <button onClick={confirmBuyIn} className="flex-1 bg-sky-500 text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Entrar con {fmtChips(amount)}</button>
+                <button onClick={() => confirmBuyIn()} className="flex-1 bg-sky-500 text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Entrar con {fmtChips(amount)}</button>
               </div>
+              {user.balance > 0 && (
+                <button onClick={() => confirmBuyIn(user.balance)} className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform">
+                  💰 Todo mi saldo — {fmtChips(user.balance)}
+                </button>
+              )}
             </div>
           </div>
         );

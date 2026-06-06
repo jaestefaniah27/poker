@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser } from '../db';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser } from '../roomManager';
@@ -119,6 +119,14 @@ export const authHandlers = (socket: Socket) => {
         playedAt: r.played_at
       }))
     });
+  });
+
+  socket.on('adminAddBalance', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    const newBalance = await applyBalanceDelta(user.id, 20_000_000);
+    const updated = await getUser(user.id);
+    callback({ ok: true, newBalance, user: updated ? toPublicUser(updated) : undefined });
   });
 
   socket.on('adminDeleteUser', async ({ token, targetId }, callback) => {

@@ -50,10 +50,13 @@ const CHIP_DEFS: ChipDenom[] = [
   { v: 10000,  color: '#06b6d4', ring: '#155e63', label: '10k'  },
   { v: 25000,  color: '#84cc16', ring: '#3f6212', label: '25k'  },
   { v: 50000,  color: '#f97316', ring: '#7c2d12', label: '50k'  },
-  { v: 100000, color: '#18181b', ring: '#71717a', label: '100k', premium: 'carbon'  },
-  { v: 200000, color: '#c0c0c0', ring: '#6b7280', label: '200k', premium: 'silver'  },
-  { v: 250000, color: '#eab308', ring: '#92400e', label: '250k', premium: 'gold'    },
-  { v: 500000, color: '#e0f2fe', ring: '#93c5fd', label: '500k', premium: 'diamond' },
+  { v: 100000,  color: '#18181b', ring: '#71717a', label: '100k', premium: 'carbon'  },
+  { v: 200000,  color: '#3b82f6', ring: '#1e3a8a', label: '200k'                    },
+  { v: 250000,  color: '#ef4444', ring: '#7f1d1d', label: '250k'                    },
+  { v: 500000,  color: '#f8fafc', ring: '#94a3b8', label: '500k'                    },
+  { v: 1000000, color: '#fbbf24', ring: '#78350f', label: '1M',   premium: 'gold'    },
+  { v: 2000000, color: '#a78bfa', ring: '#3b0764', label: '2M',   premium: 'silver'  },
+  { v: 5000000, color: '#f43f5e', ring: '#881337', label: '5M',   premium: 'diamond' },
 ];
 
 const defByValue = (v: number): ChipDenom => CHIP_DEFS.find(d => d.v === v) || CHIP_DEFS[0];
@@ -64,6 +67,7 @@ const CHIP_PAGE_VALUES: number[][] = [
   [500, 1000, 2500, 5000, 10000],
   [5000, 10000, 25000, 50000, 100000],
   [100000, 200000, 250000, 500000],
+  [500000, 1000000, 2000000, 5000000],
 ];
 const CHIP_PAGES = CHIP_PAGE_VALUES.length;
 
@@ -73,7 +77,8 @@ const pageForAmount = (amount: number): number => {
   if (amount <= 1000) return 0;
   if (amount <= 25000) return 1;
   if (amount <= 100000) return 2;
-  return 3;
+  if (amount <= 500000) return 3;
+  return 4;
 };
 
 const isPlaque = (v: number) => v >= 1000;
@@ -89,8 +94,8 @@ const sizeForValue = (v: number): number => {
 
 const Chip = ({ d, size }: { d: ChipDenom; size?: number }) => {
   const naturalH = sizeForValue(d.v);
-  // Premium chips ignore small size overrides — always at least their natural size
-  const h = d.premium ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
+  // Large chips (100k+) always at their natural size regardless of premium
+  const h = (d.premium || d.v >= 100000) ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
   const plaque = isPlaque(d.v);
   const w = plaque ? Math.round(h * 1.28) : h;
   const radius = plaque ? Math.round(h * 0.13) : 9999;
@@ -258,8 +263,8 @@ const chipsFromAmount = (amount: number): ChipDenom[] => {
 
 // One vertical pile of same-shape chips.
 const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
-  // Premium chips ignore the size prop — use their natural size for layout
-  const actualH = (d: ChipDenom) => d.premium ? sizeForValue(d.v) : size;
+  // Large chips (100k+) always use their natural size regardless of premium
+  const actualH = (d: ChipDenom) => (d.premium || d.v >= 100000) ? sizeForValue(d.v) : size;
   const actualW = (d: ChipDenom) => { const h = actualH(d); return isPlaque(d.v) ? Math.round(h * 1.28) : h; };
   const pileW = Math.max(...items.map(d => actualW(d)));
   const pileH = Math.max(...items.map(d => actualH(d)));
@@ -280,16 +285,16 @@ const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
   );
 };
 
-// Betting circle stack: rounds / plaques / premium in SEPARATE piles (never mixed).
+// Betting circle stack: rounds / plaques / larges in SEPARATE piles (never mixed).
 const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: number }) => {
-  const rounds   = chips.filter(c => !c.premium && c.v < 1000);
-  const plaques  = chips.filter(c => !c.premium && c.v >= 1000);
-  const premiums = chips.filter(c => !!c.premium);
+  const rounds  = chips.filter(c => c.v < 1000);
+  const plaques = chips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000);
+  const larges  = chips.filter(c => c.premium || c.v >= 100000);
   return (
     <div className="flex items-end justify-center gap-1.5">
-      {rounds.length > 0   && <ChipPile items={rounds}   size={size} />}
-      {plaques.length > 0  && <ChipPile items={plaques}  size={size} />}
-      {premiums.length > 0 && <ChipPile items={premiums} size={size} />}
+      {rounds.length  > 0 && <ChipPile items={rounds}  size={size} />}
+      {plaques.length > 0 && <ChipPile items={plaques} size={size} />}
+      {larges.length  > 0 && <ChipPile items={larges}  size={size} />}
     </div>
   );
 };

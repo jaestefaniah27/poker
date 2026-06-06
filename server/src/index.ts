@@ -182,17 +182,49 @@ setInterval(() => {
 }, LOOP_CHECK).unref();
 
 // --- Shutdown graceful ---
-const shutdown = (signal: string) => {
-  console.log(`Recibido ${signal}, cerrando server...`);
+const SHUTDOWN_COUNTDOWN = 8; // segundos de aviso antes de cerrar
+let isShuttingDown = false;
+
+const gracefulShutdown = async (signal: string) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[${signal}] graceful shutdown en ${SHUTDOWN_COUNTDOWN}s...`);
+
+  // 1. Avisar a todos los clientes
+  io.emit('serverRestarting', { seconds: SHUTDOWN_COUNTDOWN });
+
+  // 2. Esperar a que vean el aviso
+  await new Promise(r => setTimeout(r, SHUTDOWN_COUNTDOWN * 1000));
+
+  // 3. Devolver fichas a todos los jugadores activos en todas las salas
+  let totalCashOuts = 0;
+  for (const r of getRooms()) {
+    const cashOuts = evictAll(r.id);
+    for (const c of cashOuts) {
+      try {
+        await applyBalanceDelta(c.userId, c.chips);
+        totalCashOuts++;
+      } catch (e) {
+        console.error(`[shutdown] error devolviendo fichas a ${c.userId}:`, e);
+      }
+    }
+  }
+  console.log(`[shutdown] ${totalCashOuts} cashout(s) procesados`);
+
+  // 4. Notificar cierre definitivo y esperar propagación
+  io.emit('serverShutdown');
+  await new Promise(r => setTimeout(r, 500));
+
+  // 5. Cerrar server
   server.close(() => {
-    console.log('HTTP cerrado, saliendo.');
+    console.log('Server cerrado. Saliendo.');
     process.exit(0);
   });
-  // Salvavidas: si algo no cierra en 5s, forzamos.
-  setTimeout(() => process.exit(1), 5000).unref();
+  setTimeout(() => process.exit(1), 3000).unref();
 };
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 bootServer().catch(err => {
   console.error('Fallo arrancando server:', err);

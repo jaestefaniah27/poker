@@ -28,6 +28,7 @@ const ConnectionOverlay = ({ isConnected }: { isConnected: boolean }) => {
 
 function App() {
   const [isConnected, setIsConnected] = useState(socket.connected);
+  const [restartCountdown, setRestartCountdown] = useState<number | null>(null);
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(() => !!getStorage().getItem('pokerToken'));
@@ -306,6 +307,20 @@ function App() {
       setUser(prev => prev ? { ...prev, balance } : prev);
     });
 
+    socket.on('serverRestarting', ({ seconds }: { seconds: number }) => {
+      setRestartCountdown(seconds);
+      const tick = setInterval(() => {
+        setRestartCountdown(prev => {
+          if (prev === null || prev <= 1) { clearInterval(tick); return null; }
+          return prev - 1;
+        });
+      }, 1000);
+    });
+
+    socket.on('serverShutdown', () => {
+      setRestartCountdown(null);
+    });
+
 
 
     return () => {
@@ -493,6 +508,11 @@ function App() {
   return (
     <>
       <ConnectionOverlay isConnected={isConnected} />
+      {restartCountdown !== null && (
+        <div className="fixed top-0 inset-x-0 z-[300] bg-orange-600 text-white text-center py-2 px-4 text-sm font-bold shadow-lg" style={{ paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
+          ⚠️ Servidor reiniciando en {restartCountdown}s — tus fichas se guardan automáticamente
+        </div>
+      )}
       <div className="absolute inset-0 bg-background text-primary font-sans flex justify-center" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
       <div className="w-full max-w-md h-full relative flex flex-col overflow-hidden">
 
