@@ -1,5 +1,3 @@
-import React from 'react';
-
 const PrivacyPolicyModal = ({ onClose }: { onClose: () => void }) => {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4" style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }} onClick={onClose}>
