@@ -633,6 +633,17 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const lastResolveRef = useRef<string>('');
   const autoPlacedRef = useRef(false);
 
+  // Congelar el contador de fichas durante el reveal del dealer + vuelo de fichas.
+  // Se captura el valor pre-resolve y se descongela cuando las fichas aterrizan.
+  const [frozenChips, setFrozenChips] = useState<number | null>(null);
+  const lastNonResolveChipsRef = useRef<number>(0);
+  if (phase !== 'resolve') lastNonResolveChipsRef.current = displayedChips;
+  useEffect(() => {
+    if (phase === 'resolve') setFrozenChips(lastNonResolveChipsRef.current);
+    else setFrozenChips(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, room.id]);
+
   // --- Recogida de cartas al Continuar ---
   const [collecting, setCollecting] = useState(false);
   const [dealerCollectTarget, setDealerCollectTarget] = useState({ x: 0, y: 0 });
@@ -686,6 +697,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       const ttl = 700 + glyphs.length * 80 + 400;
       const ids = spawned.map(s => s.id);
       setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
+      setTimeout(() => setFrozenChips(null), ttl + 100);
     } else if ((result === 'win' || result === 'blackjack') && (myPlayer.bjDelta || 0) > 0) {
       // Dealer empuja fichas de premio hacia el círculo
       const prizeAmount = Math.abs(myPlayer.bjDelta || 0);
@@ -701,6 +713,10 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       const ttl = 300 + 700 + glyphs.length * 80 + 400;
       const ids = spawned.map(s => s.id);
       setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
+      setTimeout(() => setFrozenChips(null), ttl + 100);
+    } else {
+      // push u otro: sin animación de fichas, descongelar rápido
+      setTimeout(() => setFrozenChips(null), 600);
     }
     // push: sin animación (solo se devuelve la apuesta, sin fichas nuevas)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1030,7 +1046,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           <div className="flex-1 min-w-0">
             <div className="text-xs font-bold truncate">{user.name}</div>
             <div ref={countRef} className="text-[11px] text-amber-200 font-mono font-bold inline-flex items-center gap-1">
-              <AnimatedNumber value={displayedChips} maxDurationMs={650} baseStepMs={6} /> fichas
+              <AnimatedNumber value={frozenChips ?? displayedChips} maxDurationMs={650} baseStepMs={6} /> fichas
             </div>
           </div>
           {/* Bet pill — centrada absolutamente en la fila */}

@@ -441,8 +441,8 @@ export const TRIVIA_QUESTIONS: TriviaQuestion[] = [
   {
     id: 61,
     question: '¿Qué organización terrorista perpetró los atentados del 11-S?',
-    options: ['Estado Islámico (ISIS)', 'Al-Qaeda', 'Hamás', 'Hezbolá'],
-    correct: 1,
+    options: ['Estado Islámico (ISIS)', 'Al-Qaeda', 'Hamás', 'Mossad'],
+    correct: 3,
     category: 'Historia mundial',
   },
   {
