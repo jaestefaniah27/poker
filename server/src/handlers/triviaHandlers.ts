@@ -4,7 +4,7 @@ import { applyBalanceDelta, getUser, addOneFreeSpin, toPublicUser } from '../db'
 import { TRIVIA_QUESTIONS } from '../triviaQuestions';
 import { JACKPOT_TIERS } from '../../../shared/types';
 
-const COOLDOWN_MS = process.env.NODE_ENV === 'production' ? 30 * 1000 : 5 * 1000;
+const COOLDOWN_MS = process.env.NODE_ENV === 'production' ? 10 * 1000 : 10 * 1000;
 
 const triviaState = new Map<string, { lastAnswered: number; pendingId: number | null }>();
 

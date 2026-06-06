@@ -179,7 +179,7 @@ export const TriviaModal = ({
                 {phase === 'answered' && (
                   <button onClick={loadQuestion}
                     className="w-full bg-purple-500/20 border border-purple-500/40 text-purple-300 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform mt-auto">
-                    Siguiente pregunta (60s cooldown)
+                    Siguiente pregunta
                   </button>
                 )}
               </motion.div>

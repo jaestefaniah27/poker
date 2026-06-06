@@ -823,7 +823,8 @@ function App() {
                      {amBusted && !isTournament && (
                        <button
                          onClick={handleRebuy}
-                         className="bg-emerald-600 hover:bg-emerald-500 text-white flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg"
+                         disabled={!user || user.balance < (currentRoom?.buyIn ?? 0)}
+                         className="bg-emerald-600 hover:bg-emerald-500 text-white flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg disabled:opacity-30 disabled:pointer-events-none"
                        >
                          Recomprar
                        </button>
@@ -853,7 +854,8 @@ function App() {
                     ) : (
                       <button
                         onClick={handleRebuy}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white w-full max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg"
+                        disabled={!user || user.balance < (currentRoom?.buyIn ?? 0)}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white w-full max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg disabled:opacity-30 disabled:pointer-events-none"
                       >
                         Recomprar
                       </button>

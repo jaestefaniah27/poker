@@ -1196,7 +1196,11 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                 <button onClick={() => setShowRebuyModal(false)} className="flex-1 py-3 rounded-2xl border border-white/20 text-white/60 font-bold text-sm active:scale-95">
                   Cancelar
                 </button>
-                <button onClick={confirmRebuy} className="flex-1 py-3 rounded-2xl bg-gradient-to-b from-rose-400 to-rose-600 text-white font-extrabold text-sm shadow-lg active:scale-95">
+                <button
+                  onClick={confirmRebuy}
+                  disabled={user.balance < STAKE_TIERS[rebuyTierIndex]}
+                  className="flex-1 py-3 rounded-2xl bg-gradient-to-b from-rose-400 to-rose-600 text-white font-extrabold text-sm shadow-lg active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                >
                   RECOMPRAR
                 </button>
               </div>
