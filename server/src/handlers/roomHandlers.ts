@@ -36,6 +36,14 @@ export const roomHandlers = (socket: Socket) => {
     const buyIn = isBJ
       ? (Number.isFinite(reqBuyIn) && reqBuyIn > 0 ? reqBuyIn : 1000)
       : room.buyIn;
+
+    // Check balance BEFORE joining room (prevents entering with phantom chips)
+    const isReconnect = room.players.some(p => p.userId === dbUser.id && p.isActive);
+    if (!isReconnect && dbUser.balance < buyIn) {
+      socket.emit('error', 'Saldo insuficiente para entrar a esta mesa.');
+      return;
+    }
+
     const offTableBalance = dbUser.balance - buyIn;
 
     const result = joinRoom(roomId, {
@@ -55,19 +63,15 @@ export const roomHandlers = (socket: Socket) => {
     });
 
     if (!result) return;
-    
+
     if (result === 'full') {
       socket.emit('error', 'La mesa está llena (máximo 8 jugadores).');
       return;
     }
-    
+
     socket.join(roomId);
 
     if (result === 'joined') {
-      if (dbUser.balance < buyIn) {
-        socket.emit('error', 'Saldo insuficiente para entrar a esta mesa.');
-        return;
-      }
       const newBalance = await applyBalanceDelta(dbUser.id, -buyIn);
       socket.emit('balanceUpdated', { balance: newBalance });
     } else {

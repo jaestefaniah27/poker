@@ -353,7 +353,7 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
           return (
             <motion.div
               key={`${i}-${c.rank}-${c.suit}`}
-              layout
+              layout="position"
               initial={isFlipReveal
                 ? { opacity: 1, x: 0, y: 0, rotate: 0 }
                 : { x: 90, y: -70, opacity: 0, rotate: 14 }}
