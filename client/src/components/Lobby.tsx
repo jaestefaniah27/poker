@@ -264,35 +264,35 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
             <div className="flex gap-3 mb-4">
               <button
                 onClick={() => setShowJackpot(true)}
-                className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border border-amber-900/40 hover:border-amber-600/60 bg-amber-500/8 active:scale-95 transition-all"
+                className="flex-1 flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-amber-900/40 hover:border-amber-600/60 bg-amber-500/8 active:scale-[0.98] transition-all text-left"
               >
                 <span className="text-2xl">🎰</span>
                 <span className="text-xs font-bold text-amber-400">Jackpot</span>
-                <span className="text-[10px] text-gray-500">Tragaperras</span>
+                <span className="text-[10px] text-gray-500 mb-1">Tragaperras</span>
+                
+                {/* Historial de Jackpot */}
+                {jackpotState && jackpotState.recentWins.length > 0 && (
+                  <div className="space-y-1 w-full mt-2">
+                    {jackpotState.recentWins.map((win, i) => {
+                      const spinsAgo = jackpotState.globalSpins - win.spinNumber;
+                      const timeLabel = spinsAgo === 0 ? '¡AHORA!' : `hace ${spinsAgo}t`;
+                      return (
+                        <div key={i} className="bg-black/40 rounded-lg p-1.5 px-2 flex items-center justify-between text-[10px]">
+                          <span className="font-bold flex items-center gap-0.5 shrink-0">
+                            <SlotIcon symbol={win.type} className="w-3.5 h-3.5" />
+                            <SlotIcon symbol={win.type} className="w-3.5 h-3.5" />
+                            <SlotIcon symbol={win.type} className="w-3.5 h-3.5" />
+                          </span>
+                          <span className="text-gray-400 truncate ml-2 text-right">
+                            {timeLabel} <span className="text-gray-300 font-semibold">{win.playerName}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </button>
             </div>
-            
-            {/* Historial de Jackpot */}
-            {jackpotState && jackpotState.recentWins.length > 0 && (
-              <div className="space-y-1">
-                {jackpotState.recentWins.map((win, i) => {
-                  const spinsAgo = jackpotState.globalSpins - win.spinNumber;
-                  const timeLabel = spinsAgo === 0 ? '¡AHORA MISMO!' : `hace ${spinsAgo} tiradas`;
-                  return (
-                    <div key={i} className="bg-black/30 rounded-xl p-2 px-3 flex items-center justify-between text-[11px]">
-                      <span className="font-bold flex items-center gap-1">
-                        <SlotIcon symbol={win.type} className="w-4 h-4" />
-                        <SlotIcon symbol={win.type} className="w-4 h-4" />
-                        <SlotIcon symbol={win.type} className="w-4 h-4" />
-                      </span>
-                      <span className="text-gray-400">
-                        {timeLabel} por <span className="text-gray-300 font-semibold">{win.playerName}</span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
 
           {/* ---- Create Game ---- */}
