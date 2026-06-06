@@ -323,8 +323,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 className="w-full flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-purple-900/40 hover:border-purple-600/60 bg-purple-500/8 active:scale-[0.98] transition-all"
               >
                 <span className="text-2xl">🧠</span>
-                <span className="text-xs font-bold text-purple-400">Trivia Política</span>
-                <span className="text-[10px] text-gray-500">Gratis · Gana fichas o giros jackpot</span>
+                <span className="text-xs font-bold text-purple-400">Trivia</span>
+                <span className="text-[10px] text-gray-500">Suvbencionada por el Estado · Gana fichas o giros jackpot</span>
               </button>
             </div>
           </div>
