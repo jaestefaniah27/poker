@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
-import { authUser } from '../socketHelpers';
+import { io, authUser } from '../socketHelpers';
 import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin } from '../db';
-import { spinJackpot } from '../jackpotEngine';
+import { spinJackpot, getJackpotState } from '../jackpotEngine';
 
 export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
@@ -28,12 +28,20 @@ export const minigameHandlers = (socket: Socket) => {
     const amount = Math.floor(Number(bet) || 0);
     if (amount <= 0) { callback({ error: 'Apuesta inválida' }); return; }
 
-    const { symbols, multiplier } = spinJackpot();
+    const { symbols, multiplier, state } = spinJackpot(user.name);
     const winAmount = Math.floor(amount * multiplier);
     const delta = winAmount - amount;
     const newBalance = await applyBalanceDelta(user.id, delta);
     await recordJackpotSpin(user.id, amount, symbols, multiplier, winAmount);
 
-    callback({ ok: true, symbols, multiplier, winAmount, newBalance });
+    if (io) {
+      io.emit('jackpotStateUpdated', state);
+    }
+
+    callback({ ok: true, symbols, multiplier, winAmount, newBalance, state });
+  });
+
+  socket.on('getJackpotState', (callback) => {
+    callback(getJackpotState());
   });
 };

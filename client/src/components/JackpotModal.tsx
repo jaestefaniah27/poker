@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate, STAKE_TIERS } from '../utils';
+import SlotIcon from './SlotIcon';
 
-const SYMBOLS = ['🍒', '🍋', '🍊', '🍇', '⭐', '💎', '7️⃣'];
+const SYMBOLS = ['club', 'diamond', 'heart', 'spade', 'chip', 'ace'];
 
 const MULTIPLIER_LABEL: Record<number, string> = {
   50: '¡JACKPOT! x50',
-  20: '¡SÉPTIMOS! x20',
   10: '¡ESTRELLAS! x10',
   5:  '¡TRIPLE! x5',
   1.5: 'PAR x1.5',
@@ -21,7 +21,7 @@ interface Props {
 
 export default function JackpotModal({ user, token, onClose, onUpdateUser }: Props) {
   const [betIndex, setBetIndex] = useState(0);
-  const [reels, setReels] = useState<string[]>(['🎰', '🎰', '🎰']);
+  const [reels, setReels] = useState<string[]>(['spin', 'spin', 'spin']);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<{ symbols: string[]; multiplier: number; winAmount: number } | null>(null);
   const intervalsRef = useRef<ReturnType<typeof setInterval>[]>([]);
@@ -115,12 +115,12 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
           {reels.map((sym, i) => (
             <motion.div
               key={i}
-              className="w-24 h-24 rounded-2xl bg-[#1c1c1c] border border-white/10 flex items-center justify-center text-5xl shadow-inner"
+              className="w-24 h-24 rounded-2xl bg-[#1c1c1c] border border-white/10 flex items-center justify-center p-3 shadow-inner"
               animate={spinning && i >= (result ? 3 : 0)
                 ? { scale: [1, 1.04, 1], transition: { repeat: Infinity, duration: 0.15 } }
                 : { scale: 1 }}
             >
-              {sym}
+              <SlotIcon symbol={sym} className="w-16 h-16" />
             </motion.div>
           ))}
         </div>
@@ -185,15 +185,20 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         <div className="mt-5 rounded-2xl bg-white/4 p-4 text-[11px] text-gray-500 space-y-1">
           <p className="text-gray-400 font-semibold mb-2 uppercase tracking-wider text-[10px]">Premios</p>
           {[
-            ['💎💎💎', 'x50'],
-            ['7️⃣7️⃣7️⃣', 'x20'],
-            ['⭐⭐⭐', 'x10'],
+            [['ace', 'ace', 'ace'], 'x50'],
+            [['chip', 'chip', 'chip'], 'x10'],
             ['3 iguales', 'x5'],
             ['2 iguales', 'x1.5'],
           ].map(([combo, pay]) => (
-            <div key={combo} className="flex justify-between">
-              <span>{combo}</span>
-              <span className="text-amber-400/80 font-bold">{pay}</span>
+            <div key={pay as string} className="flex justify-between items-center h-6">
+              <span className="flex items-center gap-0.5">
+                {Array.isArray(combo) ? (
+                  combo.map((sym, idx) => <SlotIcon key={idx} symbol={sym} className="w-4 h-4" />)
+                ) : (
+                  combo
+                )}
+              </span>
+              <span className="text-amber-400/80 font-bold">{pay as string}</span>
             </div>
           ))}
         </div>

@@ -3,6 +3,7 @@ import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import MatchHistoryModal from './MatchHistoryModal';
 import JackpotModal from './JackpotModal';
+import SlotIcon from './SlotIcon';
 import { AnimatePresence } from 'framer-motion';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
@@ -41,6 +42,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
 
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+
+  // Jackpot State
+  const [jackpotState, setJackpotState] = useState<{ globalSpins: number, recentWins: Array<{type: string, playerName: string, spinNumber: number}> } | null>(null);
 
   // MINISTERIO DE DERECHOS SOCIALES
   const [now, setNow] = useState(Date.now());
@@ -82,6 +86,16 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
     socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
       if (Array.isArray(data)) setLeaderboard(data);
     });
+
+    socket.emit('getJackpotState', (state: any) => {
+      if (state) setJackpotState(state);
+    });
+    const handleJackpotUpdate = (state: any) => setJackpotState(state);
+    socket.on('jackpotStateUpdated', handleJackpotUpdate);
+
+    return () => {
+      socket.off('jackpotStateUpdated', handleJackpotUpdate);
+    };
   }, []);
 
   const openStakeSlider = () => {
@@ -208,8 +222,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
 
           {/* ---- Mini-juegos ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
-            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Mini-juegos</h2>
-            <div className="flex gap-3">
+            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">MINISTERIO DE IGUALDAD</h2>
+            <div className="flex gap-3 mb-4">
               <button
                 onClick={() => setShowJackpot(true)}
                 className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border border-amber-900/40 hover:border-amber-600/60 bg-amber-500/8 active:scale-95 transition-all"
@@ -219,6 +233,28 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 <span className="text-[10px] text-gray-500">Tragaperras</span>
               </button>
             </div>
+            
+            {/* Historial de Jackpot */}
+            {jackpotState && jackpotState.recentWins.length > 0 && (
+              <div className="space-y-1">
+                {jackpotState.recentWins.map((win, i) => {
+                  const spinsAgo = jackpotState.globalSpins - win.spinNumber;
+                  const timeLabel = spinsAgo === 0 ? '¡AHORA MISMO!' : `hace ${spinsAgo} tiradas`;
+                  return (
+                    <div key={i} className="bg-black/30 rounded-xl p-2 px-3 flex items-center justify-between text-[11px]">
+                      <span className="font-bold flex items-center gap-1">
+                        <SlotIcon symbol={win.type} className="w-4 h-4" />
+                        <SlotIcon symbol={win.type} className="w-4 h-4" />
+                        <SlotIcon symbol={win.type} className="w-4 h-4" />
+                      </span>
+                      <span className="text-gray-400">
+                        {timeLabel} por <span className="text-gray-300 font-semibold">{win.playerName}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* ---- Create Game ---- */}
