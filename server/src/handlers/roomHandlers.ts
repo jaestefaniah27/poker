@@ -64,6 +64,10 @@ export const roomHandlers = (socket: Socket) => {
     socket.join(roomId);
 
     if (result === 'joined') {
+      if (dbUser.balance < buyIn) {
+        socket.emit('error', 'Saldo insuficiente para entrar a esta mesa.');
+        return;
+      }
       const newBalance = await applyBalanceDelta(dbUser.id, -buyIn);
       socket.emit('balanceUpdated', { balance: newBalance });
     } else {

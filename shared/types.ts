@@ -118,9 +118,14 @@ export interface PublicUser {
   freeSpinsLeft?: number;
   freeSpinValue?: number;
   lastFreeSpinsClaim?: number | null;
+  jackpotUnlockLevel?: number; // 0=locked, 1..10 = tiers unlocked
 }
 
 export const STAKE_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000];
+
+// Jackpot-specific tiers and unlock costs (cost = 10x bet)
+export const JACKPOT_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000];
+export const JACKPOT_UNLOCK_COSTS: number[] = JACKPOT_TIERS.map(t => t * 10);
 export const BLIND_DIVISORS: number[] = [20, 10, 5, 4];
 export const DEFAULT_BLIND_DIVISOR = 10;
 

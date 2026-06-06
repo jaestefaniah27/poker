@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips, vibrate, STAKE_TIERS } from '../utils';
+import { socket, fmtChips, vibrate } from '../utils';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 import SlotIcon from './SlotIcon';
 
 const SYMBOLS = ['club', 'diamond', 'heart', 'spade', 'chip', 'crown', 'ace'];
@@ -14,10 +15,11 @@ const MULTIPLIER_LABEL: Record<number, string> = {
 };
 
 interface Props {
-  user: { 
+  user: {
     balance: number;
     freeSpinsLeft?: number;
     freeSpinValue?: number;
+    jackpotUnlockLevel?: number;
   };
   token: string | null;
   onClose: () => void;
@@ -28,6 +30,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   const [betIndex, setBetIndex] = useState(0);
   const [reels, setReels] = useState<string[]>(['spin', 'spin', 'spin']);
   const [spinning, setSpinning] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
   const [result, setResult] = useState<{ symbols: string[]; multiplier: number; winAmount: number } | null>(null);
   const intervalsRef = useRef<ReturnType<typeof setInterval>[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -38,7 +41,27 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   }, []);
 
   const hasFreeSpins = (user.freeSpinsLeft ?? 0) > 0;
-  const bet = hasFreeSpins ? (user.freeSpinValue || 0) : STAKE_TIERS[betIndex];
+  const unlockLevel = user.jackpotUnlockLevel ?? 0;
+  const isLocked = !hasFreeSpins && unlockLevel === 0;
+  const isMaxLevel = unlockLevel >= JACKPOT_TIERS.length;
+
+  // Clamp betIndex to available tiers
+  const maxBetIndex = hasFreeSpins ? JACKPOT_TIERS.length - 1 : Math.max(0, unlockLevel - 1);
+  const clampedBetIndex = Math.min(betIndex, maxBetIndex);
+  const bet = hasFreeSpins ? (user.freeSpinValue || 0) : JACKPOT_TIERS[clampedBetIndex];
+
+  const handleUnlock = () => {
+    if (unlocking) return;
+    const cost = JACKPOT_UNLOCK_COSTS[unlockLevel];
+    setUnlocking(true);
+    socket.emit('unlockJackpotLevel', { token }, (res: any) => {
+      setUnlocking(false);
+      if (res?.error) return;
+      if (res?.user) onUpdateUser(res.user);
+    });
+    // Optimistic update for cost display
+    void cost;
+  };
 
   const handleSpin = () => {
     if (spinning) return;
@@ -169,44 +192,75 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
           <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
           {hasFreeSpins ? (
             <div className="bg-pink-950/20 border border-pink-500/20 rounded-xl py-2 px-3 text-center text-xs font-bold text-pink-400 animate-pulse">
-              🎰 Usando tirada gratis (Valor: ${fmtChips(user.freeSpinValue || 0)}) — Quedan {user.freeSpinsLeft}
+              🎰 Usando tirada gratis (Valor: {fmtChips(user.freeSpinValue || 0)}) — Quedan {user.freeSpinsLeft}
+            </div>
+          ) : isLocked ? (
+            <div className="bg-yellow-950/20 border border-yellow-500/20 rounded-xl py-2 px-3 text-center text-xs text-yellow-400/70">
+              🔒 Desbloquea para apostar
             </div>
           ) : (
-            <div className="flex gap-1.5 flex-wrap justify-center">
-              {STAKE_TIERS.slice(0, 8).map((t, i) => (
-                <button
-                  key={i}
-                  onClick={() => setBetIndex(i)}
-                  disabled={spinning}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${betIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}
-                >
-                  {fmtChips(t)}
-                </button>
-              ))}
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-1.5 flex-wrap justify-center">
+                {JACKPOT_TIERS.slice(0, unlockLevel).map((t, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setBetIndex(i)}
+                    disabled={spinning}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}
+                  >
+                    {fmtChips(t)}
+                  </button>
+                ))}
+              </div>
+              {!isMaxLevel && (
+                <div className="flex items-center justify-between bg-white/4 rounded-xl px-3 py-2">
+                  <span className="text-[11px] text-gray-500">
+                    Siguiente: <span className="text-gray-300 font-bold">{fmtChips(JACKPOT_TIERS[unlockLevel])}</span>
+                  </span>
+                  <button
+                    onClick={handleUnlock}
+                    disabled={unlocking || spinning}
+                    className="px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-600/30 text-amber-400 hover:bg-amber-600/50 disabled:opacity-50 transition-colors"
+                  >
+                    {unlocking ? '…' : `Subir nivel — ${fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Botón girar */}
-        <button
-          onClick={handleSpin}
-          disabled={spinning}
-          className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-50 disabled:active:scale-100"
-          style={{ 
-            background: spinning 
-              ? '#333' 
-              : hasFreeSpins 
-                ? 'linear-gradient(180deg, #ec4899, #be185d)' 
-                : 'linear-gradient(180deg, #f59e0b, #b45309)', 
-            color: spinning ? '#888' : '#000' 
-          }}
-        >
-          {spinning 
-            ? 'Girando…' 
-            : hasFreeSpins 
-              ? `GIRAR — ¡GRATIS! (${user.freeSpinsLeft})` 
-              : `GIRAR — ${fmtChips(bet)}`}
-        </button>
+        {/* Botón desbloquear o girar */}
+        {isLocked ? (
+          <button
+            onClick={handleUnlock}
+            disabled={unlocking}
+            className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-50"
+            style={{ background: unlocking ? '#333' : 'linear-gradient(180deg, #f59e0b, #b45309)', color: unlocking ? '#888' : '#000' }}
+          >
+            {unlocking ? 'Desbloqueando…' : `🔓 DESBLOQUEAR — ${fmtChips(JACKPOT_UNLOCK_COSTS[0])}`}
+          </button>
+        ) : (
+          <button
+            onClick={handleSpin}
+            disabled={spinning}
+            className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-50 disabled:active:scale-100"
+            style={{
+              background: spinning
+                ? '#333'
+                : hasFreeSpins
+                  ? 'linear-gradient(180deg, #ec4899, #be185d)'
+                  : 'linear-gradient(180deg, #f59e0b, #b45309)',
+              color: spinning ? '#888' : '#000'
+            }}
+          >
+            {spinning
+              ? 'Girando…'
+              : hasFreeSpins
+                ? `GIRAR — ¡GRATIS! (${user.freeSpinsLeft})`
+                : `GIRAR — ${fmtChips(bet)}`}
+          </button>
+        )}
 
         {/* Tabla de premios */}
         <div className="mt-5 rounded-2xl bg-white/4 p-4 text-[11px] text-gray-500 space-y-1">

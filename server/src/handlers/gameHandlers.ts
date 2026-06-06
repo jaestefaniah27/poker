@@ -4,7 +4,7 @@ import {
   markBustedPlayers, checkTournamentEnd, restartTournament, clearBlindTimer
 } from '../roomManager';
 import { broadcastRoom, armTurnTimer, clearTurnTimer, processAction, io, SHOWDOWN_LOCK_MS } from '../socketHelpers';
-import { applyBalanceDelta } from '../db';
+import { applyBalanceDelta, getUser } from '../db';
 
 export const gameHandlers = (socket: Socket) => {
   socket.on('rebuy', async ({ roomId }) => {
@@ -13,6 +13,9 @@ export const gameHandlers = (socket: Socket) => {
     if (room.isTournament) return; // En torneo no hay recompra: busted = espectador
     const player = room.players.find(p => p.id === socket.id);
     if (!player) return;
+
+    const dbUser = await getUser(player.userId);
+    if (!dbUser || dbUser.balance < room.buyIn) return;
 
     const ok = rebuy(roomId, player.userId, room.buyIn);
     if (!ok) return;

@@ -109,6 +109,11 @@ const MIGRATIONS = [
       id INTEGER PRIMARY KEY,
       data TEXT NOT NULL
     )`
+  },
+  {
+    name: '015_jackpot_unlock_level',
+    sql: 'ALTER TABLE users ADD COLUMN jackpot_unlock_level INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
   }
 ];
 
@@ -180,6 +185,7 @@ export interface UserRow {
   free_spins_left: number;
   free_spin_value: number;
   last_free_spins_claim: number;
+  jackpot_unlock_level: number;
 }
 
 import { PublicUser } from '../../shared/types';
@@ -195,6 +201,7 @@ export const toPublicUser = (row: UserRow): PublicUser => ({
   freeSpinsLeft: row.free_spins_left ?? 0,
   freeSpinValue: row.free_spin_value ?? 0,
   lastFreeSpinsClaim: row.last_free_spins_claim ?? 0,
+  jackpotUnlockLevel: row.jackpot_unlock_level ?? 0,
 });
 
 export const getAllUsersRanked = async (): Promise<UserRow[]> => {
@@ -252,7 +259,7 @@ export const updateUserBalance = async (id: string, amount: number): Promise<voi
 // Aplica un delta al saldo y devuelve el saldo resultante.
 // sqlite3 serializa las sentencias sobre la conexión, así que UPDATE+SELECT es atómico aquí.
 export const applyBalanceDelta = async (id: string, delta: number): Promise<number> => {
-  await dbRun('UPDATE users SET balance = balance + ? WHERE id = ?', [delta, id]);
+  await dbRun('UPDATE users SET balance = MAX(0, balance + ?) WHERE id = ?', [delta, id]);
   const row = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   return row?.balance ?? 0;
 };
@@ -367,5 +374,9 @@ export const claimFreeSpins = async (id: string, value: number): Promise<void> =
 
 export const useFreeSpin = async (id: string): Promise<void> => {
   await dbRun('UPDATE users SET free_spins_left = MAX(0, free_spins_left - 1) WHERE id = ?', [id]);
+};
+
+export const setJackpotUnlockLevel = async (id: string, level: number): Promise<void> => {
+  await dbRun('UPDATE users SET jackpot_unlock_level = ? WHERE id = ?', [level, id]);
 };
 

@@ -7,7 +7,7 @@ import {
   touchRoom
 } from '../roomManager';
 import { broadcastRoom, io, hasOnlinePlayers } from '../socketHelpers';
-import { applyBalanceDelta } from '../db';
+import { applyBalanceDelta, getUser } from '../db';
 import { Room } from '../../../shared/types';
 
 // ¿Queda alguien con mano viva en playerAction?
@@ -263,6 +263,8 @@ export const blackjackHandlers = (socket: Socket) => {
     if (!seat) return;
     const reboughtAmount = rebuyBlackjack(roomId, seat.userId, Number(amount) || 0);
     if (reboughtAmount <= 0) return;
+    const dbSeat = await getUser(seat.userId);
+    if (!dbSeat || dbSeat.balance < reboughtAmount) return;
     const newBalance = await applyBalanceDelta(seat.userId, -reboughtAmount);
     socket.emit('balanceUpdated', { balance: newBalance });
     broadcastRoom(roomId);

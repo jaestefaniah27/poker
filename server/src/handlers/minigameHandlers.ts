@@ -1,7 +1,8 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin, setJackpotUnlockLevel } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 
 export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
@@ -61,8 +62,28 @@ export const minigameHandlers = (socket: Socket) => {
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
 
     const hasFreeSpins = (dbUser.free_spins_left ?? 0) > 0;
+    const unlockLevel = dbUser.jackpot_unlock_level ?? 0;
+
+    if (!hasFreeSpins && unlockLevel === 0) {
+      callback({ error: 'Jackpot bloqueado. Desbloquéalo primero.' });
+      return;
+    }
+
     const amount = hasFreeSpins ? dbUser.free_spin_value : Math.floor(Number(bet) || 0);
     if (amount <= 0) { callback({ error: 'Apuesta inválida' }); return; }
+
+    // Validate bet tier is within unlock level
+    if (!hasFreeSpins) {
+      const tierIndex = JACKPOT_TIERS.indexOf(amount);
+      if (tierIndex === -1 || tierIndex >= unlockLevel) {
+        callback({ error: 'Nivel de apuesta no desbloqueado' });
+        return;
+      }
+      if (dbUser.balance < amount) {
+        callback({ error: 'Saldo insuficiente' });
+        return;
+      }
+    }
 
     const { symbols, multiplier, state } = spinJackpot(dbUser.name, hasFreeSpins);
     
@@ -99,5 +120,30 @@ export const minigameHandlers = (socket: Socket) => {
 
   socket.on('getJackpotState', (callback) => {
     callback(getJackpotState());
+  });
+
+  socket.on('unlockJackpotLevel', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const dbUser = await getUser(user.id);
+    if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+
+    const currentLevel = dbUser.jackpot_unlock_level ?? 0;
+    if (currentLevel >= JACKPOT_TIERS.length) {
+      callback({ error: 'Ya tienes el nivel máximo' });
+      return;
+    }
+
+    const cost = JACKPOT_UNLOCK_COSTS[currentLevel];
+    if (dbUser.balance < cost) {
+      callback({ error: 'Saldo insuficiente para desbloquear este nivel' });
+      return;
+    }
+    await applyBalanceDelta(dbUser.id, -cost);
+    await setJackpotUnlockLevel(dbUser.id, currentLevel + 1);
+
+    const updated = await getUser(dbUser.id);
+    callback({ ok: true, newLevel: currentLevel + 1, user: updated ? toPublicUser(updated) : undefined });
   });
 };
