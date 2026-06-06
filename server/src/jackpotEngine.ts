@@ -107,8 +107,8 @@ export const spinJackpot = (playerName: string, isFreeSpin = false): { symbols: 
     recentWins.unshift({ type: 'chip', playerName, spinNumber: globalSpins });
   }
 
-  if (recentWins.length > 2) {
-    recentWins = recentWins.slice(0, 2);
+  if (recentWins.length > 3) {
+    recentWins = recentWins.slice(0, 3);
   }
 
   // Guardar estado asíncronamente (no bloqueamos)
