@@ -52,8 +52,8 @@ export const spinJackpot = (playerName: string): { symbols: [string, string, str
   
   // En lugar de forzarlo de golpe, la probabilidad crece exponencialmente
   // Cuanto más se acerca a su límite (50 para el as, 30 para la ficha), el peso se vuelve tan masivo que sale de forma natural.
-  const acePity = Math.floor(Math.pow(spinsSinceAce / 50, 3) * 1000); 
-  const chipPity = Math.floor(Math.pow(spinsSinceChip / 30, 3) * 500);
+  const acePity = Math.floor(Math.pow(spinsSinceAce / 100, 3) * 1000); 
+  const chipPity = Math.floor(Math.pow(spinsSinceChip / 50, 3) * 500);
 
   const dynamicWeights = [...BASE_WEIGHTS];
   dynamicWeights[4] += chipPity; // chip
