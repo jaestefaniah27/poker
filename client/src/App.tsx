@@ -33,6 +33,7 @@ function App() {
   const [token, setToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(() => !!getStorage().getItem('pokerToken'));
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [onlineCount, setOnlineCount] = useState(0);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [showBetMenu, setShowBetMenu] = useState(false);
   const [betAmount, setBetAmount] = useState(2);
@@ -307,6 +308,10 @@ function App() {
       setUser(prev => prev ? { ...prev, balance } : prev);
     });
 
+    socket.on('onlineCount', ({ count }: { count: number }) => {
+      setOnlineCount(count);
+    });
+
     socket.on('serverRestarting', ({ seconds }: { seconds: number }) => {
       setRestartCountdown(seconds);
       const tick = setInterval(() => {
@@ -452,6 +457,7 @@ function App() {
           user={user}
           token={token}
           rooms={rooms}
+          onlineCount={onlineCount}
           onJoinRoom={joinRoom}
           onLogout={handleLogout}
           onUpdateUser={(u) => setUser(u)}

@@ -29,6 +29,7 @@ interface LobbyProps {
   onJoinRoom: (roomId: string, buyInAmount?: number) => void;
   onLogout: () => void;
   onUpdateUser: (u: any) => void;
+  onlineCount?: number;
 }
 
 interface LeaderboardEntry {
@@ -37,7 +38,7 @@ interface LeaderboardEntry {
   avatar: string;
 }
 
-const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: LobbyProps) => {
+const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineCount = 0 }: LobbyProps) => {
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showJackpot, setShowJackpot] = useState(false);
@@ -198,7 +199,15 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
       <div className="w-full max-w-md">
         {/* Header */}
         <header className="flex justify-between items-center mb-8 pt-4">
-          <h1 className="text-3xl font-bold tracking-tight">Lobby</h1>
+          <div className="flex flex-col gap-0.5">
+            <h1 className="text-3xl font-bold tracking-tight">Lobby</h1>
+            {onlineCount > 0 && (
+              <span className="flex items-center gap-1 text-[11px] text-gray-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                {onlineCount} {onlineCount === 1 ? 'persona' : 'personas'} online
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <div className="flex flex-col items-end leading-tight">
               <span className="text-xs text-gray-400 font-medium">{user.name}</span>

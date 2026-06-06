@@ -110,6 +110,10 @@ io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
   socket.emit('roomsUpdated', getRooms());
   registerAllHandlers(socket);
+  io.emit('onlineCount', { count: io.engine.clientsCount });
+  socket.on('disconnect', () => {
+    io.emit('onlineCount', { count: io.engine.clientsCount });
+  });
 });
 
 // --- Barrido de inactividad ---

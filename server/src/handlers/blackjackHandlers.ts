@@ -71,6 +71,44 @@ const armDealerTimer = (roomId: string) => {
   t.dealer = setTimeout(() => runDealerAndResolve(roomId), BJ_DEALER_REVEAL_DELAY);
 };
 
+// Timer de resolve: los jugadores offline no pueden pulsar "Continuar".
+// Si bloquean el avance de la ronda, tras este tiempo se les auto-continúa para
+// que la mesa no quede atascada (p.ej. recién llegado esperando en espectador).
+const RESOLVE_OFFLINE_TIMEOUT = 8_000;
+const armResolveTimer = (roomId: string) => {
+  const t = getTimers(roomId);
+  if (t.resolve) clearTimeout(t.resolve);
+  t.resolve = setTimeout(() => onResolveTimeout(roomId), RESOLVE_OFFLINE_TIMEOUT);
+};
+const clearResolveTimer = (roomId: string) => {
+  const t = getTimers(roomId);
+  if (t.resolve) { clearTimeout(t.resolve); t.resolve = undefined; }
+};
+const onResolveTimeout = (roomId: string) => {
+  const room = getRoom(roomId);
+  if (!room || room.bjPhase !== 'resolve') return;
+  // Auto-continuar a jugadores offline: no deben bloquear el avance.
+  let changed = false;
+  room.players.forEach(p => {
+    if (p.isActive && !p.isSpectating && p.isOnline === false && !p.bjHasContinued) {
+      p.bjHasContinued = true;
+      p.bet = 0;
+      p.bjResult = undefined;
+      p.bjDelta = undefined;
+      changed = true;
+    }
+  });
+  const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
+  const allContinued = activePlayers.length === 0 || activePlayers.every(p => p.bjHasContinued);
+  if (allContinued) {
+    startNextRound(roomId);
+  } else {
+    if (changed) broadcastRoom(roomId);
+    // Quedan jugadores online sin continuar — re-armar por si se desconectan.
+    armResolveTimer(roomId);
+  }
+};
+
 const onBettingDeadline = (roomId: string) => {
   const room = getRoom(roomId);
   if (!room || room.gameType !== 'blackjack') return;
@@ -127,12 +165,15 @@ const runDealerAndResolve = (roomId: string) => {
   finishBlackjackHand(roomId);
   touchRoom(roomId);
   broadcastRoom(roomId);
-  // Sin timer: la mano se queda en 'resolve' hasta que un jugador pulse Continuar.
+  // La mano se queda en 'resolve' hasta que un jugador pulse Continuar,
+  // pero armamos un fallback: los offline no pueden pulsar y bloquearían la mesa.
+  armResolveTimer(roomId);
 };
 
 const startNextRound = (roomId: string) => {
   const room = getRoom(roomId);
   if (!room || room.gameType !== 'blackjack') return;
+  clearResolveTimer(roomId);
   if (eligibleCount(room) < 1) {
     room.bjPhase = 'waiting';
     broadcastRoom(roomId);
@@ -244,6 +285,16 @@ export const blackjackHandlers = (socket: Socket) => {
     p.bet = 0; // limpiar apuesta de la ronda anterior
     p.bjResult = undefined;
     p.bjDelta = undefined;
+
+    // Los jugadores offline no pueden pulsar Continuar: no deben bloquear la ronda.
+    room.players.forEach(pl => {
+      if (pl.isActive && !pl.isSpectating && pl.isOnline === false && !pl.bjHasContinued) {
+        pl.bjHasContinued = true;
+        pl.bet = 0;
+        pl.bjResult = undefined;
+        pl.bjDelta = undefined;
+      }
+    });
 
     const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
     const allContinued = activePlayers.every(p => p.bjHasContinued);

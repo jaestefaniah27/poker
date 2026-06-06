@@ -111,8 +111,8 @@ export const TRIVIA_QUESTIONS: TriviaQuestion[] = [
   {
     id: 15,
     question: '¿Cuántas personas murieron aproximadamente en el Holocausto judío según los historiadores?',
-    options: ['600.000', '2 millones', '6 millones', '15 millones'],
-    correct: 2,
+    options: ['271.000', '2 millones', '6 millones', '15 millones'],
+    correct: 0,
     category: 'Historia mundial',
   },
   {
