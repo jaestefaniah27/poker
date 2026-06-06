@@ -39,7 +39,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
-  // Bonos
+  // MINISTERIO DE DERECHOS SOCIALES
   const [now, setNow] = useState(Date.now());
   const [claimingDaily, setClaimingDaily] = useState(false);
   const [claimingHourly, setClaimingHourly] = useState(false);
@@ -168,9 +168,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
         </header>
 
         <div className="space-y-5">
-          {/* ---- Bonos ---- */}
+          {/* ---- MINISTERIO DE DERECHOS SOCIALES ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
-            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Bonos</h2>
+            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Ministerio de Derechos Sociales</h2>
             <div className="flex gap-3">
               {/* Diario */}
               <button
@@ -179,7 +179,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
                 style={{ borderColor: dailyAvailable ? '#f59e0b' : '#374151', background: dailyAvailable ? 'rgba(245,158,11,0.1)' : 'transparent' }}
               >
-                <span className="text-2xl">🏆</span>
+                <span className="text-xs font-extrabold tracking-wider">PAGUITA</span>
                 <span className="text-xs font-bold text-amber-400">+10.000</span>
                 <span className="text-[10px] text-gray-400">{dailyAvailable ? 'Bono diario' : 'Vuelve mañana'}</span>
               </button>
@@ -191,7 +191,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
                 style={{ borderColor: hourlyAvailable ? '#34d399' : '#374151', background: hourlyAvailable ? 'rgba(52,211,153,0.1)' : 'transparent' }}
               >
-                <span className="text-2xl">⏰</span>
+                <span className="text-xs font-extrabold tracking-wider">DIETAS</span>
                 <span className="text-xs font-bold text-emerald-400">+1.000</span>
                 <span className="text-[10px] text-gray-400">{hourlyAvailable ? 'Cada 30 min' : `${hourlyMM}:${hourlySS}`}</span>
               </button>

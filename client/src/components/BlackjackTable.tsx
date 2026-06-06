@@ -611,7 +611,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const displayDealerTotals = handTotalDisplay(displayDealerCards);
 
   const canDouble = canAct && myCards.length === 2 && myChips >= myBet * 2;
-  const canRebuy = !!myPlayer && myChips <= 0 && phase === 'betting';
+  const canRebuy = !!myPlayer && myPlayer.isActive && myChips <= 0 && phase !== 'dealing';
 
   // Fichas disponibles mostradas: restan la apuesta en mesa (ves cuánto te queda en todo momento).
   // En 'resolve' el servidor ya liquidó, así que mostramos el stack real.
@@ -704,6 +704,15 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   useEffect(() => {
     if (phase !== 'resolve') setCollecting(false);
   }, [phase]);
+
+  // Si el jugador está busted (sin fichas) al llegar a resolve, continuar automáticamente
+  // para no bloquear la UI y mostrar solo el botón de recompra.
+  useEffect(() => {
+    if (showResult && myChips <= 0 && myPlayer?.isActive) {
+      continueRound();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showResult, myChips]);
 
   // Pre-armar el gate en betting/waiting: cartas ocultas ANTES de entrar a playerAction → sin flash.
   // useLayoutEffect para que se aplique antes del paint en la transición de fase.
@@ -1108,7 +1117,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           {(phase === 'dealerAction' || (phase === 'resolve' && !resolveReady)) && (
             <div className="flex-1 flex items-center justify-center text-[11px] text-amber-200/80 font-semibold tracking-wide">El dealer juega...</div>
           )}
-          {showResult && (
+          {showResult && !canRebuy && (
             <button onClick={continueRound}
               className={`flex-1 w-full font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95 flex flex-col items-center justify-center gap-0.5 ${
                 myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack'

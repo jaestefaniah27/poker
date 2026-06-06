@@ -20,10 +20,18 @@ export const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Norma
 
 export const fmtChips = (n: number | null | undefined): string => {
   if (n == null) return '0';
-  if (Math.abs(n) < 1000) return String(n);
-  const v = n / 1000;
-  const s = Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, '');
-  return s + 'k';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) {
+    const v = n / 1_000_000;
+    const s = Number.isInteger(v) ? String(v) : v.toFixed(3).replace(/\.?0+$/, '');
+    return s + 'M';
+  }
+  if (abs >= 1000) {
+    const v = n / 1000;
+    const s = Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, '');
+    return s + 'k';
+  }
+  return String(n);
 };
 
 export const HAND_RANKINGS = [
