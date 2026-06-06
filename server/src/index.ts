@@ -93,6 +93,7 @@ const bootServer = async () => {
   if (!getRoom('sala-taberna')) createRoom('sala-taberna', 'La Taberna', true, 0);
   if (!getRoom('sala-casino')) createRoom('sala-casino', 'Casino Real', true, 4);
   if (!getRoom('sala-presidencial')) createRoom('sala-presidencial', 'Sala Presidencial', true, STAKE_TIERS.length - 1);
+  if (!getRoom('sala-satan')) createRoom('sala-satan', 'Sinagoga de Satán', true, 10);
   // Mesa de blackjack permanente: buy-in libre por jugador. Apuesta mín 25, sin tope (cap = tu stack).
   const BJ_NO_CAP = Number.MAX_SAFE_INTEGER;
   if (!getRoom('sala-blackjack')) createRoom('sala-blackjack', 'BlackJack', true, 0, undefined, undefined, 'blackjack', 25, BJ_NO_CAP);
