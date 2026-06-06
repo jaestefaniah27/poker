@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { socket, fmtChips } from '../utils';
 
 interface WheelModalProps {
@@ -8,22 +8,34 @@ interface WheelModalProps {
   onUpdateUser: (u: any) => void;
 }
 
+// All options available — server picks using STAKE_TIERS
+const ALL_OPTIONS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000];
+const SLICE_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6',
+  '#ec4899', '#ef4444', '#06b6d4', '#84cc16'
+];
+
+// Shuffle array using Fisher-Yates
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalProps) => {
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [wonValue, setWonValue] = useState<number | null>(null);
+  const [wonSpins, setWonSpins] = useState<number>(10);
   const [hasSpun, setHasSpun] = useState(false);
-  
-  const options = [100, 250, 500, 1000, 2500, 5000];
-  const colors = [
-    '#3b82f6', // blue (100)
-    '#10b981', // green (250)
-    '#f59e0b', // amber (500)
-    '#8b5cf6', // purple (1000)
-    '#ec4899', // pink (2500)
-    '#ef4444'  // red (5000)
-  ];
+
+  // Generate a shuffled wheel layout once per modal open
+  const wheelOptions = useMemo(() => shuffle(ALL_OPTIONS), []);
+  const sliceAngle = 360 / wheelOptions.length;
 
   const handleSpin = () => {
     if (isSpinning || hasSpun) return;
@@ -37,24 +49,25 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
         return;
       }
 
-      const { chosenIndex, chosenValue, user: updatedUser } = res;
+      const { chosenValue, freeSpins, user: updatedUser } = res;
 
-      // 6 slices, each slice is 60 degrees.
-      // Slices counter-clockwise/clockwise placement.
-      // To align chosenIndex with the pointer (top, 0 degrees / 360 degrees),
-      // we need to rotate the wheel backwards by chosenIndex * 60, plus a buffer.
-      // Let's do 3600 (10 full spins) minus chosenIndex * 60, offset by 30 to align center.
-      const spinAngle = 3600 - (chosenIndex * 60) - 30;
+      // Find the index in our shuffled wheel that matches the chosen value
+      const idx = wheelOptions.indexOf(chosenValue);
+      const targetIdx = idx >= 0 ? idx : 0;
+
+      // Spin: 10 full turns + land on the target slice center
+      const spinAngle = 3600 - (targetIdx * sliceAngle) - (sliceAngle / 2);
       setRotation(spinAngle);
 
       setTimeout(() => {
         setIsSpinning(false);
         setHasSpun(true);
         setWonValue(chosenValue);
+        setWonSpins(freeSpins || 10);
         if (updatedUser) {
           onUpdateUser(updatedUser);
         }
-      }, 4000); // 4 seconds transition
+      }, 4000);
     });
   };
 
@@ -105,11 +118,14 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
                 transition: isSpinning ? 'transform 4s cubic-bezier(0.1, 0.8, 0.2, 1)' : 'none'
               }}
             >
-              {options.map((val, idx) => {
-                const angle = idx * 60;
+              {wheelOptions.map((val, idx) => {
+                const angle = idx * sliceAngle;
+                const halfSlice = sliceAngle / 2;
+                // Calculate wedge border widths based on slice angle
+                const rad = Math.tan((halfSlice * Math.PI) / 180) * 128;
                 return (
                   <div 
-                    key={val} 
+                    key={`${val}-${idx}`} 
                     className="absolute top-0 left-0 w-full h-full origin-center"
                     style={{ transform: `rotate(${angle}deg)` }}
                   >
@@ -117,21 +133,20 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
                     <div 
                       className="absolute top-0 left-1/2 w-0 h-0 -translate-x-1/2"
                       style={{
-                        borderLeft: '37px solid transparent',
-                        borderRight: '37px solid transparent',
+                        borderLeft: `${rad}px solid transparent`,
+                        borderRight: `${rad}px solid transparent`,
                         borderTop: '128px solid',
-                        borderTopColor: colors[idx],
+                        borderTopColor: SLICE_COLORS[idx % SLICE_COLORS.length],
                         opacity: 0.85,
                         transformOrigin: '50% 100%',
                       }}
                     />
                     {/* Text Label */}
                     <div 
-                      className="absolute top-[28px] left-1/2 -translate-x-1/2 text-white font-extrabold text-xs tracking-wider select-none origin-bottom flex flex-col items-center"
-                      style={{ transform: 'rotate(30deg)' }}
+                      className="absolute top-[22px] left-1/2 -translate-x-1/2 text-white font-extrabold text-[10px] tracking-wider select-none origin-bottom flex flex-col items-center"
+                      style={{ transform: `rotate(${halfSlice}deg)` }}
                     >
-                      <span className="text-[10px] opacity-75">BET</span>
-                      <span>${fmtChips(val)}</span>
+                      <span className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">${fmtChips(val)}</span>
                     </div>
                   </div>
                 );
@@ -169,7 +184,7 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
             </div>
             <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-2xl p-4 w-full text-center flex flex-col gap-1">
               <span className="text-xs text-gray-400">Has desbloqueado</span>
-              <span className="text-xl font-black text-white">10 Tiradas Gratis</span>
+              <span className="text-xl font-black text-white">{wonSpins} Tiradas Gratis</span>
               <span className="text-lg font-bold text-emerald-300">Valor de apuesta: ${fmtChips(wonValue)}/giro</span>
             </div>
             <button

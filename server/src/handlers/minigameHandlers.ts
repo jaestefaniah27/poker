@@ -33,9 +33,10 @@ export const minigameHandlers = (socket: Socket) => {
     const nextAt = last + COOLDOWN_MS;
     if (now < nextAt) { callback({ error: 'Demasiado pronto', nextClaimAt: nextAt }); return; }
 
-    // Weighted random selection of spin value
-    const options = [100, 250, 500, 1000, 2500, 5000];
-    const weights = [40, 30, 15, 10, 4, 1];
+    // Weighted random selection from STAKE_TIERS values
+    // 1k, 5k, 10k, 25k, 50k, 100k, 250k, 500k
+    const options = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000];
+    const weights = [35, 25, 18, 12, 6, 3, 0.8, 0.2];
     let totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
     let chosenIndex = 0;
@@ -49,7 +50,7 @@ export const minigameHandlers = (socket: Socket) => {
     const spinValue = options[chosenIndex];
     await claimFreeSpins(dbUser.id, spinValue);
     const updated = await getUser(dbUser.id);
-    callback({ ok: true, chosenIndex, chosenValue: spinValue, nextClaimAt: now + COOLDOWN_MS, user: updated ? toPublicUser(updated) : undefined });
+    callback({ ok: true, chosenValue: spinValue, freeSpins: 10, nextClaimAt: now + COOLDOWN_MS, user: updated ? toPublicUser(updated) : undefined });
   });
 
   socket.on('playJackpot', async ({ token, bet }, callback) => {

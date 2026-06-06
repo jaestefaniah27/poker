@@ -102,6 +102,13 @@ const MIGRATIONS = [
     name: '013_free_spins_claim',
     sql: 'ALTER TABLE users ADD COLUMN last_free_spins_claim INTEGER DEFAULT 0',
     ignoreError: 'duplicate column'
+  },
+  {
+    name: '014_jackpot_state',
+    sql: `CREATE TABLE IF NOT EXISTS jackpot_state (
+      id INTEGER PRIMARY KEY,
+      data TEXT NOT NULL
+    )`
   }
 ];
 

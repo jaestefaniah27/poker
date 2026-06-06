@@ -53,6 +53,7 @@ const SWEEP_INTERVAL = 30 * 1000;
 
 import { initDB, loadRoomsFromDB } from './db';
 import { restoreRoom, resumeBlindTimers } from './roomManager';
+import { loadJackpotState } from './jackpotEngine';
 
 // Initialize io in helpers
 setIo(io);
@@ -60,6 +61,9 @@ setIo(io);
 const bootServer = async () => {
   console.log('Initializing database migrations...');
   await initDB();
+
+  console.log('Loading jackpot state...');
+  await loadJackpotState();
 
   console.log('Loading saved rooms from database...');
   const savedRooms = await loadRoomsFromDB();

@@ -3,13 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate, STAKE_TIERS } from '../utils';
 import SlotIcon from './SlotIcon';
 
-const SYMBOLS = ['club', 'diamond', 'heart', 'spade', 'chip', 'ace'];
+const SYMBOLS = ['club', 'diamond', 'heart', 'spade', 'chip', 'crown', 'ace'];
 
 const MULTIPLIER_LABEL: Record<number, string> = {
   50: '¡JACKPOT! x50',
+  20: '¡CORONA! x20',
   10: '¡ESTRELLAS! x10',
-  5:  '¡TRIPLE! x5',
-  1.5: 'PAR x1.5',
+  3:  '¡TRIPLE! x3',
 };
 
 interface Props {
@@ -212,9 +212,9 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
           <p className="text-gray-400 font-semibold mb-2 uppercase tracking-wider text-[10px]">Premios</p>
           {[
             [['ace', 'ace', 'ace'], 'x50'],
+            [['crown', 'crown', 'crown'], 'x20'],
             [['chip', 'chip', 'chip'], 'x10'],
-            ['3 iguales', 'x5'],
-            ['2 iguales', 'x1.5'],
+            ['3 iguales', 'x3'],
           ].map(([combo, pay]) => (
             <div key={pay as string} className="flex justify-between items-center h-6">
               <span className="flex items-center gap-0.5">
