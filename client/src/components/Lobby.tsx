@@ -9,6 +9,7 @@ import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
 import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
+import TriviaModal from './TriviaModal';
 
 interface LobbyProps {
   user: { 
@@ -40,6 +41,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showJackpot, setShowJackpot] = useState(false);
+  const [showTrivia, setShowTrivia] = useState(false);
 
   // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
@@ -187,6 +189,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
           <JackpotModal user={user} token={token} onClose={() => setShowJackpot(false)} onUpdateUser={onUpdateUser} />
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {showTrivia && (
+          <TriviaModal token={token} onClose={() => setShowTrivia(false)} onUpdateUser={onUpdateUser} />
+        )}
+      </AnimatePresence>
 
       <div className="w-full max-w-md">
         {/* Header */}
@@ -280,10 +287,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
           {/* ---- Mini-juegos ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
             <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">MINISTERIO DE IGUALDAD</h2>
-            <div className="flex gap-3 mb-4">
+            <div className="flex flex-col gap-3 mb-4">
               <button
                 onClick={() => setShowJackpot(true)}
-                className="flex-1 flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-amber-900/40 hover:border-amber-600/60 bg-amber-500/8 active:scale-[0.98] transition-all text-left"
+                className="w-full flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-amber-900/40 hover:border-amber-600/60 bg-amber-500/8 active:scale-[0.98] transition-all text-left"
               >
                 <span className="text-2xl">🎰</span>
                 <span className="text-xs font-bold text-amber-400">Jackpot</span>
@@ -310,6 +317,14 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                     })}
                   </div>
                 )}
+              </button>
+              <button
+                onClick={() => setShowTrivia(true)}
+                className="w-full flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-purple-900/40 hover:border-purple-600/60 bg-purple-500/8 active:scale-[0.98] transition-all"
+              >
+                <span className="text-2xl">🧠</span>
+                <span className="text-xs font-bold text-purple-400">Trivia Política</span>
+                <span className="text-[10px] text-gray-500">Gratis · Gana fichas o giros jackpot</span>
               </button>
             </div>
           </div>

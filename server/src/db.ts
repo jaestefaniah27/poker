@@ -380,3 +380,13 @@ export const setJackpotUnlockLevel = async (id: string, level: number): Promise<
   await dbRun('UPDATE users SET jackpot_unlock_level = ? WHERE id = ?', [level, id]);
 };
 
+export const addOneFreeSpin = async (id: string, value: number): Promise<void> => {
+  await dbRun(
+    `UPDATE users SET
+      free_spins_left = free_spins_left + 1,
+      free_spin_value = CASE WHEN free_spins_left = 0 THEN ? ELSE MAX(COALESCE(free_spin_value, ?), ?) END
+    WHERE id = ?`,
+    [value, value, value, id]
+  );
+};
+
