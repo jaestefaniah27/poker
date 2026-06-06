@@ -68,7 +68,7 @@ function getMultiplier(s: [Sym, Sym, Sym], isFreeSpin: boolean): number {
     if (a === 'chip') return 10;
     return 3;
   }
-  if (a === b || b === c || a === c) return isFreeSpin ? 1.5 : 0;
+  if (a === b || b === c || a === c) return 1;
   return 0;
 }
 
