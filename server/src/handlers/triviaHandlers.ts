@@ -6,7 +6,7 @@ import { JACKPOT_TIERS } from '../../../shared/types';
 
 const COOLDOWN_MS = process.env.NODE_ENV === 'production' ? 10 * 1000 : 10 * 1000;
 
-const triviaState = new Map<string, { lastAnswered: number; pendingId: number | null }>();
+const triviaState = new Map<string, { lastAnswered: number; pendingId: number | null; seenIds: Set<number> }>();
 
 const CHIP_REWARDS = [1000, 2500, 5000, 10000, 25000, 50000, 100000];
 
@@ -19,8 +19,11 @@ function pickReward(): { type: 'chips'; amount: number } | { type: 'spin'; value
 }
 
 function pickQuestion(userId: string) {
-  const lastId = triviaState.get(userId)?.pendingId;
-  const pool = TRIVIA_QUESTIONS.filter(q => q.id !== lastId);
+  const state = triviaState.get(userId);
+  let seenIds = state?.seenIds ?? new Set<number>();
+  // Si ya se vieron todas, reiniciar ciclo
+  if (seenIds.size >= TRIVIA_QUESTIONS.length) seenIds = new Set<number>();
+  const pool = TRIVIA_QUESTIONS.filter(q => !seenIds.has(q.id));
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -43,7 +46,9 @@ export const triviaHandlers = (socket: Socket) => {
     }
 
     const q = pickQuestion(user.id);
-    triviaState.set(user.id, { lastAnswered: state?.lastAnswered ?? 0, pendingId: q.id });
+    const seenIds = new Set(state?.seenIds ?? []);
+    seenIds.add(q.id);
+    triviaState.set(user.id, { lastAnswered: state?.lastAnswered ?? 0, pendingId: q.id, seenIds });
 
     callback({ question: { id: q.id, question: q.question, options: q.options, category: q.category } });
   });
@@ -60,7 +65,7 @@ export const triviaHandlers = (socket: Socket) => {
     const q = TRIVIA_QUESTIONS.find(q => q.id === questionId);
     if (!q) { callback({ error: 'Pregunta no encontrada' }); return; }
 
-    triviaState.set(user.id, { lastAnswered: Date.now(), pendingId: null });
+    triviaState.set(user.id, { lastAnswered: Date.now(), pendingId: null, seenIds: state.seenIds });
 
     const correct = answerIndex === q.correct;
     if (!correct) { callback({ correct: false, correctIndex: q.correct }); return; }

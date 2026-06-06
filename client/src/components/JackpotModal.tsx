@@ -205,8 +205,8 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                   <button
                     key={i}
                     onClick={() => setBetIndex(i)}
-                    disabled={spinning}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}
+                    disabled={spinning || user.balance < t}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}
                   >
                     {fmtChips(t)}
                   </button>
@@ -219,8 +219,8 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                   </span>
                   <button
                     onClick={handleUnlock}
-                    disabled={unlocking || spinning}
-                    className="px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-600/30 text-amber-400 hover:bg-amber-600/50 disabled:opacity-50 transition-colors"
+                    disabled={unlocking || spinning || user.balance < JACKPOT_UNLOCK_COSTS[unlockLevel]}
+                    className="px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-600/30 text-amber-400 hover:bg-amber-600/50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                   >
                     {unlocking ? '…' : `Subir nivel — ${fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}`}
                   </button>
@@ -234,24 +234,24 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         {isLocked ? (
           <button
             onClick={handleUnlock}
-            disabled={unlocking}
-            className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-50"
-            style={{ background: unlocking ? '#333' : 'linear-gradient(180deg, #f59e0b, #b45309)', color: unlocking ? '#888' : '#000' }}
+            disabled={unlocking || user.balance < JACKPOT_UNLOCK_COSTS[0]}
+            className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none"
+            style={{ background: (unlocking || user.balance < JACKPOT_UNLOCK_COSTS[0]) ? '#333' : 'linear-gradient(180deg, #f59e0b, #b45309)', color: (unlocking || user.balance < JACKPOT_UNLOCK_COSTS[0]) ? '#888' : '#000' }}
           >
             {unlocking ? 'Desbloqueando…' : `🔓 DESBLOQUEAR — ${fmtChips(JACKPOT_UNLOCK_COSTS[0])}`}
           </button>
         ) : (
           <button
             onClick={handleSpin}
-            disabled={spinning}
-            className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-50 disabled:active:scale-100"
+            disabled={spinning || (!hasFreeSpins && user.balance < bet)}
+            className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none disabled:active:scale-100"
             style={{
-              background: spinning
+              background: (spinning || (!hasFreeSpins && user.balance < bet))
                 ? '#333'
                 : hasFreeSpins
                   ? 'linear-gradient(180deg, #ec4899, #be185d)'
                   : 'linear-gradient(180deg, #f59e0b, #b45309)',
-              color: spinning ? '#888' : '#000'
+              color: (spinning || (!hasFreeSpins && user.balance < bet)) ? '#888' : '#000'
             }}
           >
             {spinning
