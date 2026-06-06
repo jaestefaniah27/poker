@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import MatchHistoryModal from './MatchHistoryModal';
+import PrivacyPolicyModal from './PrivacyPolicyModal';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
 import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
@@ -24,6 +25,7 @@ interface LeaderboardEntry {
 const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: LobbyProps) => {
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
@@ -420,6 +422,20 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
           </div>
         );
       })()}
+
+      <div className="mt-8 mb-6 text-center flex flex-col items-center gap-2">
+        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">
+          Creado por Jorge Alejandro Estefanía Hidalgo
+        </p>
+        <button 
+          onClick={() => setShowPrivacy(true)} 
+          className="text-xs text-gray-500 hover:text-white transition-colors underline decoration-gray-700 underline-offset-4"
+        >
+          Política de Privacidad
+        </button>
+      </div>
+
+      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   );
 };

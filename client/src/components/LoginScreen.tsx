@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { socket, getStorage } from '../utils';
+import PrivacyPolicyModal from './PrivacyPolicyModal';
 
 interface LoginScreenProps {
   onLogin: (user: any, token: string, activeRoomId?: string) => void;
@@ -10,6 +11,7 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
   const [loginPassword, setLoginPassword] = useState('');
   const [needPassword, setNeedPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const handleLogin = () => {
     if (!playerName.trim()) return;
@@ -80,7 +82,18 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
             </button>
           )}
         </div>
+        
+        <div className="text-center mt-6">
+          <button 
+            onClick={() => setShowPrivacy(true)} 
+            className="text-gray-500 hover:text-gray-300 text-xs transition-colors underline decoration-gray-600 underline-offset-4"
+          >
+            Política de Privacidad
+          </button>
+        </div>
       </div>
+      
+      {showPrivacy && <PrivacyPolicyModal onClose={() => setShowPrivacy(false)} />}
     </div>
   );
 };
