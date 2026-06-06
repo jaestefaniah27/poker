@@ -785,7 +785,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         <div className="text-center">
           <div className="text-[10px] font-extrabold tracking-[0.3em] text-amber-200/90">BLACKJACK</div>
           <div className="text-[10px] text-white/50 -mt-0.5">
-            Apuesta desde {fmtChips(minBet)} · Paga 3:2
+            Apuesta desde {fmtChips(minBet)} · Paga 6:5
           </div>
         </div>
         <div className="text-right">

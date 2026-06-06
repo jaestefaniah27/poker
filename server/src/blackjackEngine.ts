@@ -102,7 +102,7 @@ export const resolveBlackjack = (room: Room) => {
         delta = 0; // push
         result = 'push';
       } else if (playerBJ) {
-        delta = Math.ceil(bet * 1.5); // 3:2
+        delta = Math.floor(bet * 1.2); // 6:5
         result = 'blackjack';
       } else if (dealerBJ) {
         delta = -bet;
