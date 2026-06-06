@@ -261,10 +261,13 @@ export const blackjackHandlers = (socket: Socket) => {
     if (!room || room.gameType !== 'blackjack') return;
     const seat = room.players.find(p => p.id === socket.id);
     if (!seat) return;
-    const reboughtAmount = rebuyBlackjack(roomId, seat.userId, Number(amount) || 0);
-    if (reboughtAmount <= 0) return;
+    // Compute expected rebuy amount BEFORE touching room state
+    const requestedAmount = Number(amount) || 0;
+    const expectedAmount = requestedAmount > 0 ? requestedAmount : (seat.lastBuyIn && seat.lastBuyIn > 0 ? seat.lastBuyIn : 1000);
     const dbSeat = await getUser(seat.userId);
-    if (!dbSeat || dbSeat.balance < reboughtAmount) return;
+    if (!dbSeat || dbSeat.balance < expectedAmount) return;
+    const reboughtAmount = rebuyBlackjack(roomId, seat.userId, requestedAmount);
+    if (reboughtAmount <= 0) return;
     const newBalance = await applyBalanceDelta(seat.userId, -reboughtAmount);
     socket.emit('balanceUpdated', { balance: newBalance });
     broadcastRoom(roomId);
