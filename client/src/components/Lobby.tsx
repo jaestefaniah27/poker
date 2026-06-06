@@ -52,6 +52,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
   const [buyInRoom, setBuyInRoom] = useState<{ id: string; name: string } | null>(null);
   const [buyInTierIndex, setBuyInTierIndex] = useState(1); // default 5000
 
+  // Poker buy-in modal: el jugador elige entre 1x y 10x la entrada mínima
+  const [pokerBuyInRoom, setPokerBuyInRoom] = useState<{ id: string; name: string; buyIn: number } | null>(null);
+  const [pokerBuyInMultiplier, setPokerBuyInMultiplier] = useState(1);
+
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
@@ -153,7 +157,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
       setBuyInTierIndex(1);
       setBuyInRoom({ id: room.id, name: room.name });
     } else {
-      onJoinRoom(room.id);
+      setPokerBuyInMultiplier(1);
+      setPokerBuyInRoom({ id: room.id, name: room.name, buyIn: room.buyIn });
     }
   };
 
@@ -490,6 +495,68 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser }: Lobby
                 <button onClick={() => setShowStakeSlider(false)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
                 <button onClick={confirmCreateRoom} className="flex-1 bg-white text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Crear</button>
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Poker buy-in modal */}
+      {pokerBuyInRoom && (() => {
+        const minBuyIn = pokerBuyInRoom.buyIn;
+        const amount = minBuyIn * pokerBuyInMultiplier;
+        const maxBuyIn = minBuyIn * 10;
+        const canAffordMin = user.balance >= minBuyIn;
+        const allInAmount = Math.min(user.balance, maxBuyIn);
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setPokerBuyInRoom(null)}>
+            <div className="w-full max-w-md bg-surface rounded-3xl p-6 border border-surfaceLight" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300">PK</span>
+                <h2 className="text-lg font-bold truncate">{pokerBuyInRoom.name}</h2>
+              </div>
+              <p className="text-center text-xs text-gray-500 mb-6 uppercase tracking-wider">¿Con cuánto quieres entrar?</p>
+
+              <div className="text-center mb-6">
+                <p className="text-sm text-emerald-300/80 font-semibold">Buy-in · {pokerBuyInMultiplier}x entrada</p>
+                <p className="text-5xl font-extrabold text-emerald-200">{fmtChips(amount)}</p>
+                <p className="text-xs text-gray-600 mt-1">Mín {fmtChips(minBuyIn)} · Máx {fmtChips(maxBuyIn)}</p>
+              </div>
+
+              <Slider min={1} max={10} step={1} value={pokerBuyInMultiplier} onChange={v => setPokerBuyInMultiplier(v)} accent="emerald" formatLabel={v => `${v}x`} />
+              <div className="flex justify-between px-1 mb-5 mt-1">
+                {[1,2,3,4,5,6,7,8,9,10].map(m => (
+                  <button key={m} onClick={() => setPokerBuyInMultiplier(m)} className={`text-[9px] ${m === pokerBuyInMultiplier ? 'text-white font-bold' : 'text-gray-600'}`}>{m}x</button>
+                ))}
+              </div>
+
+              {!canAffordMin && (
+                <p className="text-xs text-rose-400 text-center mb-4">Saldo insuficiente (mínimo {fmtChips(minBuyIn)})</p>
+              )}
+
+              <div className="flex gap-2 mb-2">
+                <button onClick={() => setPokerBuyInRoom(null)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
+                <button
+                  onClick={() => { onJoinRoom(pokerBuyInRoom.id, amount); setPokerBuyInRoom(null); }}
+                  disabled={!canAffordMin || user.balance < amount}
+                  className="flex-1 bg-emerald-500 text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform disabled:opacity-40 disabled:pointer-events-none"
+                >Entrar con {fmtChips(amount)}</button>
+              </div>
+              {user.balance >= minBuyIn && user.balance < maxBuyIn && (
+                <button
+                  onClick={() => { onJoinRoom(pokerBuyInRoom.id, allInAmount); setPokerBuyInRoom(null); }}
+                  className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform"
+                >
+                  💰 Todo mi saldo — {fmtChips(allInAmount)}
+                </button>
+              )}
+              {user.balance >= maxBuyIn && (
+                <button
+                  onClick={() => { onJoinRoom(pokerBuyInRoom.id, maxBuyIn); setPokerBuyInRoom(null); }}
+                  className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform"
+                >
+                  🚀 Máximo — {fmtChips(maxBuyIn)}
+                </button>
+              )}
             </div>
           </div>
         );

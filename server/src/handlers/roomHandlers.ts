@@ -35,7 +35,9 @@ export const roomHandlers = (socket: Socket) => {
     const reqBuyIn = Math.floor(Number(buyInAmount));
     const buyIn = isBJ
       ? (Number.isFinite(reqBuyIn) && reqBuyIn > 0 ? reqBuyIn : 1000)
-      : room.buyIn;
+      : (Number.isFinite(reqBuyIn) && reqBuyIn > 0
+          ? Math.min(Math.max(reqBuyIn, room.buyIn), room.buyIn * 10)
+          : room.buyIn);
 
     // Check balance BEFORE joining room (prevents entering with phantom chips)
     const isReconnect = room.players.some(p => p.userId === dbUser.id && p.isActive);

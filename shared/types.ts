@@ -121,7 +121,7 @@ export interface PublicUser {
   jackpotUnlockLevel?: number; // 0=locked, 1..10 = tiers unlocked
 }
 
-export const STAKE_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000];
+export const STAKE_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];
 
 // Jackpot-specific tiers and unlock costs (cost = 10x bet)
 export const JACKPOT_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000];
