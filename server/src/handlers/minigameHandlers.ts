@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
 
@@ -23,6 +23,8 @@ function minesMultiplier(numMines: number, revealed: number): number {
   }
   return Math.round((0.97 / prob) * 100) / 100;
 }
+
+const wordleClaimedSlots = new Map<string, string>(); // userId → YYYY-MM-DDTHH
 
 export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
@@ -73,46 +75,41 @@ export const minigameHandlers = (socket: Socket) => {
     callback({ ok: true, chosenValue: spinValue, freeSpins: 10, nextClaimAt: now + COOLDOWN_MS, user: updated ? toPublicUser(updated) : undefined });
   });
 
-  socket.on('playJackpot', async ({ token, bet }, callback) => {
+  socket.on('playJackpot', async ({ token, bet, useFreeSpin }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
-    
+
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
 
-    const hasFreeSpins = (dbUser.free_spins_left ?? 0) > 0;
+    const pools = parsePools(dbUser.free_spins_pools ?? null);
+    const amount = Math.floor(Number(bet) || 0);
+    const doFreeSpin = Boolean(useFreeSpin) && amount > 0 && (pools[String(amount)] || 0) > 0;
     const unlockLevel = dbUser.jackpot_unlock_level ?? 0;
 
-    if (!hasFreeSpins && unlockLevel === 0) {
+    if (!doFreeSpin && unlockLevel === 0) {
       callback({ error: 'Jackpot bloqueado. Desbloquéalo primero.' });
       return;
     }
-
-    const amount = hasFreeSpins ? dbUser.free_spin_value : Math.floor(Number(bet) || 0);
     if (amount <= 0) { callback({ error: 'Apuesta inválida' }); return; }
 
-    // Validate bet tier is within unlock level
-    if (!hasFreeSpins) {
+    // Validate bet tier is within unlock level (paid spins only)
+    if (!doFreeSpin) {
       const tierIndex = JACKPOT_TIERS.indexOf(amount);
       if (tierIndex === -1 || tierIndex >= unlockLevel) {
         callback({ error: 'Nivel de apuesta no desbloqueado' });
         return;
       }
-      if (dbUser.balance < amount) {
-        callback({ error: 'Saldo insuficiente' });
-        return;
-      }
     }
 
-    const { symbols, multiplier, state } = spinJackpot(dbUser.name, hasFreeSpins, amount);
-    
+    const { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount);
+
     let delta = 0;
     const winAmount = Math.floor(amount * multiplier);
-    
-    if (hasFreeSpins) {
-      // Free spin does not subtract the bet amount from balance!
+
+    if (doFreeSpin) {
       delta = winAmount;
-      await useFreeSpin(dbUser.id);
+      await consumeFreeSpin(dbUser.id, amount);
     } else {
       delta = winAmount - amount;
     }
@@ -282,5 +279,27 @@ export const minigameHandlers = (socket: Socket) => {
 
   socket.on('disconnect', () => {
     activeMinesGames.delete(socket.id);
+  });
+
+  // --- WORDLE ---
+  socket.on('wordleComplete', async ({ token, won, attempts }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const slot = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
+    if (wordleClaimedSlots.get(user.id) === slot) {
+      callback({ error: 'Ya reclamaste el premio de esta hora' }); return;
+    }
+    wordleClaimedSlots.set(user.id, slot);
+
+    if (!won) { callback({ ok: true, reward: 0 }); return; }
+
+    const prizes = [5_000_000, 1_000_000, 500_000, 100_000, 50_000, 10_000];
+    const reward = prizes[Math.min(Math.max(Number(attempts) - 1, 0), prizes.length - 1)];
+
+    const newBalance = await applyBalanceDelta(user.id, reward);
+    await addXp(user.id, 25);
+    const dbUser = await getUser(user.id);
+    callback({ ok: true, reward, newBalance, user: dbUser ? toPublicUser(dbUser) : undefined });
   });
 };

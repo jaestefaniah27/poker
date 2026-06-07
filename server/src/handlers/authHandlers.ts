@@ -9,6 +9,16 @@ import { findActiveRoomForUser } from '../roomManager';
 
 const BCRYPT_ROUNDS = 10;
 
+const emitOnlineCount = () => {
+  const { io } = require('../socketHelpers');
+  if (!io) return;
+  const ids = new Set<string>();
+  for (const [, s] of io.sockets.sockets) {
+    if (s.data.user) ids.add(s.data.user.id);
+  }
+  io.emit('onlineCount', { count: ids.size });
+};
+
 export const authHandlers = (socket: Socket) => {
   socket.on('login', async ({ name, password }, callback) => {
     const cleanName = sanitizeInput((name || '').trim());
@@ -32,6 +42,7 @@ export const authHandlers = (socket: Socket) => {
     const activeRoomId = findActiveRoomForUser(user.id);
     const publicUser = toPublicUser(user);
     socket.data.user = publicUser;
+    emitOnlineCount();
     callback({ user: publicUser, token, activeRoomId });
   });
 
@@ -41,6 +52,7 @@ export const authHandlers = (socket: Socket) => {
     const activeRoomId = findActiveRoomForUser(user.id);
     const publicUser = toPublicUser(user);
     socket.data.user = publicUser;
+    emitOnlineCount();
     callback({ user: publicUser, token, activeRoomId });
   });
 
@@ -164,15 +176,16 @@ export const authHandlers = (socket: Socket) => {
   });
 
   socket.on('getOnlinePlayers', async (_data, callback) => {
-    const playersMap = new Map<string, any>();
     const { io } = require('../socketHelpers');
+    const userIds = new Set<string>();
     if (io) {
-      for (const [id, s] of io.sockets.sockets) {
-        if (s.data.user) {
-          playersMap.set(s.data.user.id, s.data.user);
-        }
+      for (const [, s] of io.sockets.sockets) {
+        if (s.data.user) userIds.add(s.data.user.id);
       }
     }
-    callback({ ok: true, players: Array.from(playersMap.values()) });
+    const players = (await Promise.all(Array.from(userIds).map(id => getUser(id))))
+      .filter(Boolean)
+      .map(u => toPublicUser(u!));
+    callback({ ok: true, players });
   });
 };

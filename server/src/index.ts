@@ -117,13 +117,21 @@ const bootServer = async () => {
   });
 };
 
+const countOnlineUsers = () => {
+  const ids = new Set<string>();
+  for (const [, s] of io.sockets.sockets) {
+    if (s.data.user) ids.add(s.data.user.id);
+  }
+  return ids.size;
+};
+
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
   socket.emit('roomsUpdated', getRooms());
   registerAllHandlers(socket);
-  io.emit('onlineCount', { count: io.engine.clientsCount });
+  // Emitir tras autenticación (el socket aún no tiene user aquí)
   socket.on('disconnect', () => {
-    io.emit('onlineCount', { count: io.engine.clientsCount });
+    setTimeout(() => io.emit('onlineCount', { count: countOnlineUsers() }), 50);
   });
 });
 

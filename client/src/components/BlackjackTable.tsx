@@ -795,13 +795,24 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
       {/* Header */}
       <div className="relative flex justify-between items-center px-4 py-2 z-20">
-        <button onClick={onLeave} className="text-white/70 text-xs px-3 py-1.5 rounded-full bg-black/35 border border-white/10 backdrop-blur active:scale-95">
-          ← Salir
-        </button>
+        <div className="flex flex-col items-start gap-0.5">
+          <button onClick={onLeave} className="text-white/70 text-xs px-3 py-1.5 rounded-full bg-black/35 border border-white/10 backdrop-blur active:scale-95">
+            ← Salir
+          </button>
+          {myPlayer && (() => {
+            const totalEnMesa = myPlayer.chips + (myPlayer.bet || 0);
+            const diff = totalEnMesa - room.buyIn;
+            return (
+              <span className={`text-[10px] font-bold px-1 ${diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                {diff > 0 ? '+' : ''}{fmtChips(diff)}
+              </span>
+            );
+          })()}
+        </div>
         <div className="text-center">
           <div className="text-[10px] font-extrabold tracking-[0.3em] text-amber-200/90">BLACKJACK</div>
           <div className="text-[10px] text-white/50 -mt-0.5">
-            Apuesta desde {fmtChips(minBet)} · Paga 6:5
+            Apuesta desde {fmtChips(minBet)} · Paga 3:2
           </div>
         </div>
         <div className="text-right">

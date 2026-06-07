@@ -139,6 +139,11 @@ const MIGRATIONS = [
     name: '020_trivia_level',
     sql: 'ALTER TABLE users ADD COLUMN trivia_level INTEGER DEFAULT 0',
     ignoreError: 'duplicate column'
+  },
+  {
+    name: '021_free_spins_pools',
+    sql: "ALTER TABLE users ADD COLUMN free_spins_pools TEXT DEFAULT '{}'",
+    ignoreError: 'duplicate column'
   }
 ];
 
@@ -210,6 +215,7 @@ export interface UserRow {
   free_spins_left: number;
   free_spin_value: number;
   last_free_spins_claim: number;
+  free_spins_pools: string | null;
   jackpot_unlock_level: number;
   xp: number;
   paguita_level: number;
@@ -220,6 +226,10 @@ export interface UserRow {
 
 import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX } from '../../shared/types';
 
+export const parsePools = (raw: string | null): Record<string, number> => {
+  try { const p = JSON.parse(raw || '{}'); return (p && typeof p === 'object') ? p : {}; } catch { return {}; }
+};
+
 export const toPublicUser = (row: UserRow): PublicUser => {
   const xp = row.xp ?? 0;
   const level = levelFromXp(xp);
@@ -227,6 +237,13 @@ export const toPublicUser = (row: UserRow): PublicUser => {
   const dietaLevel = row.dieta_level ?? 0;
   const ruletaLevel = row.ruleta_level ?? 0;
   const triviaLevel = row.trivia_level ?? 0;
+  // Merge legacy single-slot into pools for backward compat
+  const pools = parsePools(row.free_spins_pools);
+  const legacyLeft = row.free_spins_left ?? 0;
+  const legacyVal = row.free_spin_value ?? 0;
+  if (legacyLeft > 0 && legacyVal > 0 && !pools[String(legacyVal)]) {
+    pools[String(legacyVal)] = legacyLeft;
+  }
   return {
     id: row.id,
     name: row.name,
@@ -235,8 +252,9 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     hasPassword: !!row.password_hash,
     lastDailyClaim: row.last_daily_claim ?? null,
     lastHourlyClaim: row.last_hourly_claim ?? null,
-    freeSpinsLeft: row.free_spins_left ?? 0,
-    freeSpinValue: row.free_spin_value ?? 0,
+    freeSpinPools: pools,
+    freeSpinsLeft: Object.values(pools).reduce((a, b) => a + b, 0),
+    freeSpinValue: legacyVal,
     lastFreeSpinsClaim: row.last_free_spins_claim ?? 0,
     jackpotUnlockLevel: row.jackpot_unlock_level ?? 0,
     xp,
@@ -457,14 +475,24 @@ export const getMatchHistoryForUser = async (userId: string, limit = 30): Promis
 };
 
 export const claimFreeSpins = async (id: string, value: number): Promise<void> => {
+  const user = await getUser(id);
+  const pools = parsePools(user?.free_spins_pools ?? null);
+  pools[String(value)] = (pools[String(value)] || 0) + 10;
   await dbRun(
-    'UPDATE users SET free_spins_left = 10, free_spin_value = ?, last_free_spins_claim = ? WHERE id = ?',
-    [value, Date.now(), id]
+    'UPDATE users SET free_spins_pools = ?, last_free_spins_claim = ? WHERE id = ?',
+    [JSON.stringify(pools), Date.now(), id]
   );
 };
 
-export const useFreeSpin = async (id: string): Promise<void> => {
-  await dbRun('UPDATE users SET free_spins_left = MAX(0, free_spins_left - 1) WHERE id = ?', [id]);
+export const useFreeSpin = async (id: string, value?: number): Promise<void> => {
+  const user = await getUser(id);
+  const pools = parsePools(user?.free_spins_pools ?? null);
+  const key = String(value ?? user?.free_spin_value ?? 0);
+  if (pools[key] > 0) {
+    pools[key]--;
+    if (pools[key] === 0) delete pools[key];
+  }
+  await dbRun('UPDATE users SET free_spins_pools = ? WHERE id = ?', [JSON.stringify(pools), id]);
 };
 
 export const setJackpotUnlockLevel = async (id: string, level: number): Promise<void> => {
@@ -472,12 +500,9 @@ export const setJackpotUnlockLevel = async (id: string, level: number): Promise<
 };
 
 export const addOneFreeSpin = async (id: string, value: number, count = 1): Promise<void> => {
-  await dbRun(
-    `UPDATE users SET
-      free_spins_left = free_spins_left + ?,
-      free_spin_value = CASE WHEN free_spins_left = 0 THEN ? ELSE MAX(COALESCE(free_spin_value, ?), ?) END
-    WHERE id = ?`,
-    [count, value, value, value, id]
-  );
+  const user = await getUser(id);
+  const pools = parsePools(user?.free_spins_pools ?? null);
+  pools[String(value)] = (pools[String(value)] || 0) + count;
+  await dbRun('UPDATE users SET free_spins_pools = ? WHERE id = ?', [JSON.stringify(pools), id]);
 };
 

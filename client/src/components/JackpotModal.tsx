@@ -17,8 +17,7 @@ const MULTIPLIER_LABEL: Record<number, string> = {
 interface Props {
   user: {
     balance: number;
-    freeSpinsLeft?: number;
-    freeSpinValue?: number;
+    freeSpinPools?: Record<string, number>;
     jackpotUnlockLevel?: number;
   };
   token: string | null;
@@ -27,7 +26,10 @@ interface Props {
 }
 
 export default function JackpotModal({ user, token, onClose, onUpdateUser }: Props) {
+  const [balance, setBalance] = useState(user.balance);
   const [betIndex, setBetIndex] = useState(0);
+  // null = paying; number = using free spin of this value
+  const [freeSpinSelected, setFreeSpinSelected] = useState<number | null>(null);
   const [reels, setReels] = useState<string[]>(['spin', 'spin', 'spin']);
   const [spinning, setSpinning] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
@@ -40,27 +42,31 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
     timersRef.current.forEach(clearTimeout);
   }, []);
 
-  const hasFreeSpins = (user.freeSpinsLeft ?? 0) > 0;
+  const pools = user.freeSpinPools ?? {};
+  const hasFreeSpins = Object.values(pools).some(c => c > 0);
   const unlockLevel = user.jackpotUnlockLevel ?? 0;
   const isLocked = !hasFreeSpins && unlockLevel === 0;
   const isMaxLevel = unlockLevel >= JACKPOT_TIERS.length;
 
-  // Clamp betIndex to available tiers
-  const maxBetIndex = hasFreeSpins ? JACKPOT_TIERS.length - 1 : Math.max(0, unlockLevel - 1);
+  const maxBetIndex = Math.max(0, unlockLevel - 1);
   const clampedBetIndex = Math.min(betIndex, maxBetIndex);
-  const bet = hasFreeSpins ? (user.freeSpinValue || 0) : JACKPOT_TIERS[clampedBetIndex];
+  const bet = JACKPOT_TIERS[clampedBetIndex];
+
+  // Reset free spin selection if that pool runs out
+  useEffect(() => {
+    if (freeSpinSelected !== null && !(pools[String(freeSpinSelected)] > 0)) {
+      setFreeSpinSelected(null);
+    }
+  }, [pools, freeSpinSelected]);
 
   const handleUnlock = () => {
     if (unlocking) return;
-    const cost = JACKPOT_UNLOCK_COSTS[unlockLevel];
     setUnlocking(true);
     socket.emit('unlockJackpotLevel', { token }, (res: any) => {
       setUnlocking(false);
       if (res?.error) return;
-      if (res?.user) onUpdateUser(res.user);
+      if (res?.user) { onUpdateUser(res.user); setBalance(res.user.balance); }
     });
-    // Optimistic update for cost display
-    void cost;
   };
 
   const handleSpin = () => {
@@ -68,7 +74,6 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
     setSpinning(true);
     setResult(null);
 
-    // Arranca los 3 carretes girando
     const intervals = [0, 1, 2].map(i =>
       setInterval(() => {
         setReels(prev => {
@@ -80,14 +85,14 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
     );
     intervalsRef.current = intervals;
 
-    socket.emit('playJackpot', { token, bet }, (res: any) => {
+    const spinBet = freeSpinSelected ?? bet;
+    socket.emit('playJackpot', { token, bet: spinBet, useFreeSpin: freeSpinSelected !== null }, (res: any) => {
       if (res?.error) {
         intervals.forEach(clearInterval);
         setSpinning(false);
         return;
       }
 
-      // Para cada carrete con delay creciente
       const stops = [900, 1500, 2100];
       stops.forEach((delay, i) => {
         const t = setTimeout(() => {
@@ -99,15 +104,16 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
           });
           vibrate(30);
 
-          // Tras parar el último carrete → mostrar resultado
           if (i === 2) {
             const t2 = setTimeout(() => {
               setResult(res);
               setSpinning(false);
               if (res.user) {
                 onUpdateUser(res.user);
-              } else {
+                setBalance(res.user.balance);
+              } else if (res.newBalance != null) {
                 onUpdateUser({ ...user, balance: res.newBalance });
+                setBalance(res.newBalance);
               }
               if (res.multiplier >= 5) vibrate([80, 40, 80, 40, 200]);
               else if (res.multiplier > 0) vibrate([60, 30, 60]);
@@ -122,6 +128,9 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
 
   const isWin = result && result.multiplier > 0;
   const isBig = result && result.multiplier >= 10;
+  const spinDisabled = spinning || (freeSpinSelected !== null
+    ? !(pools[String(freeSpinSelected)] > 0)
+    : (isLocked || balance < bet));
 
   return (
     <div
@@ -139,7 +148,10 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
       >
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-extrabold tracking-tight text-white">Jackpot</h2>
+          <div>
+            <h2 className="text-xl font-extrabold tracking-tight text-white">Jackpot</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{fmtChips(balance)}</p>
+          </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">✕</button>
         </div>
 
@@ -191,28 +203,49 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         {/* Selector de apuesta */}
         <div className="mb-5">
           <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
-          {hasFreeSpins ? (
-            <div className="bg-pink-950/20 border border-pink-500/20 rounded-xl py-2 px-3 text-center text-xs font-bold text-pink-400 animate-pulse">
-              🎰 Usando tirada gratis (Valor: {fmtChips(user.freeSpinValue || 0)}) — Quedan {user.freeSpinsLeft}
-            </div>
-          ) : isLocked ? (
+
+          {isLocked ? (
             <div className="bg-yellow-950/20 border border-yellow-500/20 rounded-xl py-2 px-3 text-center text-xs text-yellow-400/70">
               🔒 Desbloquea para apostar
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               <div className="flex gap-1.5 flex-wrap justify-center">
-                {JACKPOT_TIERS.slice(0, unlockLevel).map((t, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setBetIndex(i)}
-                    disabled={spinning || user.balance < t}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}
-                  >
-                    {fmtChips(t)}
-                  </button>
-                ))}
+                {JACKPOT_TIERS.slice(0, Math.max(unlockLevel, 1)).map((t, i) => {
+                  const poolCount = pools[String(t)] || 0;
+                  const isFreeSpinTier = poolCount > 0;
+                  const isSelected = isFreeSpinTier
+                    ? freeSpinSelected === t
+                    : (freeSpinSelected === null && clampedBetIndex === i);
+                  const isDisabled = spinning || (i >= unlockLevel && !isFreeSpinTier) || (!isFreeSpinTier && balance < t);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (isFreeSpinTier) {
+                          setFreeSpinSelected(t);
+                        } else {
+                          setBetIndex(i);
+                          setFreeSpinSelected(null);
+                        }
+                      }}
+                      disabled={isDisabled}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none border ${
+                        isSelected
+                          ? isFreeSpinTier
+                            ? 'bg-pink-600 text-white border-transparent shadow-[0_0_10px_rgba(236,72,153,0.5)]'
+                            : 'bg-amber-500 text-black border-transparent'
+                          : isFreeSpinTier
+                            ? 'bg-pink-950/40 text-pink-400 border-pink-500/40 hover:bg-pink-900/50'
+                            : 'bg-white/8 text-gray-400 border-transparent hover:bg-white/15'
+                      }`}
+                    >
+                      {fmtChips(t)}
+                    </button>
+                  );
+                })}
               </div>
+
               {!isMaxLevel && (
                 <div className="flex items-center justify-between bg-white/4 rounded-xl px-3 py-2">
                   <span className="text-[11px] text-gray-500">
@@ -220,7 +253,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                   </span>
                   <button
                     onClick={handleUnlock}
-                    disabled={unlocking || spinning || user.balance < JACKPOT_UNLOCK_COSTS[unlockLevel]}
+                    disabled={unlocking || spinning || balance < JACKPOT_UNLOCK_COSTS[unlockLevel]}
                     className="px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-600/30 text-amber-400 hover:bg-amber-600/50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                   >
                     {unlocking ? '…' : `Subir nivel — ${fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}`}
@@ -235,30 +268,30 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         {isLocked ? (
           <button
             onClick={handleUnlock}
-            disabled={unlocking || user.balance < JACKPOT_UNLOCK_COSTS[0]}
+            disabled={unlocking}
             className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none"
-            style={{ background: (unlocking || user.balance < JACKPOT_UNLOCK_COSTS[0]) ? '#333' : 'linear-gradient(180deg, #f59e0b, #b45309)', color: (unlocking || user.balance < JACKPOT_UNLOCK_COSTS[0]) ? '#888' : '#000' }}
+            style={{ background: unlocking ? '#333' : 'linear-gradient(180deg, #f59e0b, #b45309)', color: unlocking ? '#888' : '#000' }}
           >
             {unlocking ? 'Desbloqueando…' : `🔓 DESBLOQUEAR — ${fmtChips(JACKPOT_UNLOCK_COSTS[0])}`}
           </button>
         ) : (
           <button
             onClick={handleSpin}
-            disabled={spinning || (!hasFreeSpins && user.balance < bet)}
+            disabled={spinDisabled}
             className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none disabled:active:scale-100"
             style={{
-              background: (spinning || (!hasFreeSpins && user.balance < bet))
+              background: spinDisabled
                 ? '#333'
-                : hasFreeSpins
+                : freeSpinSelected !== null
                   ? 'linear-gradient(180deg, #ec4899, #be185d)'
                   : 'linear-gradient(180deg, #f59e0b, #b45309)',
-              color: (spinning || (!hasFreeSpins && user.balance < bet)) ? '#888' : '#000'
+              color: spinDisabled ? '#888' : '#000',
             }}
           >
             {spinning
               ? 'Girando…'
-              : hasFreeSpins
-                ? `GIRAR — ¡GRATIS! (${user.freeSpinsLeft})`
+              : freeSpinSelected !== null
+                ? `GIRAR GRATIS — quedan ${pools[String(freeSpinSelected)] ?? 0}`
                 : `GIRAR — ${fmtChips(bet)}`}
           </button>
         )}
@@ -266,13 +299,13 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         {/* Tabla de premios */}
         <div className="mt-5 rounded-2xl bg-white/4 p-4 text-[11px] text-gray-500 space-y-1">
           <p className="text-gray-400 font-semibold mb-2 uppercase tracking-wider text-[10px]">Premios</p>
-          {( [
+          {([
             [['ace', 'ace', 'ace'], 'x50'],
             [['crown', 'crown', 'crown'], 'x20'],
             [['chip', 'chip', 'chip'], 'x10'],
             ['3 iguales', 'x3'],
-            ...((user.freeSpinsLeft ?? 0) > 0 ? [['2 iguales', 'x1.5']] : [])
-          ] as [string | string[], string][] ).map(([combo, pay]) => (
+            ['2 iguales', 'x1.5'],
+          ] as [string | string[], string][]).map(([combo, pay]) => (
             <div key={pay as string} className="flex justify-between items-center h-6">
               <span className="flex items-center gap-0.5">
                 {Array.isArray(combo) ? (
@@ -289,4 +322,3 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
     </div>
   );
 }
-

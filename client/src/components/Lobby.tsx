@@ -11,6 +11,8 @@ import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor } from '../../..
 import { WheelModal } from './WheelModal';
 import TriviaModal from './TriviaModal';
 import MinesModal from './MinesModal';
+import CrashModal from './CrashModal';
+import WordleModal from './WordleModal';
 import OnlinePlayersModal from './OnlinePlayersModal';
 import LevelsModal from './LevelsModal';
 
@@ -56,6 +58,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showJackpot, setShowJackpot] = useState(false);
   const [showTrivia, setShowTrivia] = useState(false);
   const [showMines, setShowMines] = useState(false);
+  const [showCrash, setShowCrash] = useState(false);
+  const [showWordle, setShowWordle] = useState(false);
   const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
   const [showLevels, setShowLevels] = useState(false);
 
@@ -222,6 +226,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       {showMines && (
         <MinesModal user={user} token={token} onClose={() => setShowMines(false)} onUpdateUser={onUpdateUser} />
       )}
+      {showCrash && (
+        <CrashModal user={user} token={token} onClose={() => setShowCrash(false)} onUpdateUser={onUpdateUser} />
+      )}
+      {showWordle && (
+        <WordleModal user={user} token={token} onClose={() => setShowWordle(false)} onUpdateUser={onUpdateUser} />
+      )}
       {showOnlinePlayers && (
         <OnlinePlayersModal onClose={() => setShowOnlinePlayers(false)} />
       )}
@@ -317,16 +327,14 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               {/* Ruleta */}
               <button
                 onClick={() => setShowWheelModal(true)}
-                disabled={!freeSpinsAvailable && !((user.freeSpinsLeft ?? 0) > 0)}
+                disabled={!freeSpinsAvailable}
                 className="flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
-                style={{ borderColor: freeSpinsAvailable ? '#a855f7' : (user.freeSpinsLeft ?? 0) > 0 ? '#ec4899' : '#374151', background: freeSpinsAvailable ? 'rgba(168,85,247,0.1)' : (user.freeSpinsLeft ?? 0) > 0 ? 'rgba(236,72,153,0.1)' : 'transparent' }}
+                style={{ borderColor: freeSpinsAvailable ? '#a855f7' : '#374151', background: freeSpinsAvailable ? 'rgba(168,85,247,0.1)' : 'transparent' }}
               >
                 <span className="text-[10px] font-extrabold tracking-wider text-center">RULETA</span>
-                <span className={`text-xs font-bold ${(user.freeSpinsLeft ?? 0) > 0 ? 'text-pink-400' : 'text-purple-400'}`}>
-                  {(user.freeSpinsLeft ?? 0) > 0 ? `${user.freeSpinsLeft} Gs` : '10 Gs'}
-                </span>
+                <span className="text-xs font-bold text-purple-400">10 Gs</span>
                 <span className="text-[9px] text-gray-400 text-center">
-                  {(user.freeSpinsLeft ?? 0) > 0 ? `Valor: $${fmtChips(user.freeSpinValue || 0)}` : freeSpinsAvailable ? 'Girar' : `${freeSpinsMM}:${freeSpinsSS}`}
+                  {freeSpinsAvailable ? 'Girar' : `${freeSpinsMM}:${freeSpinsSS}`}
                 </span>
               </button>
             </div>
@@ -350,7 +358,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
           {/* ---- Mini-juegos ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
-            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">MINISTERIO DE IGUALDAD</h2>
+            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">MINIJUEGOS</h2>
             <div className="flex flex-col gap-3 mb-4">
               <button
                 onClick={() => setShowJackpot(true)}
@@ -418,6 +426,46 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                   <span className="text-[10px] text-gray-500 text-center">Revela · Cobra cuando quieras</span>
                 </button>
               </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowCrash(true)}
+                  className="flex-1 flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-cyan-900/40 hover:border-cyan-600/60 bg-cyan-500/8 active:scale-[0.98] transition-all"
+                >
+                  <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
+                    <defs>
+                      <linearGradient id="crashG" x1="0%" y1="100%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#06b6d4"/>
+                        <stop offset="100%" stopColor="#a855f7"/>
+                      </linearGradient>
+                    </defs>
+                    <polyline points="2,18 8,10 13,14 22,4" stroke="url(#crashG)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <polyline points="17,4 22,4 22,9" stroke="url(#crashG)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-xs font-bold text-cyan-400">Crash</span>
+                  <span className="text-[10px] text-gray-500 text-center">Multiplica · Cobra antes del crash</span>
+                </button>
+                <button
+                  onClick={() => setShowWordle(true)}
+                  className="flex-1 flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-emerald-900/40 hover:border-emerald-600/60 bg-emerald-500/8 active:scale-[0.98] transition-all"
+                >
+                  <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
+                    <rect x="2" y="4" width="4" height="4" rx="1" fill="#16a34a"/>
+                    <rect x="7" y="4" width="4" height="4" rx="1" fill="#ca8a04"/>
+                    <rect x="12" y="4" width="4" height="4" rx="1" fill="#374151"/>
+                    <rect x="17" y="4" width="4" height="4" rx="1" fill="#374151"/>
+                    <rect x="2" y="10" width="4" height="4" rx="1" fill="#ca8a04"/>
+                    <rect x="7" y="10" width="4" height="4" rx="1" fill="#16a34a"/>
+                    <rect x="12" y="10" width="4" height="4" rx="1" fill="#374151"/>
+                    <rect x="17" y="10" width="4" height="4" rx="1" fill="#374151"/>
+                    <rect x="2" y="16" width="4" height="4" rx="1" fill="#16a34a"/>
+                    <rect x="7" y="16" width="4" height="4" rx="1" fill="#16a34a"/>
+                    <rect x="12" y="16" width="4" height="4" rx="1" fill="#16a34a"/>
+                    <rect x="17" y="16" width="4" height="4" rx="1" fill="#16a34a"/>
+                  </svg>
+                  <span className="text-xs font-bold text-emerald-400">Wordle</span>
+                  <span className="text-[10px] text-gray-500 text-center">Adivina · Hasta 5M de premio</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -439,7 +487,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
           {/* ---- Join Game ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
-            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">Unirse</h2>
+            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">JUEGOS DE CARTAS</h2>
             {rooms.length === 0 ? (
               <p className="text-gray-500 text-center py-4 text-sm">No hay partidas activas.</p>
             ) : (

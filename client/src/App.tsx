@@ -631,6 +631,15 @@ function App() {
             <div className="bg-[#1a1a1a] rounded-2xl p-6 mx-6 w-full max-w-xs shadow-2xl flex flex-col gap-4">
               <p className="text-white text-center font-semibold text-base">¿Salir de la mesa?</p>
               <p className="text-gray-400 text-center text-sm">Perderás tu apuesta si hay una mano en curso.</p>
+              {myPlayer && (() => {
+                const totalEnMesa = myPlayer.chips + myPlayer.currentBet;
+                const diff = totalEnMesa - currentRoom.buyIn;
+                return (
+                  <p className={`text-center text-sm font-bold ${diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                    {diff > 0 ? '+' : ''}{fmtChips(diff)} ({fmtChips(currentRoom.buyIn)} → {fmtChips(totalEnMesa)})
+                  </p>
+                );
+              })()}
               <div className="flex gap-3 mt-1">
                 <button
                   onClick={() => setShowLeaveConfirm(false)}

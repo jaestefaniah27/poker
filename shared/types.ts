@@ -116,6 +116,7 @@ export interface PublicUser {
   hasPassword: boolean;
   lastDailyClaim: string | null;  // "YYYY-MM-DD"
   lastHourlyClaim: number | null; // ms timestamp
+  freeSpinPools?: Record<string, number>; // value (as string) → count
   freeSpinsLeft?: number;
   freeSpinValue?: number;
   lastFreeSpinsClaim?: number | null;

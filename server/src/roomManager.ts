@@ -17,7 +17,7 @@ const pokerXp = (won: boolean, handName?: string): number =>
 
 // XP blackjack: blackjack > victoria > empate > derrota.
 const blackjackXp = (result?: string): number =>
-  result === 'blackjack' ? 40 : result === 'win' ? 25 : result === 'push' ? 8 : 5;
+  result === 'blackjack' ? 200 : result === 'win' ? 100 : result === 'push' ? 30 : 10;
 
 // Hook para re-emitir la sala tras refrescar niveles (lo registra socketHelpers).
 let broadcastHook: ((roomId: string) => void) | null = null;
