@@ -65,7 +65,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
   // Jackpot State
-  const [jackpotState, setJackpotState] = useState<{ globalSpins: number, recentWins: Array<{type: string, playerName: string, spinNumber: number}> } | null>(null);
+  const [jackpotState, setJackpotState] = useState<{ globalSpins: number, recentWins: Array<{type: string, playerName: string, spinNumber: number, winAmount: number}> } | null>(null);
 
   // MINISTERIO DE DERECHOS SOCIALES
   const [now, setNow] = useState(Date.now());
