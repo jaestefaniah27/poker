@@ -10,6 +10,7 @@ import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABEL
 import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
 import TriviaModal from './TriviaModal';
+import OnlinePlayersModal from './OnlinePlayersModal';
 
 interface LobbyProps {
   user: { 
@@ -43,6 +44,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showHistory, setShowHistory] = useState(false);
   const [showJackpot, setShowJackpot] = useState(false);
   const [showTrivia, setShowTrivia] = useState(false);
+  const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
 
   // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
@@ -195,11 +197,18 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
           <TriviaModal token={token} onClose={() => setShowTrivia(false)} onUpdateUser={onUpdateUser} />
         )}
       </AnimatePresence>
+      {showOnlinePlayers && (
+        <OnlinePlayersModal onClose={() => setShowOnlinePlayers(false)} />
+      )}
 
       <div className="w-full max-w-md">
         {/* Header */}
         <header className="flex justify-between items-center mb-8 pt-4">
-          <div className="flex flex-col gap-0.5">
+          <div 
+            className="flex flex-col gap-0.5 cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
+            onClick={() => setShowOnlinePlayers(true)}
+            title="Ver jugadores en línea"
+          >
             <h1 className="text-3xl font-bold tracking-tight">Lobby</h1>
             {onlineCount > 0 && (
               <span className="flex items-center gap-1 text-[11px] text-gray-500">
@@ -318,8 +327,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                             <SlotIcon symbol={win.type} className="w-3.5 h-3.5" />
                             <SlotIcon symbol={win.type} className="w-3.5 h-3.5" />
                           </span>
-                          <span className="text-gray-400 truncate ml-2 text-right">
+                          <span className="text-gray-400 truncate ml-2 text-right flex items-center gap-1.5">
                             {timeLabel} <span className="text-gray-300 font-semibold">{win.playerName}</span>
+                            {win.winAmount > 0 && <span className="text-amber-400 font-bold shrink-0">+{fmtChips(win.winAmount)}</span>}
                           </span>
                         </div>
                       );

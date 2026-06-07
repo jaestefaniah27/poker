@@ -11,6 +11,7 @@ export interface JackpotWin {
   type: 'ace' | 'crown' | 'chip';
   playerName: string;
   spinNumber: number;
+  winAmount: number;
 }
 
 export interface JackpotState {
@@ -72,7 +73,7 @@ function getMultiplier(s: [Sym, Sym, Sym], isFreeSpin: boolean): number {
   return 0;
 }
 
-export const spinJackpot = (playerName: string, isFreeSpin = false): { symbols: [string, string, string]; multiplier: number; state: JackpotState } => {
+export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0): { symbols: [string, string, string]; multiplier: number; state: JackpotState } => {
   globalSpins++;
   spinsSinceAce++;
   spinsSinceCrown++;
@@ -98,13 +99,13 @@ export const spinJackpot = (playerName: string, isFreeSpin = false): { symbols: 
 
   if (multiplier === 50) {
     spinsSinceAce = 0;
-    recentWins.unshift({ type: 'ace', playerName, spinNumber: globalSpins });
+    recentWins.unshift({ type: 'ace', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   } else if (multiplier === 20) {
     spinsSinceCrown = 0;
-    recentWins.unshift({ type: 'crown', playerName, spinNumber: globalSpins });
+    recentWins.unshift({ type: 'crown', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   } else if (multiplier === 10) {
     spinsSinceChip = 0;
-    recentWins.unshift({ type: 'chip', playerName, spinNumber: globalSpins });
+    recentWins.unshift({ type: 'chip', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   }
 
   if (recentWins.length > 3) {

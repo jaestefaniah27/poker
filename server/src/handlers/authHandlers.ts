@@ -29,14 +29,18 @@ export const authHandlers = (socket: Socket) => {
     const token = await issueToken(user.id);
     console.log(`Login: ${user.name} -> ${user.id} (balance ${user.balance})`);
     const activeRoomId = findActiveRoomForUser(user.id);
-    callback({ user: toPublicUser(user), token, activeRoomId });
+    const publicUser = toPublicUser(user);
+    socket.data.user = publicUser;
+    callback({ user: publicUser, token, activeRoomId });
   });
 
   socket.on('resumeSession', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'sesión no válida' }); return; }
     const activeRoomId = findActiveRoomForUser(user.id);
-    callback({ user: toPublicUser(user), token, activeRoomId });
+    const publicUser = toPublicUser(user);
+    socket.data.user = publicUser;
+    callback({ user: publicUser, token, activeRoomId });
   });
 
   socket.on('setPassword', async ({ token, currentPassword, newPassword }, callback) => {
@@ -73,7 +77,9 @@ export const authHandlers = (socket: Socket) => {
     if (await isNameTaken(clean, user.id)) { callback({ error: 'Ese nombre ya está en uso' }); return; }
     await updateUserName(user.id, clean);
     const updated = await getUser(user.id);
-    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+    const publicUser = updated ? toPublicUser(updated) : undefined;
+    if (publicUser) socket.data.user = publicUser;
+    callback({ ok: true, user: publicUser });
   });
 
   socket.on('changeAvatar', async ({ token, avatar }, callback) => {
@@ -89,7 +95,9 @@ export const authHandlers = (socket: Socket) => {
     }
     await updateUserAvatar(user.id, seed);
     const updated = await getUser(user.id);
-    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+    const publicUser = updated ? toPublicUser(updated) : undefined;
+    if (publicUser) socket.data.user = publicUser;
+    callback({ ok: true, user: publicUser });
   });
 
   socket.on('getLeaderboard', async (_data, callback) => {
@@ -136,5 +144,18 @@ export const authHandlers = (socket: Socket) => {
     await deleteUser(targetId);
     console.log(`[ADMIN] User ${user.name} deleted user ${targetId}`);
     callback({ ok: true });
+  });
+
+  socket.on('getOnlinePlayers', async (_data, callback) => {
+    const playersMap = new Map<string, any>();
+    const { io } = require('../socketHelpers');
+    if (io) {
+      for (const [id, s] of io.sockets.sockets) {
+        if (s.data.user) {
+          playersMap.set(s.data.user.id, s.data.user);
+        }
+      }
+    }
+    callback({ ok: true, players: Array.from(playersMap.values()) });
   });
 };

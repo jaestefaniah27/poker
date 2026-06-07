@@ -85,7 +85,7 @@ export const minigameHandlers = (socket: Socket) => {
       }
     }
 
-    const { symbols, multiplier, state } = spinJackpot(dbUser.name, hasFreeSpins);
+    const { symbols, multiplier, state } = spinJackpot(dbUser.name, hasFreeSpins, amount);
     
     let delta = 0;
     const winAmount = Math.floor(amount * multiplier);

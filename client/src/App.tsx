@@ -70,6 +70,9 @@ const AppSkeleton = ({ hasToken }: { hasToken: boolean }) => (
 
 function App() {
   const [isConnected, setIsConnected] = useState(socket.connected);
+  const needsSkeleton = () => !socket.connected || !!getStorage().getItem('pokerToken');
+  const [showSkeleton, setShowSkeleton] = useState(needsSkeleton);
+  const [skeletonFading, setSkeletonFading] = useState(false);
   const [restartCountdown, setRestartCountdown] = useState<number | null>(null);
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -425,6 +428,21 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const shouldShow = !isConnected || (!user && initializing);
+    if (shouldShow) {
+      setSkeletonFading(false);
+      setShowSkeleton(true);
+    } else if (showSkeleton) {
+      setSkeletonFading(true);
+      const t = setTimeout(() => {
+        setShowSkeleton(false);
+        setSkeletonFading(false);
+      }, 280);
+      return () => clearTimeout(t);
+    }
+  }, [isConnected, user, initializing]);
+
   const handleLogin = (u: any, t: string, activeRoomId?: string) => {
     setToken(t);
     setUser(u);
@@ -473,8 +491,15 @@ function App() {
 
   const hasToken = !!getStorage().getItem('pokerToken');
 
-  if (!isConnected || (!user && initializing)) {
-    return <AppSkeleton hasToken={hasToken || !!user} />;
+  if (showSkeleton) {
+    return (
+      <div
+        className="fixed inset-0 z-[200] bg-background"
+        style={{ opacity: skeletonFading ? 0 : 1, transition: skeletonFading ? 'opacity 280ms ease-out' : 'none' }}
+      >
+        <AppSkeleton hasToken={hasToken || !!user} />
+      </div>
+    );
   }
 
   if (!user) {
