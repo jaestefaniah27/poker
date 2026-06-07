@@ -498,10 +498,17 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               <div className="space-y-1.5">
                 {leaderboard.map((entry, i) => {
                   const isMe = entry.name === user.name;
+                  let borderCls = isMe ? 'border-emerald-500/30' : 'border-transparent';
+                  let bgCls = isMe ? 'bg-emerald-500/10' : 'bg-background';
+                  
+                  if (i === 0) { borderCls = 'border-yellow-400/60 shadow-[0_0_12px_rgba(250,204,21,0.15)]'; bgCls = isMe ? 'bg-emerald-500/10' : 'bg-yellow-400/5'; }
+                  else if (i === 1) { borderCls = 'border-slate-300/60 shadow-[0_0_12px_rgba(203,213,225,0.15)]'; bgCls = isMe ? 'bg-emerald-500/10' : 'bg-slate-300/5'; }
+                  else if (i === 2) { borderCls = 'border-amber-600/60 shadow-[0_0_12px_rgba(217,119,6,0.15)]'; bgCls = isMe ? 'bg-emerald-500/10' : 'bg-amber-600/5'; }
+
                   return (
                     <div
                       key={entry.name}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${isMe ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-background border border-transparent'}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors border ${bgCls} ${borderCls}`}
                     >
                       <span className="w-7 text-center text-sm font-bold shrink-0">
                         {i < 3 ? medals[i] : <span className="text-gray-600">{i + 1}</span>}
