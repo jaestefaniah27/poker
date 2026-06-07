@@ -10,6 +10,7 @@ import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABEL
 import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
 import TriviaModal from './TriviaModal';
+import MinesModal from './MinesModal';
 import OnlinePlayersModal from './OnlinePlayersModal';
 import LevelsModal from './LevelsModal';
 
@@ -54,6 +55,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showHistory, setShowHistory] = useState(false);
   const [showJackpot, setShowJackpot] = useState(false);
   const [showTrivia, setShowTrivia] = useState(false);
+  const [showMines, setShowMines] = useState(false);
   const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
   const [showLevels, setShowLevels] = useState(false);
 
@@ -67,10 +69,6 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   // BlackJack buy-in modal: el jugador elige con cuánto entra
   const [buyInRoom, setBuyInRoom] = useState<{ id: string; name: string } | null>(null);
   const [buyInTierIndex, setBuyInTierIndex] = useState(1); // default 5000
-
-  // Poker buy-in modal: el jugador elige entre 1x y 10x la entrada mínima
-  const [pokerBuyInRoom, setPokerBuyInRoom] = useState<{ id: string; name: string; buyIn: number } | null>(null);
-  const [pokerBuyInMultiplier, setPokerBuyInMultiplier] = useState(1);
 
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -184,8 +182,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       setBuyInTierIndex(1);
       setBuyInRoom({ id: room.id, name: room.name });
     } else {
-      setPokerBuyInMultiplier(1);
-      setPokerBuyInRoom({ id: room.id, name: room.name, buyIn: room.buyIn });
+      onJoinRoom(room.id);
     }
   };
 
@@ -222,6 +219,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
           <TriviaModal token={token} onClose={() => setShowTrivia(false)} onUpdateUser={onUpdateUser} />
         )}
       </AnimatePresence>
+      {showMines && (
+        <MinesModal user={user} token={token} onClose={() => setShowMines(false)} onUpdateUser={onUpdateUser} />
+      )}
       {showOnlinePlayers && (
         <OnlinePlayersModal onClose={() => setShowOnlinePlayers(false)} />
       )}
@@ -356,7 +356,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 onClick={() => setShowJackpot(true)}
                 className="w-full flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-amber-900/40 hover:border-amber-600/60 bg-amber-500/8 active:scale-[0.98] transition-all text-left"
               >
-                <span className="text-2xl">🎰</span>
+                <SlotIcon symbol="crown" className="w-9 h-9" />
                 <span className="text-xs font-bold text-amber-400">Jackpot</span>
                 <span className="text-[10px] text-gray-500 mb-1">Tragaperras</span>
                 
@@ -384,14 +384,40 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                   </div>
                 )}
               </button>
-              <button
-                onClick={() => setShowTrivia(true)}
-                className="w-full flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-purple-900/40 hover:border-purple-600/60 bg-purple-500/8 active:scale-[0.98] transition-all"
-              >
-                <span className="text-2xl">🧠</span>
-                <span className="text-xs font-bold text-purple-400">Trivia</span>
-                <span className="text-[10px] text-gray-500">Suvbencionada por el Estado · Gana fichas o giros jackpot</span>
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowTrivia(true)}
+                  className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border border-purple-900/40 hover:border-purple-600/60 bg-purple-500/8 active:scale-[0.98] transition-all"
+                >
+                  <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
+                    <defs>
+                      <linearGradient id="triviaG" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#c084fc"/>
+                        <stop offset="100%" stopColor="#7c3aed"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill="url(#triviaG)" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-xs font-bold text-purple-400">Trivia</span>
+                  <span className="text-[10px] text-gray-500 text-center">Fichas o giros jackpot</span>
+                </button>
+                <button
+                  onClick={() => setShowMines(true)}
+                  className="flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border border-red-900/40 hover:border-red-600/60 bg-red-500/8 active:scale-[0.98] transition-all"
+                >
+                  <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
+                    <circle cx="12" cy="12" r="9" stroke="#ef4444" strokeWidth="1.5" opacity="0.5"/>
+                    <circle cx="12" cy="12" r="5" stroke="#ef4444" strokeWidth="1.5" opacity="0.7"/>
+                    <circle cx="12" cy="12" r="2.5" fill="#ef4444"/>
+                    <line x1="12" y1="2" x2="12" y2="6.5" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="12" y1="17.5" x2="12" y2="22" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="2" y1="12" x2="6.5" y2="12" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="17.5" y1="12" x2="22" y2="12" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span className="text-xs font-bold text-red-400">Minas</span>
+                  <span className="text-[10px] text-gray-500 text-center">Revela · Cobra cuando quieras</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -602,68 +628,6 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
         );
       })()}
 
-      {/* Poker buy-in modal */}
-      {pokerBuyInRoom && (() => {
-        const minBuyIn = pokerBuyInRoom.buyIn;
-        const amount = minBuyIn * pokerBuyInMultiplier;
-        const maxBuyIn = minBuyIn * 10;
-        const canAffordMin = user.balance >= minBuyIn;
-        const allInAmount = Math.min(user.balance, maxBuyIn);
-        return (
-          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setPokerBuyInRoom(null)}>
-            <div className="w-full max-w-md bg-surface rounded-3xl p-6 border border-surfaceLight" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300">PK</span>
-                <h2 className="text-lg font-bold truncate">{pokerBuyInRoom.name}</h2>
-              </div>
-              <p className="text-center text-xs text-gray-500 mb-6 uppercase tracking-wider">¿Con cuánto quieres entrar?</p>
-
-              <div className="text-center mb-6">
-                <p className="text-sm text-emerald-300/80 font-semibold">Buy-in · {pokerBuyInMultiplier}x entrada</p>
-                <p className="text-5xl font-extrabold text-emerald-200">{fmtChips(amount)}</p>
-                <p className="text-xs text-gray-600 mt-1">Mín {fmtChips(minBuyIn)} · Máx {fmtChips(maxBuyIn)}</p>
-              </div>
-
-              <Slider min={1} max={10} step={1} value={pokerBuyInMultiplier} onChange={v => setPokerBuyInMultiplier(v)} accent="emerald" formatLabel={v => `${v}x`} />
-              <div className="flex justify-between px-1 mb-5 mt-1">
-                {[1,2,3,4,5,6,7,8,9,10].map(m => (
-                  <button key={m} onClick={() => setPokerBuyInMultiplier(m)} className={`text-[9px] ${m === pokerBuyInMultiplier ? 'text-white font-bold' : 'text-gray-600'}`}>{m}x</button>
-                ))}
-              </div>
-
-              {!canAffordMin && (
-                <p className="text-xs text-rose-400 text-center mb-4">Saldo insuficiente (mínimo {fmtChips(minBuyIn)})</p>
-              )}
-
-              <div className="flex gap-2 mb-2">
-                <button onClick={() => setPokerBuyInRoom(null)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
-                <button
-                  onClick={() => { onJoinRoom(pokerBuyInRoom.id, amount); setPokerBuyInRoom(null); }}
-                  disabled={!canAffordMin || user.balance < amount}
-                  className="flex-1 bg-emerald-500 text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform disabled:opacity-40 disabled:pointer-events-none"
-                >Entrar con {fmtChips(amount)}</button>
-              </div>
-              {user.balance >= minBuyIn && user.balance < maxBuyIn && (
-                <button
-                  onClick={() => { onJoinRoom(pokerBuyInRoom.id, allInAmount); setPokerBuyInRoom(null); }}
-                  className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform"
-                >
-                  💰 Todo mi saldo — {fmtChips(allInAmount)}
-                </button>
-              )}
-              {user.balance >= maxBuyIn && (
-                <button
-                  onClick={() => { onJoinRoom(pokerBuyInRoom.id, maxBuyIn); setPokerBuyInRoom(null); }}
-                  className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform"
-                >
-                  🚀 Máximo — {fmtChips(maxBuyIn)}
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
       {/* BlackJack buy-in modal */}
       {buyInRoom && (() => {
         const amount = STAKE_TIERS[buyInTierIndex];
@@ -689,7 +653,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               </div>
 
               <p className="text-[10px] text-gray-600 mb-6 px-1">
-                Entras con estas fichas. Tu saldo es solo indicativo: puedes apostar lo que quieras y quedar en negativo. Al salir, tus fichas vuelven al saldo.
+                Entras con estas fichas. Al salir, tus fichas vuelven al saldo.
               </p>
 
               <div className="flex gap-2 mb-2">

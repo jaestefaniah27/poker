@@ -139,7 +139,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
       >
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-extrabold tracking-tight text-white">🎰 Jackpot</h2>
+          <h2 className="text-xl font-extrabold tracking-tight text-white">Jackpot</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">✕</button>
         </div>
 

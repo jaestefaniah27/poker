@@ -171,6 +171,8 @@ export const XP_PER_TRIVIA_PARTICIPATION = 4;
 export const XP_PER_TRIVIA_CORRECT = 12;
 export const XP_PER_JACKPOT_SPIN = 2;
 export const XP_PER_JACKPOT_WIN = 5;
+export const XP_PER_MINES_PLAY = 2;
+export const XP_PER_MINES_WIN = 5;
 
 // XP TOTAL acumulada necesaria para estar EN el nivel dado. Nivel mínimo = 1.
 // Curva cuadrática suave: L2=100, L3=300, L4=600, L5=1000, L6=1500...

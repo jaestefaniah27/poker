@@ -2,7 +2,27 @@ import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
 import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
-import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN } from '../../../shared/types';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
+
+interface MinesGame {
+  userId: string;
+  bet: number;
+  numMines: number;
+  minePositions: Set<number>;
+  revealedSafe: Set<number>;
+  active: boolean;
+}
+
+const activeMinesGames = new Map<string, MinesGame>();
+
+function minesMultiplier(numMines: number, revealed: number): number {
+  const total = 25;
+  let prob = 1;
+  for (let i = 0; i < revealed; i++) {
+    prob *= (total - numMines - i) / (total - i);
+  }
+  return Math.round((0.97 / prob) * 100) / 100;
+}
 
 export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
@@ -165,5 +185,102 @@ export const minigameHandlers = (socket: Socket) => {
 
     const updated = await getUser(dbUser.id);
     callback({ ok: true, newLevel: currentLevel + 1, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  // --- MINES ---
+  socket.on('minesStart', async ({ token, bet, numMines }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const nm = Math.floor(Number(numMines));
+    const betAmt = Math.floor(Number(bet));
+    if (nm < 1 || nm > 24) { callback({ error: 'Minas inválidas (1-24)' }); return; }
+    if (betAmt <= 0) { callback({ error: 'Apuesta inválida' }); return; }
+
+    activeMinesGames.delete(socket.id);
+
+    const positions = new Set<number>();
+    while (positions.size < nm) {
+      positions.add(Math.floor(Math.random() * 25));
+    }
+
+    await applyBalanceDelta(user.id, -betAmt);
+    await addXp(user.id, XP_PER_MINES_PLAY);
+
+    activeMinesGames.set(socket.id, {
+      userId: user.id,
+      bet: betAmt,
+      numMines: nm,
+      minePositions: positions,
+      revealedSafe: new Set(),
+      active: true,
+    });
+
+    const dbUser = await getUser(user.id);
+    callback({ ok: true, newBalance: dbUser?.balance, user: dbUser ? toPublicUser(dbUser) : undefined });
+  });
+
+  socket.on('minesReveal', async ({ token, cell }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const game = activeMinesGames.get(socket.id);
+    if (!game || !game.active) { callback({ error: 'Sin partida activa' }); return; }
+    if (game.userId !== user.id) { callback({ error: 'No autorizado' }); return; }
+
+    const cellIdx = Math.floor(Number(cell));
+    if (cellIdx < 0 || cellIdx > 24) { callback({ error: 'Celda inválida' }); return; }
+    if (game.revealedSafe.has(cellIdx)) { callback({ error: 'Ya revelada' }); return; }
+
+    if (game.minePositions.has(cellIdx)) {
+      game.active = false;
+      activeMinesGames.delete(socket.id);
+      callback({ ok: true, safe: false, minePositions: Array.from(game.minePositions), hitCell: cellIdx });
+      return;
+    }
+
+    game.revealedSafe.add(cellIdx);
+    const revealed = game.revealedSafe.size;
+    const multiplier = minesMultiplier(game.numMines, revealed);
+    const winnable = Math.floor(game.bet * multiplier);
+
+    const safeTiles = 25 - game.numMines;
+    if (revealed === safeTiles) {
+      game.active = false;
+      activeMinesGames.delete(socket.id);
+      const newBalance = await applyBalanceDelta(user.id, winnable);
+      const xpWin = XP_PER_MINES_WIN + (multiplier >= 10 ? 20 : multiplier >= 5 ? 10 : 0);
+      await addXp(user.id, xpWin);
+      const dbUser = await getUser(user.id);
+      callback({ ok: true, safe: true, multiplier, winnable, autoWin: true, newBalance, minePositions: Array.from(game.minePositions), user: dbUser ? toPublicUser(dbUser) : undefined, addedXp: xpWin });
+      return;
+    }
+
+    callback({ ok: true, safe: true, multiplier, winnable, revealedCount: revealed });
+  });
+
+  socket.on('minesCashout', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const game = activeMinesGames.get(socket.id);
+    if (!game || !game.active) { callback({ error: 'Sin partida activa' }); return; }
+    if (game.revealedSafe.size === 0) { callback({ error: 'Debes revelar al menos una celda' }); return; }
+
+    const multiplier = minesMultiplier(game.numMines, game.revealedSafe.size);
+    const winAmount = Math.floor(game.bet * multiplier);
+
+    game.active = false;
+    activeMinesGames.delete(socket.id);
+
+    const newBalance = await applyBalanceDelta(user.id, winAmount);
+    const xpWin = XP_PER_MINES_WIN + (multiplier >= 10 ? 20 : multiplier >= 5 ? 10 : 0);
+    await addXp(user.id, xpWin);
+    const dbUser = await getUser(user.id);
+    callback({ ok: true, winAmount, multiplier, newBalance, minePositions: Array.from(game.minePositions), user: dbUser ? toPublicUser(dbUser) : undefined, addedXp: xpWin });
+  });
+
+  socket.on('disconnect', () => {
+    activeMinesGames.delete(socket.id);
   });
 };
