@@ -285,16 +285,49 @@ const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
   );
 };
 
+const chunkArray = <T,>(arr: T[], size: number): T[][] => {
+  if (arr.length === 0) return [];
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+};
+
+const createColumns = <T,>(arr: T[], itemsPerStack: number, stacksPerCol: number): T[][][] => {
+  const chunks = chunkArray(arr, itemsPerStack);
+  return chunkArray(chunks, stacksPerCol);
+};
+
 // Betting circle stack: rounds / plaques / larges in SEPARATE piles (never mixed).
 const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: number }) => {
   const rounds  = chips.filter(c => c.v < 1000);
   const plaques = chips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000);
   const larges  = chips.filter(c => c.premium || c.v >= 100000);
+
+  const roundCols = createColumns(rounds, 10, 2);
+  const plaqueCols = createColumns(plaques, 10, 2);
+  const largeCols = createColumns(larges, 8, 1);
+
+  const renderCol = (col: ChipDenom[][], prefix: string, colIndex: number) => (
+    <motion.div layout key={`${prefix}-col-${colIndex}`} className="grid">
+      {col.map((chunk, i) => (
+        <div 
+          key={`${prefix}-chunk-${i}`} 
+          className="col-start-1 row-start-1 flex items-end justify-center" 
+          style={{ marginBottom: (col.length - 1 - i) * 34, zIndex: i }}
+        >
+          <ChipPile items={chunk} size={size} />
+        </div>
+      ))}
+    </motion.div>
+  );
+
   return (
     <motion.div layout className="flex items-end justify-center gap-1.5">
-      {rounds.length  > 0 && <ChipPile items={rounds}  size={size} />}
-      {plaques.length > 0 && <ChipPile items={plaques} size={size} />}
-      {larges.length  > 0 && <ChipPile items={larges}  size={size} />}
+      {roundCols.map((col, i) => renderCol(col, 'rounds', i))}
+      {plaqueCols.map((col, i) => renderCol(col, 'plaques', i))}
+      {largeCols.map((col, i) => renderCol(col, 'larges', i))}
     </motion.div>
   );
 };
@@ -498,6 +531,22 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const addChip = (d: ChipDenom) => {
     if (!canBet) return;
     if (pendingTotal + d.v > maxBet) return;
+    
+    // Limitar visualmente para que no se salgan del rectángulo
+    const newChips = [...pendingChips, d];
+    const rounds = newChips.filter(c => c.v < 1000);
+    const plaques = newChips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000);
+    const larges = newChips.filter(c => c.premium || c.v >= 100000);
+
+    const roundCols = Math.ceil(rounds.length / 20); // 10 fichas * 2 filas = 20 por columna
+    const plaqueCols = Math.ceil(plaques.length / 20);
+    const largeCols = Math.ceil(larges.length / 8);
+
+    const totalCols = roundCols + plaqueCols + largeCols;
+    const totalW = roundCols * 36 + plaqueCols * 46 + largeCols * 56 + Math.max(0, totalCols - 1) * 6;
+
+    if (totalW > 260) return; // Límite de anchura visual de la zona de apuestas
+
     setPendingChips(s => [...s, d]);
     vibrate(20);
   };
@@ -543,7 +592,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   let finalCircleChips = _circleChips;
   if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer?.bjDelta || 0) > 0) {
-    const prizeChips = myPlayer.bjResult === 'win' ? _circleChips : chipsFromAmount(Math.abs(myPlayer.bjDelta || 0));
+    const prizeChips = chipsFromAmount(Math.abs(myPlayer.bjDelta || 0));
     finalCircleChips = [..._circleChips, ...prizeChips];
   }
 
@@ -571,13 +620,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       const circle = circleRef.current?.getBoundingClientRect();
       const count = countRef.current?.getBoundingClientRect();
       if (circle && count) {
-        let glyphs: ChipDenom[] = [];
-        if (result === 'push') glyphs = circleChips;
-        else if (result === 'win') glyphs = [...circleChips, ...circleChips];
-        else {
-          const amount = myBet + Math.abs(myPlayer?.bjDelta || 0);
-          glyphs = chipsFromAmount(amount);
-        }
+        const glyphs = circleChips;
         const fromX = circle.left + circle.width / 2;
         const fromY = circle.top + circle.height / 2;
         const toX = count.left + count.width / 2;
@@ -712,7 +755,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     } else if ((result === 'win' || result === 'blackjack') && (myPlayer.bjDelta || 0) > 0) {
       // Dealer empuja fichas de premio hacia el círculo
       const prizeAmount = Math.abs(myPlayer.bjDelta || 0);
-      const glyphs = result === 'win' ? circleChips : chipsFromAmount(prizeAmount);
+      const glyphs = chipsFromAmount(prizeAmount);
       const spawned = glyphs.map((d, i) => ({
         id: ++flyIdRef.current,
         x: dealerEl.left + dealerEl.width / 2, y: dealerEl.top + dealerEl.height / 2,
