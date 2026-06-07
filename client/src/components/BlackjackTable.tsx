@@ -9,7 +9,7 @@ import type { Room, Player, Card } from '../../../shared/types';
 
 interface Props {
   room: Room;
-  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean };
+  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean; level?: number };
   onLeave: () => void;
 }
 

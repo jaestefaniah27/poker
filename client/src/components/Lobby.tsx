@@ -42,9 +42,11 @@ interface LobbyProps {
 }
 
 interface LeaderboardEntry {
+  userId: string;
   name: string;
   balance: number;
   avatar: string;
+  level?: number;
 }
 
 const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineCount = 0 }: LobbyProps) => {
