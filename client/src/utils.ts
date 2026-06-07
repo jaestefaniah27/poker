@@ -21,16 +21,16 @@ export const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Norma
 export const fmtChips = (n: number | null | undefined): string => {
   if (n == null) return '0';
   const abs = Math.abs(n);
-  if (abs >= 1_000_000) {
-    const v = n / 1_000_000;
-    const s = Number.isInteger(v) ? String(v) : v.toFixed(3).replace(/\.?0+$/, '');
-    return s + 'M';
-  }
-  if (abs >= 1000) {
-    const v = n / 1000;
-    const s = Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, '');
-    return s + 'k';
-  }
+  
+  const trunc2 = (v: number) => {
+    const match = v.toString().match(/^-?\d+(?:\.\d{0,2})?/);
+    return match ? match[0] : '0';
+  };
+
+  if (abs >= 1_000_000_000) return trunc2(n / 1_000_000_000) + 'B';
+  if (abs >= 1_000_000) return trunc2(n / 1_000_000) + 'M';
+  if (abs >= 1000) return trunc2(n / 1000) + 'k';
+  
   return String(n);
 };
 

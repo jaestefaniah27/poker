@@ -36,7 +36,7 @@ const handTotalDisplay = (cards: Card[]): { total: number; soft: boolean; bust: 
 // Chip catalogue. Rounds (<1000) are circles; plaques (>=1000) are rectangles.
 // Border: striped/dashed ("rallado") < 100k, smooth/solid >= 100k.
 // Physical size scales with denomination (small value -> smaller chip).
-type ChipDenom = { v: number; color: string; ring: string; label: string; premium?: 'carbon' | 'silver' | 'gold' | 'diamond' };
+type ChipDenom = { v: number; color: string; ring: string; label: string; premium?: 'carbon' | 'silver' | 'gold' | 'diamond'; isCustom?: boolean };
 
 const CHIP_DEFS: ChipDenom[] = [
   { v: 25,     color: '#10b981', ring: '#064e3b', label: '25'   },
@@ -69,16 +69,17 @@ const CHIP_PAGE_VALUES: number[][] = [
   [100000, 200000, 250000, 500000],
   [500000, 1000000, 2000000, 5000000],
 ];
-const CHIP_PAGES = CHIP_PAGE_VALUES.length;
+const CHIP_PAGES = CHIP_PAGE_VALUES.length + 1;
 
 // Default page scaled to a stack (umbrales fijos por buy-in):
 //  <=1k → p0 | <=25k → p1 (5k,10k,25k) | <=100k → p2 (50k,100k) | resto → p3 (250k,500k)
 const pageForAmount = (amount: number): number => {
-  if (amount <= 1000) return 0;
-  if (amount <= 25000) return 1;
-  if (amount <= 100000) return 2;
-  if (amount <= 2000000) return 3;
-  return 4;
+  if (amount < 5000) return 0;
+  if (amount < 50000) return 1;
+  if (amount < 250000) return 2;
+  if (amount < 2000000) return 3;
+  if (amount < 120000000) return 4;
+  return 5;
 };
 
 const isPlaque = (v: number) => v >= 1000;
@@ -92,15 +93,36 @@ const sizeForValue = (v: number): number => {
   return 58; // Premium — todas del mismo tamaño
 };
 
-const Chip = ({ d, size }: { d: ChipDenom; size?: number }) => {
+const Chip = ({ d, size = 36 }: { d: ChipDenom; size?: number }) => {
+  if (d.isCustom) {
+    const w = Math.max(64, size * 1.6);
+    const h = size * 1.1;
+    return (
+      <div 
+        className="flex items-center justify-center font-black text-cyan-300 relative shrink-0 overflow-hidden"
+        style={{ 
+          width: w, height: h, 
+          borderRadius: 8, 
+          background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+          boxShadow: '0 4px 10px rgba(0,0,0,0.5), 0 0 12px rgba(6,182,212,0.4), inset 0 0 8px rgba(6,182,212,0.2)',
+          border: '2px solid #06b6d4'
+        }}
+      >
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, #06b6d4 4px, #06b6d4 8px)' }} />
+        <span className="relative z-10 text-[14px]" style={{ textShadow: '0 0 6px rgba(6,182,212,1)' }}>{d.label}</span>
+      </div>
+    );
+  }
+
   const naturalH = sizeForValue(d.v);
+  const p = d.premium;
   // Large chips (100k+) always at their natural size regardless of premium
-  const h = (d.premium || d.v >= 100000) ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
+  const h = d.isCustom ? size * 1.1 : (d.premium || d.v >= 100000) ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
   const plaque = isPlaque(d.v);
-  const w = plaque ? Math.round(h * 1.28) : h;
-  const radius = plaque ? Math.round(h * 0.13) : 9999;
-  const innerRadius = plaque ? Math.round(h * 0.07) : 9999;
-  const fontSize = d.label.length >= 4 ? h * 0.26 : h * 0.3;
+  const w = d.isCustom ? Math.max(64, (size || 36) * 1.6) : plaque ? Math.round(h * 1.28) : h;
+  const radius = d.isCustom ? 8 : plaque ? Math.round(h * 0.13) : 9999;
+  const innerRadius = d.isCustom ? 8 : plaque ? Math.round(h * 0.07) : 9999;
+  const fontSize = d.isCustom ? 14 : d.label.length >= 4 ? h * 0.26 : h * 0.3;
 
   if (d.premium) {
     const p = d.premium;
@@ -187,6 +209,78 @@ const Chip = ({ d, size }: { d: ChipDenom; size?: number }) => {
   );
 };
 
+// Custom Chip Page Component
+const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onAdd: (d: ChipDenom) => void; maxBet: number; pendingTotal: number; canBet: boolean }) => {
+  const getMostSignificantDigitValue = (num: number) => {
+    if (num <= 0) return 1;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(num)));
+    return Math.floor(num / magnitude) * magnitude;
+  };
+
+  const [val, setVal] = useState(() => {
+    const stored = localStorage.getItem('customChipValue');
+    let init = stored ? parseInt(stored, 10) : 1000;
+    if (init > maxBet && maxBet > 0) init = getMostSignificantDigitValue(maxBet);
+    return Math.max(1, init);
+  });
+
+  useEffect(() => {
+    if (val > maxBet && maxBet > 0) {
+      setVal(getMostSignificantDigitValue(maxBet));
+    }
+  }, [maxBet, val]);
+
+  useEffect(() => {
+    localStorage.setItem('customChipValue', val.toString());
+  }, [val]);
+
+  const getStep = (v: number) => {
+    if (v >= 1_000_000_000) return 1_000_000_000;
+    if (v >= 1_000_000) return 1_000_000;
+    if (v >= 1000) return 1000;
+    return 1;
+  };
+
+  const applyChange = (type: 'up' | 'down' | 'x10' | '/10') => {
+    setVal(v => {
+      let nv = v;
+      if (type === 'x10') nv = v * 10;
+      else if (type === '/10') nv = Math.floor(v / 10);
+      else if (type === 'up') {
+        const step = getStep(v);
+        nv = Math.floor(v / step) * step + step;
+      }
+      else if (type === 'down') {
+        const step = getStep(Math.max(1, v - 1));
+        if (v % step === 0) {
+          nv = v - step;
+        } else {
+          nv = Math.floor(v / step) * step;
+        }
+      }
+      
+      return Math.max(1, Math.min(maxBet, nv));
+    });
+  };
+
+  const d: ChipDenom = { v: val, label: fmtChips(val), color: '', ring: '', isCustom: true };
+  const disabled = !canBet || val > maxBet || pendingTotal + val > maxBet;
+
+  return (
+    <div className="flex items-center justify-between w-full px-2 gap-4 h-full">
+      <button onClick={() => onAdd(d)} disabled={disabled} className="active:scale-95 transition-transform disabled:opacity-30 shrink-0">
+        <Chip d={d} size={42} />
+      </button>
+      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 flex-1 h-full py-1">
+        <button onClick={() => applyChange('up')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center">▲</button>
+        <button onClick={() => applyChange('x10')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center">x10</button>
+        <button onClick={() => applyChange('down')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center">▼</button>
+        <button onClick={() => applyChange('/10')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center">/10</button>
+      </div>
+    </div>
+  );
+};
+
 // Paged chip rail: 5 chips visible, swipe or arrows to reveal next page (overlapping scales).
 const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet }: {
   page: number; setPage: (p: number) => void;
@@ -194,7 +288,7 @@ const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet }: {
 }) => {
   const dragX = useRef(0);
   const dirRef = useRef(0);
-  const slice = CHIP_PAGE_VALUES[page].map(defByValue);
+  const slice = page < CHIP_PAGE_VALUES.length ? CHIP_PAGE_VALUES[page].map(defByValue) : [];
   const go = (delta: number) => {
     const np = Math.max(0, Math.min(CHIP_PAGES - 1, page + delta));
     if (np !== page) { dirRef.current = delta; setPage(np); }
@@ -217,17 +311,21 @@ const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet }: {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: dir >= 0 ? -90 : 90, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 340, damping: 30 }}
-              className="flex items-center justify-between"
+              className="flex items-center justify-between h-full min-h-[64px]"
             >
-              {slice.map(d => {
-                const disabled = !canBet || d.v > maxBet || pendingTotal + d.v > maxBet;
-                return (
-                  <button key={d.v} onClick={() => onAdd(d)} disabled={disabled}
-                    className="active:scale-90 transition-transform disabled:opacity-20 shrink-0">
-                    <Chip d={d} />
-                  </button>
-                );
-              })}
+              {page < CHIP_PAGE_VALUES.length ? (
+                slice.map(d => {
+                  const disabled = !canBet || d.v > maxBet || pendingTotal + d.v > maxBet;
+                  return (
+                    <button key={d.v} onClick={() => onAdd(d)} disabled={disabled}
+                      className="active:scale-90 transition-transform disabled:opacity-20 shrink-0">
+                      <Chip d={d} />
+                    </button>
+                  );
+                })
+              ) : (
+                <CustomChipControl onAdd={onAdd} maxBet={maxBet} pendingTotal={pendingTotal} canBet={canBet} />
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -247,11 +345,15 @@ const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet }: {
 
 // Build a stack of chip glyphs from an amount (greedy biggest denoms first, cap at 6 visual chips)
 const chipsFromAmount = (amount: number): ChipDenom[] => {
+  if (amount > 120_000_000) {
+    return [{ v: amount, label: fmtChips(amount), color: '', ring: '', isCustom: true }];
+  }
+
   const stack: ChipDenom[] = [];
   let remaining = amount;
   const desc = [...CHIP_DEFS].sort((a, b) => b.v - a.v);
   for (const d of desc) {
-    while (remaining >= d.v && stack.length < 6) {
+    while (remaining >= d.v && stack.length < 24) {
       stack.push(d);
       remaining -= d.v;
     }
@@ -262,10 +364,15 @@ const chipsFromAmount = (amount: number): ChipDenom[] => {
 };
 
 // One vertical pile of same-shape chips.
-const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
-  // Large chips (100k+) always use their natural size regardless of premium
-  const actualH = (d: ChipDenom) => (d.premium || d.v >= 100000) ? sizeForValue(d.v) : size;
-  const actualW = (d: ChipDenom) => { const h = actualH(d); return isPlaque(d.v) ? Math.round(h * 1.28) : h; };
+const ChipPile = ({ items, size = 36 }: { items: ChipDenom[]; size?: number }) => {
+  const actualH = (d: ChipDenom) => {
+    if (d.isCustom) return 42 * 1.1;
+    return (d.premium || d.v >= 100000) ? sizeForValue(d.v) : size;
+  };
+  const actualW = (d: ChipDenom) => {
+    if (d.isCustom) return 60;
+    const h = actualH(d); return isPlaque(d.v) ? Math.round(h * 1.28) : h;
+  };
   const pileW = Math.max(...items.map(d => actualW(d)));
   const pileH = Math.max(...items.map(d => actualH(d)));
   return (
@@ -278,7 +385,7 @@ const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
           transition={{ type: 'spring', stiffness: 360, damping: 22 }}
           style={{ position: 'absolute', left: (pileW - actualW(d)) / 2, bottom: 0, zIndex: i }}
         >
-          <Chip d={d} size={size} />
+          <Chip d={d} size={d.isCustom ? 42 : size} />
         </motion.div>
       ))}
     </motion.div>
@@ -301,13 +408,15 @@ const createColumns = <T,>(arr: T[], itemsPerStack: number, stacksPerCol: number
 
 // Betting circle stack: rounds / plaques / larges in SEPARATE piles (never mixed).
 const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: number }) => {
-  const rounds  = chips.filter(c => c.v < 1000);
-  const plaques = chips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000);
-  const larges  = chips.filter(c => c.premium || c.v >= 100000);
+  const rounds  = chips.filter(c => c.v < 1000 && !c.isCustom);
+  const plaques = chips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000 && !c.isCustom);
+  const larges  = chips.filter(c => (c.premium || c.v >= 100000) && !c.isCustom);
+  const customs = chips.filter(c => c.isCustom);
 
   const roundCols = createColumns(rounds, 10, 2);
   const plaqueCols = createColumns(plaques, 10, 2);
   const largeCols = createColumns(larges, 8, 1);
+  const customCols = createColumns(customs, 1, 2);
 
   const renderCol = (col: ChipDenom[][], prefix: string, colIndex: number) => (
     <motion.div layout key={`${prefix}-col-${colIndex}`} className="grid">
@@ -315,7 +424,7 @@ const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: number }) 
         <div 
           key={`${prefix}-chunk-${i}`} 
           className="col-start-1 row-start-1 flex items-end justify-center" 
-          style={{ marginBottom: (col.length - 1 - i) * 34, zIndex: i }}
+          style={{ marginBottom: (col.length - 1 - i) * (prefix === 'customs' ? 44 : 34) + (prefix === 'customs' ? 14 : 0), zIndex: i }}
         >
           <ChipPile items={chunk} size={size} />
         </div>
@@ -328,6 +437,7 @@ const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: number }) 
       {roundCols.map((col, i) => renderCol(col, 'rounds', i))}
       {plaqueCols.map((col, i) => renderCol(col, 'plaques', i))}
       {largeCols.map((col, i) => renderCol(col, 'larges', i))}
+      {customCols.map((col, i) => renderCol(col, 'customs', i))}
     </motion.div>
   );
 };
@@ -534,16 +644,20 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     
     // Limitar visualmente para que no se salgan del rectángulo
     const newChips = [...pendingChips, d];
-    const rounds = newChips.filter(c => c.v < 1000);
-    const plaques = newChips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000);
-    const larges = newChips.filter(c => c.premium || c.v >= 100000);
+    const rounds = newChips.filter(c => c.v < 1000 && !c.isCustom);
+    const plaques = newChips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000 && !c.isCustom);
+    const larges = newChips.filter(c => (c.premium || c.v >= 100000) && !c.isCustom);
+    const customs = newChips.filter(c => c.isCustom);
 
     const roundCols = Math.ceil(rounds.length / 20); // 10 fichas * 2 filas = 20 por columna
     const plaqueCols = Math.ceil(plaques.length / 20);
     const largeCols = Math.ceil(larges.length / 8);
+    const customCols = Math.ceil(customs.length / 2);
 
-    const totalCols = roundCols + plaqueCols + largeCols;
-    const totalW = roundCols * 36 + plaqueCols * 46 + largeCols * 56 + Math.max(0, totalCols - 1) * 6;
+    if (largeCols > 3) return; // Límite estricto de 3 columnas para fichas grandes
+
+    const totalCols = roundCols + plaqueCols + largeCols + customCols;
+    const totalW = roundCols * 36 + plaqueCols * 46 + largeCols * 56 + customCols * 60 + Math.max(0, totalCols - 1) * 6;
 
     if (totalW > 260) return; // Límite de anchura visual de la zona de apuestas
 
