@@ -269,7 +269,7 @@ const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
   const pileW = Math.max(...items.map(d => actualW(d)));
   const pileH = Math.max(...items.map(d => actualH(d)));
   return (
-    <div className="relative" style={{ width: pileW, height: pileH + items.length * 4 }}>
+    <motion.div layout className="relative" style={{ width: pileW, height: pileH + items.length * 4 }}>
       {items.map((d, i) => (
         <motion.div
           key={i}
@@ -281,7 +281,7 @@ const ChipPile = ({ items, size }: { items: ChipDenom[]; size: number }) => {
           <Chip d={d} size={size} />
         </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 };
 
@@ -291,11 +291,11 @@ const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: number }) 
   const plaques = chips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000);
   const larges  = chips.filter(c => c.premium || c.v >= 100000);
   return (
-    <div className="flex items-end justify-center gap-1.5">
+    <motion.div layout className="flex items-end justify-center gap-1.5">
       {rounds.length  > 0 && <ChipPile items={rounds}  size={size} />}
       {plaques.length > 0 && <ChipPile items={plaques} size={size} />}
       {larges.length  > 0 && <ChipPile items={larges}  size={size} />}
-    </div>
+    </motion.div>
   );
 };
 
@@ -518,6 +518,16 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   };
   const startRound = () => socket.emit('bjStartRound', { roomId: room.id });
 
+  // --- Resolve: dealer roba carta a carta; el resultado solo se muestra tras la última ---
+  const [resolveReady, setResolveReady] = useState(false);
+  const [dealerResolveCount, setDealerResolveCount] = useState(99);
+  const showResult = phase === 'resolve' && resolveReady;
+  const [prizeArrived, setPrizeArrived] = useState(false);
+
+  useEffect(() => {
+    if (phase === 'betting') setPrizeArrived(false);
+  }, [phase]);
+
   // Chips visibles en el círculo: pendientes mientras apuestas, o la composición exacta apostada.
   const basePlacedChips = placedComposition.length > 0
     ? placedComposition
@@ -531,7 +541,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       ? [...basePlacedChips, ...basePlacedChips]
       : basePlacedChips;
 
-  const circleChips = hideLostChips ? [] : _circleChips;
+  let finalCircleChips = _circleChips;
+  if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer?.bjDelta || 0) > 0) {
+    const prizeChips = myPlayer.bjResult === 'win' ? _circleChips : chipsFromAmount(Math.abs(myPlayer.bjDelta || 0));
+    finalCircleChips = [..._circleChips, ...prizeChips];
+  }
+
+  const circleChips = hideLostChips ? [] : finalCircleChips;
 
   const circleAmount = pendingChips.length > 0 ? pendingTotal : myBet;
 
@@ -600,11 +616,6 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const [revealedDealer, setRevealedDealer] = useState(0);
   const [dealDone, setDealDone] = useState(true);
   const dealingRef = useRef(false);
-
-  // --- Resolve: dealer roba carta a carta; el resultado solo se muestra tras la última ---
-  const [resolveReady, setResolveReady] = useState(false);
-  const [dealerResolveCount, setDealerResolveCount] = useState(99);
-  const showResult = phase === 'resolve' && resolveReady;
 
   const myCards = (phase === 'betting' || phase === 'waiting') ? [] : (myPlayer?.cards || []);
   // Sliced versions for sequential deal animation (dealDone → show all)
@@ -714,6 +725,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       const ids = spawned.map(s => s.id);
       setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
       setTimeout(() => setFrozenChips(null), ttl + 100);
+      
+      const arrivalDelay = (0.2 + Math.max(0, glyphs.length - 1) * 0.08 + 0.5) * 1000;
+      setTimeout(() => setPrizeArrived(true), arrivalDelay);
     } else {
       // push u otro: sin animación de fichas, descongelar rápido
       setTimeout(() => setFrozenChips(null), 600);
@@ -997,21 +1011,6 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                 <div className="flex items-end justify-center gap-1.5 transition-transform duration-300">
                   <ChipStack chips={circleChips} size={34} />
                 </div>
-
-                <AnimatePresence>
-                  {showResult && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer.bjDelta || 0) > 0 && (
-                    <motion.div
-                      key="prize-chips"
-                      layout
-                      initial={{ x: -20, y: -40, opacity: 0, scale: 0.6 }}
-                      animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.6 }}
-                      transition={{ type: 'spring', stiffness: 280, damping: 22, delay: 0.25 }}
-                    >
-                      <ChipStack chips={myPlayer.bjResult === 'win' ? circleChips : chipsFromAmount(Math.abs(myPlayer.bjDelta || 0))} size={34} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </motion.div>
             ) : <span key="empty" />}
           </AnimatePresence>
