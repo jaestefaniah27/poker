@@ -575,6 +575,19 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const [showRebuyModal, setShowRebuyModal] = useState(false);
   const [rebuyTierIndex, setRebuyTierIndex] = useState(1);
 
+  const initialNetWorthRef = useRef<number | null>(null);
+  const lastValidDiffRef = useRef<number>(0);
+
+  if (myPlayer) {
+    if (initialNetWorthRef.current === null) {
+      initialNetWorthRef.current = user.balance + myPlayer.chips + (myPlayer.bet || 0);
+    }
+    if (phase === 'betting' || phase === 'waiting') {
+      const currentNetWorth = user.balance + myPlayer.chips + (myPlayer.bet || 0);
+      lastValidDiffRef.current = currentNetWorth - (initialNetWorthRef.current || currentNetWorth);
+    }
+  }
+
   useEffect(() => {
     if (phase === 'betting' && myBet === 0) { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
     else if (phase === 'waiting') { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
@@ -971,8 +984,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             ← Salir
           </button>
           {myPlayer && (() => {
-            const totalEnMesa = myPlayer.chips + (myPlayer.bet || 0);
-            const diff = totalEnMesa - room.buyIn;
+            const diff = lastValidDiffRef.current;
             return (
               <span className={`text-[10px] font-bold px-1 ${diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-gray-500'}`}>
                 {diff > 0 ? '+' : ''}{fmtChips(diff)}
