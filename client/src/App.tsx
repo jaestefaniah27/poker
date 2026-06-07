@@ -15,16 +15,58 @@ import Slider from './components/Slider';
 import BlackjackTable from './components/BlackjackTable';
 import type { Room, Player, PublicUser } from '../../shared/types';
 
-const ConnectionOverlay = ({ isConnected }: { isConnected: boolean }) => {
-  if (isConnected) return null;
-  return (
-    <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center backdrop-blur-sm transition-opacity duration-300">
-      <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-6"></div>
-      <h2 className="text-2xl font-bold text-emerald-500 mb-2">Conexión perdida</h2>
-      <p className="text-gray-300 animate-pulse font-medium">Reconectando con el servidor...</p>
-    </div>
-  );
-};
+const AppSkeleton = ({ hasToken }: { hasToken: boolean }) => (
+  <div className="min-h-screen bg-background font-sans">
+    {hasToken ? (
+      <div className="h-full w-full overflow-hidden flex flex-col items-center" style={{ padding: 'max(1.5rem, env(safe-area-inset-top, 0px)) 1.5rem max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
+        <div className="w-full max-w-md">
+          <header className="flex justify-between items-center mb-8 pt-4">
+            <div className="flex flex-col gap-2">
+              <div className="skeleton h-8 w-20" />
+              <div className="skeleton h-2.5 w-28" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="skeleton h-2.5 w-16" />
+                <div className="skeleton h-3 w-12" />
+              </div>
+              <div className="skeleton w-10 h-10 rounded-full" />
+            </div>
+          </header>
+          <div className="space-y-5">
+            <div className="bg-surface p-5 rounded-3xl border border-surfaceLight space-y-4">
+              <div className="skeleton h-3 w-48" />
+              <div className="flex gap-2">
+                <div className="skeleton flex-1 h-16 rounded-2xl" />
+                <div className="skeleton flex-1 h-16 rounded-2xl" />
+                <div className="skeleton flex-1 h-16 rounded-2xl" />
+              </div>
+            </div>
+            <div className="skeleton h-4 w-24" />
+            <div className="space-y-3">
+              <div className="skeleton h-16 w-full rounded-2xl" />
+              <div className="skeleton h-16 w-full rounded-2xl" />
+              <div className="skeleton h-16 w-full rounded-2xl" />
+            </div>
+          </div>
+        </div>
+      </div>
+    ) : (
+      <div className="flex items-center justify-center p-4 h-full">
+        <div className="max-w-sm w-full space-y-8">
+          <div className="flex flex-col items-center gap-3">
+            <div className="skeleton h-12 w-32" />
+            <div className="skeleton h-3 w-20" />
+          </div>
+          <div className="bg-surface p-6 rounded-3xl border border-surfaceLight space-y-4">
+            <div className="skeleton h-14 w-full rounded-2xl" />
+            <div className="skeleton h-14 w-full rounded-2xl" />
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
 
 function App() {
   const [isConnected, setIsConnected] = useState(socket.connected);
@@ -429,30 +471,19 @@ function App() {
     if (currentRoom) socket.emit('restartTournament', { roomId: currentRoom.id });
   };
 
-  if (!user && initializing) {
-    return (
-      <>
-        <ConnectionOverlay isConnected={isConnected} />
-        <div className="min-h-screen bg-background text-primary flex items-center justify-center font-sans">
-          <div className="animate-pulse text-gray-500 text-sm tracking-widest uppercase">Cargando…</div>
-        </div>
-      </>
-    );
+  const hasToken = !!getStorage().getItem('pokerToken');
+
+  if (!isConnected || (!user && initializing)) {
+    return <AppSkeleton hasToken={hasToken || !!user} />;
   }
 
   if (!user) {
-    return (
-      <>
-        <ConnectionOverlay isConnected={isConnected} />
-        <LoginScreen onLogin={handleLogin} />
-      </>
-    );
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   if (!currentRoom) {
     return (
       <>
-        <ConnectionOverlay isConnected={isConnected} />
         <Lobby
           user={user}
           token={token}
@@ -470,7 +501,6 @@ function App() {
   if (currentRoom.gameType === 'blackjack') {
     return (
       <>
-        <ConnectionOverlay isConnected={isConnected} />
         <BlackjackTable room={currentRoom} user={user} onLeave={leaveRoom} />
       </>
     );
@@ -513,7 +543,6 @@ function App() {
 
   return (
     <>
-      <ConnectionOverlay isConnected={isConnected} />
       {restartCountdown !== null && (
         <div className="fixed top-0 inset-x-0 z-[300] bg-orange-600 text-white text-center py-2 px-4 text-sm font-bold shadow-lg" style={{ paddingTop: 'max(8px, env(safe-area-inset-top))' }}>
           ⚠️ Servidor reiniciando en {restartCountdown}s — tus fichas se guardan automáticamente
