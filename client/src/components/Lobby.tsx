@@ -129,6 +129,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     });
   };
 
+  const handleAdminAddBalance1B = () => {
+    socket.emit('adminAddBalance1B', { token }, (res: any) => {
+      if (res?.user) onUpdateUser(res.user);
+    });
+  };
+
   const handleAdminAddXp = () => {
     socket.emit('adminAddXp', { token }, (res: any) => {
       if (res?.user) onUpdateUser(res.user);
@@ -339,18 +345,26 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               </button>
             </div>
             {user.name === 'Jorge' && (
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAdminAddBalance}
+                    className="flex-1 py-2 rounded-2xl text-xs font-bold text-red-400 border border-red-900/40 bg-red-500/8 active:scale-95 transition-all"
+                  >
+                    💸 +20M (Admin)
+                  </button>
+                  <button
+                    onClick={handleAdminAddXp}
+                    className="flex-1 py-2 rounded-2xl text-xs font-bold text-amber-400 border border-amber-900/40 bg-amber-500/8 active:scale-95 transition-all"
+                  >
+                    ⭐ +1000 XP (Admin)
+                  </button>
+                </div>
                 <button
-                  onClick={handleAdminAddBalance}
-                  className="flex-1 py-2 rounded-2xl text-xs font-bold text-red-400 border border-red-900/40 bg-red-500/8 active:scale-95 transition-all"
+                  onClick={handleAdminAddBalance1B}
+                  className="w-full py-2 rounded-2xl text-xs font-bold text-emerald-400 border border-emerald-900/40 bg-emerald-500/8 active:scale-95 transition-all"
                 >
-                  💸 +20M (Admin)
-                </button>
-                <button
-                  onClick={handleAdminAddXp}
-                  className="flex-1 py-2 rounded-2xl text-xs font-bold text-amber-400 border border-amber-900/40 bg-amber-500/8 active:scale-95 transition-all"
-                >
-                  ⭐ +1000 XP (Admin)
+                  💸 +1B (Admin)
                 </button>
               </div>
             )}

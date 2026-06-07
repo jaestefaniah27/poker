@@ -150,6 +150,14 @@ export const authHandlers = (socket: Socket) => {
     callback({ ok: true, newBalance, user: updated ? toPublicUser(updated) : undefined });
   });
 
+  socket.on('adminAddBalance1B', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    const newBalance = await applyBalanceDelta(user.id, 1_000_000_000);
+    const updated = await getUser(user.id);
+    callback({ ok: true, newBalance, user: updated ? toPublicUser(updated) : undefined });
+  });
+
   socket.on('adminAddXp', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
