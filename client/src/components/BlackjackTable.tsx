@@ -355,9 +355,9 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
               key={`${i}-${c.rank}-${c.suit}`}
               layout="position"
               initial={isFlipReveal
-                ? { opacity: 1, x: 0, y: 0, rotate: 0 }
-                : { x: 90, y: -70, opacity: 0, rotate: 14 }}
-              animate={{ x: 0, y: 0, opacity: 1, rotate: 0 }}
+                ? { opacity: 1, x: 0, y: 0 }
+                : { x: 90, y: -70, opacity: 0 }}
+              animate={{ x: 0, y: 0, opacity: 1 }}
               exit={hidden
                 ? { opacity: 0, transition: { duration: 0 } }
                 : { opacity: 0, scale: 0.8 }}
@@ -372,8 +372,8 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
             >
               {/* Rotación aislada en elemento interno → layout mide el tamaño completo, no la carta girada (evita carta "pequeñita") */}
               <motion.div
-                initial={isFlipReveal ? { rotateY: -90 } : false}
-                animate={{ rotateY: 0 }}
+                initial={isFlipReveal ? { rotateY: -90, rotate: 0 } : { rotateY: 0, rotate: 14 }}
+                animate={{ rotateY: 0, rotate: 0 }}
                 transition={{ type: 'spring', stiffness: 280, damping: 24 }}
                 style={{ width: cardW, height: cardH, transformStyle: 'preserve-3d' }}
               >
