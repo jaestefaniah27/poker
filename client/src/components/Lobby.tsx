@@ -410,11 +410,22 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               <p className="text-gray-500 text-center py-4 text-sm">No hay partidas activas.</p>
             ) : (
               <div className="space-y-2">
-                {rooms.map(room => {
+                {[...rooms]
+                  .sort((a, b) => {
+                    const aActive = a.playerCount > 0 ? 1 : 0;
+                    const bActive = b.playerCount > 0 ? 1 : 0;
+                    return bActive - aActive;
+                  })
+                  .map(room => {
                   const isBJ = room.gameType === 'blackjack';
+                  const hasPlayers = room.playerCount > 0;
                   return (
                   <button key={room.id} onClick={() => handleRoomClick(room)}
-                    className={`w-full flex justify-between items-center bg-background p-4 rounded-2xl border transition-colors text-left ${isBJ ? 'border-sky-900/40 hover:border-sky-600/60' : room.isTournament ? 'border-amber-900/40 hover:border-amber-600/60' : 'border-gray-800 hover:border-gray-500'}`}>
+                    className={`w-full flex justify-between items-center bg-background p-4 rounded-2xl border transition-colors text-left ${
+                      hasPlayers ? 'border-yellow-400 border-[1.5px] shadow-[0_0_12px_rgba(250,204,21,0.15)] hover:border-yellow-300'
+                      : isBJ ? 'border-sky-900/40 hover:border-sky-600/60' 
+                      : room.isTournament ? 'border-amber-900/40 hover:border-amber-600/60' 
+                      : 'border-gray-800 hover:border-gray-500'}`}>
                     <div>
                       <div className="flex items-center gap-2">
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isBJ ? 'bg-sky-500/20 text-sky-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
