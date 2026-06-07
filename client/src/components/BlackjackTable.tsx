@@ -115,7 +115,6 @@ const Chip = ({ d, size = 36 }: { d: ChipDenom; size?: number }) => {
   }
 
   const naturalH = sizeForValue(d.v);
-  const p = d.premium;
   // Large chips (100k+) always at their natural size regardless of premium
   const h = d.isCustom ? size * 1.1 : (d.premium || d.v >= 100000) ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
   const plaque = isPlaque(d.v);
