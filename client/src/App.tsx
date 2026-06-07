@@ -201,7 +201,8 @@ function App() {
     const potEl = potRef.current;
     const timeoutIds: ReturnType<typeof setTimeout>[] = [];
 
-    const potGrew = curr.pot > prev.pot && curr.phase !== 'waiting';
+    const isFirstFullState = !prev.players;
+    const potGrew = !isFirstFullState && curr.pot > prev.pot && curr.phase !== 'waiting';
     let chipsToPotMaxDelay = 0;
     const CHIP_FLIGHT_MS = 850;
     if (potGrew) {
@@ -244,8 +245,8 @@ function App() {
       });
     }
 
-    const prevMyPlayer = prev.players.find((p: any) => p.userId === user?.id);
-    const currMyPlayer = curr.players.find((p: any) => p.userId === user?.id);
+    const prevMyPlayer = prev.players?.find((p: any) => p.userId === user?.id);
+    const currMyPlayer = curr.players?.find((p: any) => p.userId === user?.id);
     if (prevMyPlayer && currMyPlayer && currMyPlayer.currentBet > prevMyPlayer.currentBet) {
       setAnimateBetIn(true);
       timeoutIds.push(setTimeout(() => setAnimateBetIn(false), 400));
@@ -1008,7 +1009,7 @@ function App() {
                     </div>
                   )
                 ) : (
-                   currentRoom.players[0]?.userId === user?.id && currentRoom.phase === 'waiting' && (
+                   currentRoom.players.find((p: any) => p.isActive)?.userId === user?.id && currentRoom.phase === 'waiting' && (
                      <div className="flex justify-center">
                        <button
                         onClick={startGame}

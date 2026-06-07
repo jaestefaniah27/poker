@@ -69,10 +69,12 @@ export const gameHandlers = (socket: Socket) => {
     clearTurnTimer(roomId);
     touchRoom(roomId);
     if (nextHand(roomId)) {
-      startGame(roomId);
-      armTurnTimer(roomId, true);
+      const started = startGame(roomId);
+      if (started) {
+        armTurnTimer(roomId, true);
+        io.to(roomId).emit('gameStarted');
+      }
       broadcastRoom(roomId);
-      io.to(roomId).emit('gameStarted');
     } else {
       broadcastRoom(roomId);
     }

@@ -309,6 +309,8 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
   player.chips = 0;
   player.isActive = false;
   player.hasCashedOut = true;
+  player.cards = [];
+  player.handName = undefined;
 
   if (isInHand && room.gameType !== 'blackjack') {
     const signal = checkRoundEnd(room);
@@ -318,11 +320,27 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
     }
   }
 
-  // Clean up empty non-persistent room
-  if (room.players.every(p => !p.isActive) && !room.persistent) {
-    clearBlindTimer(roomId);
-    rooms.delete(roomId);
-    deleteRoomFromDB(roomId).catch(e => console.error('DB delete error', e));
+  // Clean up empty room
+  if (room.players.every(p => !p.isActive)) {
+    if (!room.persistent) {
+      clearBlindTimer(roomId);
+      rooms.delete(roomId);
+      deleteRoomFromDB(roomId).catch(e => console.error('DB delete error', e));
+    } else {
+      room.phase = 'waiting';
+      room.communityCards = [];
+      room.pot = 0;
+      room.highestBet = 0;
+      room.currentTurnIndex = -1;
+      room.winners = [];
+      room.players.forEach(p => {
+        p.cards = [];
+        p.currentBet = 0;
+        p.hasActed = false;
+        p.totalContribution = 0;
+        p.handName = undefined;
+      });
+    }
   }
   return cashOut;
 };
