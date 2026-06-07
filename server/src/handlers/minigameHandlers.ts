@@ -1,8 +1,8 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin, setJackpotUnlockLevel } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin, setJackpotUnlockLevel, spendLevelPoint } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
-import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, LevelTrack } from '../../../shared/types';
 
 export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
@@ -34,9 +34,8 @@ export const minigameHandlers = (socket: Socket) => {
     const nextAt = last + COOLDOWN_MS;
     if (now < nextAt) { callback({ error: 'Demasiado pronto', nextClaimAt: nextAt }); return; }
 
-    // Weighted random selection from STAKE_TIERS values
-    // 1k, 5k, 10k, 25k, 50k, 100k, 250k, 500k
-    const options = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000];
+    // Premios según el nivel de ruleta del jugador (8 valores).
+    const options = ruletaOptionsFor(dbUser.ruleta_level ?? 0);
     const weights = [35, 25, 18, 12, 6, 3, 0.8, 0.2];
     let totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
@@ -120,6 +119,17 @@ export const minigameHandlers = (socket: Socket) => {
 
   socket.on('getJackpotState', (callback) => {
     callback(getJackpotState());
+  });
+
+  socket.on('spendLevelPoint', async ({ token, track }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    const valid: LevelTrack[] = ['paguita', 'dieta', 'ruleta', 'trivia'];
+    if (!valid.includes(track)) { callback({ error: 'Mejora inválida' }); return; }
+    const result = await spendLevelPoint(user.id, track as LevelTrack);
+    if (!result.ok) { callback({ error: result.error }); return; }
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
   });
 
   socket.on('unlockJackpotLevel', async ({ token }, callback) => {

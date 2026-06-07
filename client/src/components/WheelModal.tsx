@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
+import { ruletaOptionsFor } from '../../../shared/types';
 
 interface WheelModalProps {
   user: any;
@@ -9,7 +10,6 @@ interface WheelModalProps {
   onUpdateUser: (u: any) => void;
 }
 
-const ALL_OPTIONS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000];
 const COLORS = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
 const DARK   = ['#4338ca','#0369a1','#047857','#b45309','#b91c1c','#6d28d9','#be185d','#0f766e'];
 
@@ -23,7 +23,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 const CX = 140, CY = 140, R = 122;
-const N = ALL_OPTIONS.length;
+const N = 8; // siempre 8 sectores
 const DEG = 360 / N;
 
 function polar(r: number, deg: number) {
@@ -45,7 +45,7 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
   const [wonSpins, setWonSpins] = useState<number>(10);
   const [hasSpun, setHasSpun] = useState(false);
 
-  const wheelOptions = useMemo(() => shuffle(ALL_OPTIONS), []);
+  const wheelOptions = useMemo(() => shuffle(ruletaOptionsFor(user.ruletaLevel ?? 0)), [user.ruletaLevel]);
   const sliceAngle = DEG;
 
   const handleSpin = () => {

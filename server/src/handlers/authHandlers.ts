@@ -1,8 +1,9 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta } from '../db';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
+import { levelFromXp } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser } from '../roomManager';
 
@@ -102,7 +103,7 @@ export const authHandlers = (socket: Socket) => {
 
   socket.on('getLeaderboard', async (_data, callback) => {
     const users = await getAllUsersRanked();
-    callback(users.map(u => ({ name: u.name, balance: u.balance, avatar: u.avatar || u.id })));
+    callback(users.map(u => ({ name: u.name, balance: u.balance, avatar: u.avatar || u.id, level: levelFromXp(u.xp ?? 0) })));
   });
 
   socket.on('getAdminUsers', async ({ token }, callback) => {
@@ -135,6 +136,22 @@ export const authHandlers = (socket: Socket) => {
     const newBalance = await applyBalanceDelta(user.id, 20_000_000);
     const updated = await getUser(user.id);
     callback({ ok: true, newBalance, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('adminAddXp', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    await addXp(user.id, 1000);
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('adminResetXp', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    await resetUserLevels(user.id);
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
   });
 
   socket.on('adminDeleteUser', async ({ token, targetId }, callback) => {

@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { getRooms, createRoom, getRoom, joinRoom, leaveRoom } from '../roomManager';
 import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR } from '../pokerEngine';
 import { authUser, broadcastRoom, armTurnTimer, clearTurnTimer, io } from '../socketHelpers';
-import { applyBalanceDelta } from '../db';
+import { applyBalanceDelta, getUser, toPublicUser } from '../db';
+import { levelFromXp } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { maybeStartBlackjack, handleBlackjackLeave, clearBlackjackTimers } from './blackjackHandlers';
 
@@ -61,6 +62,7 @@ export const roomHandlers = (socket: Socket) => {
       hasActed: false,
       isActive: true,
       totalContribution: 0,
+      level: levelFromXp(dbUser.xp ?? 0),
       lastBuyIn: isBJ ? buyIn : undefined
     });
 
@@ -102,6 +104,9 @@ export const roomHandlers = (socket: Socket) => {
     if (cashOut) {
       const newBalance = await applyBalanceDelta(cashOut.userId, cashOut.chips);
       socket.emit('balanceUpdated', { balance: newBalance });
+      // Refrescar user completo (nivel/XP ganados en la mesa) para el lobby.
+      const u = await getUser(cashOut.userId);
+      if (u) socket.emit('userUpdated', toPublicUser(u));
     }
     if (wasBlackjack) {
       const after = getRoom(roomId);

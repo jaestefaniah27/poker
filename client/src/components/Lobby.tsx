@@ -7,10 +7,11 @@ import SlotIcon from './SlotIcon';
 import { AnimatePresence } from 'framer-motion';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
-import { BLIND_LEVEL_DURATIONS } from '../../../shared/types';
+import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
 import TriviaModal from './TriviaModal';
 import OnlinePlayersModal from './OnlinePlayersModal';
+import LevelsModal from './LevelsModal';
 
 interface LobbyProps {
   user: { 
@@ -24,6 +25,13 @@ interface LobbyProps {
     freeSpinsLeft?: number;
     freeSpinValue?: number;
     lastFreeSpinsClaim?: number | null;
+    level?: number;
+    xp?: number;
+    levelPoints?: number;
+    paguitaLevel?: number;
+    dietaLevel?: number;
+    ruletaLevel?: number;
+    triviaLevel?: number;
   };
   token: string | null;
   rooms: any[];
@@ -45,6 +53,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showJackpot, setShowJackpot] = useState(false);
   const [showTrivia, setShowTrivia] = useState(false);
   const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
+  const [showLevels, setShowLevels] = useState(false);
 
   // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
@@ -116,6 +125,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     });
   };
 
+  const handleAdminAddXp = () => {
+    socket.emit('adminAddXp', { token }, (res: any) => {
+      if (res?.user) onUpdateUser(res.user);
+    });
+  };
+
   useEffect(() => {
     socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
       if (Array.isArray(data)) setLeaderboard(data);
@@ -181,6 +196,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       {showWheelModal && (
         <WheelModal user={user} token={token} onClose={() => setShowWheelModal(false)} onUpdateUser={onUpdateUser} />
       )}
+      {showLevels && (
+        <LevelsModal user={user} token={token} onClose={() => setShowLevels(false)} onUpdateUser={onUpdateUser} />
+      )}
       {showProfile && (
         <ProfileModal user={user} token={token} onClose={() => setShowProfile(false)} onUpdate={onUpdateUser} />
       )}
@@ -218,6 +236,19 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
             )}
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowLevels(true)}
+              title="Niveles"
+              className="relative flex flex-col items-center justify-center px-2.5 py-1 rounded-xl border border-amber-500/30 bg-amber-500/10 active:scale-95 transition-all"
+            >
+              <span className="text-[8px] text-amber-300/80 uppercase tracking-wider font-bold leading-none">Nv</span>
+              <span className="text-sm font-black text-amber-300 leading-none">{user.level ?? 1}</span>
+              {(user.levelPoints ?? 0) > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black text-white animate-pulse">
+                  {user.levelPoints}
+                </span>
+              )}
+            </button>
             <div className="flex flex-col items-end leading-tight">
               <span className="text-xs text-gray-400 font-medium">{user.name}</span>
               <span className={`font-mono text-sm ${user.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
@@ -260,7 +291,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 style={{ borderColor: dailyAvailable ? '#f59e0b' : '#374151', background: dailyAvailable ? 'rgba(245,158,11,0.1)' : 'transparent' }}
               >
                 <span className="text-[10px] font-extrabold tracking-wider text-center">PAGUITA</span>
-                <span className="text-xs font-bold text-amber-400">+10.000</span>
+                <span className="text-xs font-bold text-amber-400">+{fmtChips(dailyAmountFor(user.paguitaLevel ?? 0))}</span>
                 <span className="text-[9px] text-gray-400 text-center">{dailyAvailable ? 'Bono diario' : 'Mañana'}</span>
               </button>
 
@@ -272,7 +303,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 style={{ borderColor: hourlyAvailable ? '#34d399' : '#374151', background: hourlyAvailable ? 'rgba(52,211,153,0.1)' : 'transparent' }}
               >
                 <span className="text-[10px] font-extrabold tracking-wider text-center">DIETAS</span>
-                <span className="text-xs font-bold text-emerald-400">+1.000</span>
+                <span className="text-xs font-bold text-emerald-400">+{fmtChips(hourlyAmountFor(user.dietaLevel ?? 0))}</span>
                 <span className="text-[9px] text-gray-400 text-center">{hourlyAvailable ? '30 min' : `${hourlyMM}:${hourlySS}`}</span>
               </button>
 
@@ -293,12 +324,20 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               </button>
             </div>
             {user.name === 'Jorge' && (
-              <button
-                onClick={handleAdminAddBalance}
-                className="mt-3 w-full py-2 rounded-2xl text-xs font-bold text-red-400 border border-red-900/40 bg-red-500/8 active:scale-95 transition-all"
-              >
-                💸 +20M (Admin)
-              </button>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={handleAdminAddBalance}
+                  className="flex-1 py-2 rounded-2xl text-xs font-bold text-red-400 border border-red-900/40 bg-red-500/8 active:scale-95 transition-all"
+                >
+                  💸 +20M (Admin)
+                </button>
+                <button
+                  onClick={handleAdminAddXp}
+                  className="flex-1 py-2 rounded-2xl text-xs font-bold text-amber-400 border border-amber-900/40 bg-amber-500/8 active:scale-95 transition-all"
+                >
+                  ⭐ +1000 XP (Admin)
+                </button>
+              </div>
             )}
           </div>
 
@@ -454,8 +493,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                       <span className="w-7 text-center text-sm font-bold shrink-0">
                         {i < 3 ? medals[i] : <span className="text-gray-600">{i + 1}</span>}
                       </span>
-                      <div className="shrink-0">
+                      <div className="relative shrink-0">
                         <Avatar seed={entry.avatar} size={28} />
+                        <span className="absolute -top-1 -left-1 z-10 min-w-[14px] h-3.5 px-0.5 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[8px] font-black text-black leading-none">
+                          {entry.level ?? 1}
+                        </span>
                       </div>
                       <span className={`text-sm font-medium truncate flex-1 ${isMe ? 'text-emerald-300' : 'text-gray-300'}`}>
                         {entry.name}

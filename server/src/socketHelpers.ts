@@ -22,7 +22,7 @@ export const safeTimeout = (fn: () => void, ms: number, label = 'timeout'): Node
 };
 
 import { Room } from './pokerEngine';
-import { getRoom, handlePlayerAction, endRound, gatherBetsToPot, advanceStreet, bettingClosed, contenders } from './roomManager';
+import { getRoom, handlePlayerAction, endRound, gatherBetsToPot, advanceStreet, bettingClosed, contenders, setRoomBroadcastHook } from './roomManager';
 import { sessions, SESSION_TTL_MS, turnTimers, TurnTimer } from './state';
 
 export const issueToken = async (userId: string): Promise<string> => {
@@ -123,6 +123,9 @@ export const broadcastRoom = (roomId: string) => {
   });
   schedulePersist(roomId);
 };
+
+// roomManager re-emite la sala tras refrescar niveles (XP de cada mano).
+setRoomBroadcastHook(broadcastRoom);
 
 export const clearTurnTimer = (roomId: string) => {
   const t = turnTimers.get(roomId);

@@ -22,6 +22,7 @@ export interface Player {
   hasCashedOut?: boolean;
   isOnline?: boolean;
   reducedTime?: boolean;
+  level?: number; // nivel de cuenta (para mostrar en la mesa)
   handName?: string;
   totalContribution: number;
   bustedSeq?: number; // Orden de eliminación en modo torneo (1 = primer eliminado)
@@ -119,6 +120,14 @@ export interface PublicUser {
   freeSpinValue?: number;
   lastFreeSpinsClaim?: number | null;
   jackpotUnlockLevel?: number; // 0=locked, 1..10 = tiers unlocked
+  // --- Niveles personales ---
+  xp?: number;            // XP acumulada total
+  level?: number;         // nivel derivado de xp (empieza en 1)
+  levelPoints?: number;   // puntos de mejora sin gastar
+  paguitaLevel?: number;  // 0 = base 10k, cada nivel x3
+  dietaLevel?: number;    // 0 = base 1k, cada nivel x2
+  ruletaLevel?: number;   // 0 = base, índice en RULETA_LEVELS
+  triviaLevel?: number;   // 0 = base, nº de recompensas malas eliminadas
 }
 
 export const STAKE_TIERS: number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];
@@ -149,4 +158,162 @@ export const BLIND_LEVEL_DURATIONS: { key: string; label: string; sub: string; m
 export const nextBlinds = (bigBlind: number): { smallBlind: number; bigBlind: number } => {
   const target = bigBlind * 2;
   return { bigBlind: target, smallBlind: Math.max(1, Math.round(target / 2)) };
+};
+
+// ============================================================
+// Sistema de niveles personales
+// ============================================================
+
+// XP que se gana jugando / acertando trivia.
+export const XP_PER_POKER_HAND = 10;
+export const XP_PER_BLACKJACK_HAND = 6;
+export const XP_PER_TRIVIA_CORRECT = 8;
+
+// XP TOTAL acumulada necesaria para estar EN el nivel dado. Nivel mínimo = 1.
+// Curva cuadrática suave: L2=100, L3=300, L4=600, L5=1000, L6=1500...
+export const xpForLevel = (level: number): number => {
+  if (level <= 1) return 0;
+  return 50 * (level - 1) * level;
+};
+
+// Nivel derivado de la XP acumulada.
+export const levelFromXp = (xp: number): number => {
+  let lvl = 1;
+  while (xpForLevel(lvl + 1) <= xp) lvl++;
+  return lvl;
+};
+
+// Puntos de mejora disponibles = (nivel - 1) - puntos ya gastados en tracks.
+export const availableLevelPoints = (
+  level: number,
+  paguitaLevel: number,
+  dietaLevel: number,
+  ruletaLevel: number,
+  triviaLevel: number
+): number => Math.max(0, (level - 1) - (paguitaLevel + dietaLevel + ruletaLevel + triviaLevel));
+
+// --- Paguita (bono diario): nv.0 base 10k → nv.10 máx 10M.
+//     Sube ~x3 al principio, luego lineal para no dispararse. ---
+export const PAGUITA_AMOUNTS = [
+  10_000,    // 0
+  30_000,    // 1
+  90_000,    // 2
+  250_000,   // 3
+  500_000,   // 4
+  1_000_000, // 5
+  2_000_000, // 6
+  4_000_000, // 7
+  6_000_000, // 8
+  8_000_000, // 9
+  10_000_000,// 10 (máx)
+];
+export const PAGUITA_MAX_LEVEL = PAGUITA_AMOUNTS.length - 1; // 10
+export const dailyAmountFor = (paguitaLevel: number): number =>
+  PAGUITA_AMOUNTS[Math.max(0, Math.min(paguitaLevel, PAGUITA_MAX_LEVEL))];
+
+// --- Dietas (bono cada 30 min): nv.0 base 1k → nv.10 máx 1M.
+//     Sube x2 al principio, luego lineal. ---
+export const DIETA_AMOUNTS = [
+  1_000,     // 0
+  2_000,     // 1
+  4_000,     // 2
+  8_000,     // 3
+  16_000,    // 4
+  50_000,    // 5
+  100_000,   // 6
+  250_000,   // 7
+  500_000,   // 8
+  750_000,   // 9
+  1_000_000, // 10 (máx)
+];
+export const DIETA_MAX_LEVEL = DIETA_AMOUNTS.length - 1; // 10
+export const hourlyAmountFor = (dietaLevel: number): number =>
+  DIETA_AMOUNTS[Math.max(0, Math.min(dietaLevel, DIETA_MAX_LEVEL))];
+
+// --- Ruleta: cada nivel mejora un valor del set de 8 premios ---
+const K = 1_000, M = 1_000_000;
+export const RULETA_LEVELS: number[][] = [
+  [1*K, 5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 0 (base)
+  [1*M, 5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 1
+  [1*M, 2*M, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 2
+  [1*M, 2*M, 5*M, 25*K, 50*K, 100*K, 250*K, 500*K],  // 3
+  [1*M, 2*M, 5*M, 10*M, 50*K, 100*K, 250*K, 500*K],  // 4
+  [1*M, 2*M, 5*M, 10*M, 100*K, 100*K, 250*K, 500*K], // 5
+  [1*M, 2*M, 5*M, 10*M, 100*K, 250*K, 250*K, 500*K], // 6
+  [1*M, 2*M, 5*M, 10*M, 100*K, 250*K, 500*K, 500*K], // 7
+  [1*M, 2*M, 5*M, 10*M, 100*K, 250*K, 500*K, 1*M],   // 8
+  [1*M, 2*M, 5*M, 10*M, 250*K, 250*K, 500*K, 1*M],   // 9
+  [1*M, 2*M, 5*M, 10*M, 250*K, 500*K, 500*K, 1*M],   // 10
+  [1*M, 2*M, 5*M, 10*M, 250*K, 500*K, 1*M, 1*M],     // 11
+  [1*M, 2*M, 5*M, 10*M, 500*K, 500*K, 1*M, 2*M],     // 12
+  [1*M, 2*M, 5*M, 10*M, 1*M, 500*K, 1*M, 2*M],       // 13
+  [1*M, 2*M, 5*M, 10*M, 2*M, 1*M, 1*M, 2*M],         // 14
+  [1*M, 2*M, 5*M, 10*M, 2*M, 5*M, 2*M, 2*M],         // 15
+  [1*M, 2*M, 5*M, 10*M, 2*M, 5*M, 10*M, 5*M],        // 16
+  [2*M, 5*M, 5*M, 10*M, 2*M, 5*M, 10*M, 5*M],        // 17
+  [5*M, 10*M, 5*M, 10*M, 2*M, 5*M, 10*M, 5*M],       // 18
+  [5*M, 10*M, 5*M, 10*M, 5*M, 5*M, 10*M, 10*M],      // 19
+  [10*M, 10*M, 5*M, 10*M, 5*M, 10*M, 10*M, 10*M],    // 20
+  [10*M, 10*M, 10*M, 10*M, 5*M, 10*M, 10*M, 10*M],   // 21 (máx)
+];
+export const RULETA_MAX_LEVEL = RULETA_LEVELS.length - 1; // 21
+export const ruletaOptionsFor = (ruletaLevel: number): number[] =>
+  RULETA_LEVELS[Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL))];
+
+// --- Trivia: track de 10 niveles ---
+//   Las mejoras de "quitar peor premio" y "reducir tiempo" van INTERCALADAS.
+//   Última mejora: las recompensas de giro dan 5 giros de jackpot en vez de 1.
+export type TriviaReward = { type: 'spin'; value: number } | { type: 'chips'; amount: number };
+const TRIVIA_TIERS = [
+  1_000, 2_500, 5_000, 10_000, 25_000, 50_000, 100_000,
+  250_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000,
+];
+
+// Qué desbloquea cada nivel (índice 0 = nivel 1 ... índice 9 = nivel 10).
+type TriviaUpgrade = 'removal' | 'time' | 'multispin';
+const TRIVIA_SCHEDULE: TriviaUpgrade[] = [
+  'removal', // 1
+  'time',    // 2
+  'removal', // 3
+  'time',    // 4
+  'removal', // 5
+  'time',    // 6
+  'removal', // 7
+  'removal', // 8
+  'removal', // 9
+  'multispin', // 10
+];
+export const TRIVIA_MAX_LEVEL = TRIVIA_SCHEDULE.length; // 10
+export const TRIVIA_REWARD_MAX_LEVEL = TRIVIA_TIERS.length - 1; // 6 (máx removals)
+
+const countUpgrades = (triviaLevel: number, kind: TriviaUpgrade): number =>
+  TRIVIA_SCHEDULE.slice(0, Math.max(0, Math.min(triviaLevel, TRIVIA_MAX_LEVEL))).filter(u => u === kind).length;
+
+// Recompensas disponibles: deja siempre al menos el tier de 100k de cada tipo.
+export const triviaRewardsFor = (triviaLevel: number): TriviaReward[] => {
+  const removals = Math.min(countUpgrades(triviaLevel, 'removal'), TRIVIA_REWARD_MAX_LEVEL);
+  const remaining = TRIVIA_TIERS.slice(removals);
+  return [
+    ...remaining.map((value): TriviaReward => ({ type: 'spin', value })),
+    ...remaining.map((amount): TriviaReward => ({ type: 'chips', amount })),
+  ];
+};
+
+// Cooldown entre preguntas según mejoras de tiempo acumuladas.
+// 0 mejoras = 15s, 1ª = 10s, 2ª = 5s, 3ª = 1s.
+export const TRIVIA_COOLDOWNS_S = [15, 10, 5, 1];
+export const triviaCooldownMs = (triviaLevel: number): number => {
+  const timeUpgrades = Math.min(countUpgrades(triviaLevel, 'time'), TRIVIA_COOLDOWNS_S.length - 1);
+  return TRIVIA_COOLDOWNS_S[timeUpgrades] * 1000;
+};
+
+// Última mejora: las recompensas de giro dan 5 giros en vez de 1.
+export const triviaSpinCount = (triviaLevel: number): number => (countUpgrades(triviaLevel, 'multispin') > 0 ? 5 : 1);
+
+export type LevelTrack = 'paguita' | 'dieta' | 'ruleta' | 'trivia';
+export const LEVEL_TRACK_MAX: Record<LevelTrack, number> = {
+  paguita: PAGUITA_MAX_LEVEL,
+  dieta: DIETA_MAX_LEVEL,
+  ruleta: RULETA_MAX_LEVEL,
+  trivia: TRIVIA_MAX_LEVEL,
 };

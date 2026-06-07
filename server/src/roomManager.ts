@@ -1,7 +1,44 @@
-import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType } from '../../shared/types';
+import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 import { dealBlackjack, dealerPlay as bjDealerPlay, resolveBlackjack, resetBlackjackHand, handValue as bjHandValue } from './blackjackEngine';
-import { deleteRoomFromDB, recordMatchHistory } from './db';
+import { deleteRoomFromDB, recordMatchHistory, addXp, getUser } from './db';
+
+// Calidad de mano de poker → rango 1..10 (pokersolver hand.name en inglés).
+const HAND_RANK: Record<string, number> = {
+  'High Card': 1, 'Pair': 2, 'Two Pair': 3, 'Three of a Kind': 4,
+  'Straight': 5, 'Flush': 6, 'Full House': 7, 'Four of a Kind': 8,
+  'Straight Flush': 9, 'Royal Flush': 10,
+};
+const handRank = (name?: string): number => (name && HAND_RANK[name]) || 1;
+
+// XP poker: perder da poco, ganar bastante; escala con la calidad de la mano.
+const pokerXp = (won: boolean, handName?: string): number =>
+  (won ? 25 : 5) + handRank(handName) * (won ? 5 : 1);
+
+// XP blackjack: blackjack > victoria > empate > derrota.
+const blackjackXp = (result?: string): number =>
+  result === 'blackjack' ? 40 : result === 'win' ? 25 : result === 'push' ? 8 : 5;
+
+// Hook para re-emitir la sala tras refrescar niveles (lo registra socketHelpers).
+let broadcastHook: ((roomId: string) => void) | null = null;
+export const setRoomBroadcastHook = (fn: (roomId: string) => void) => { broadcastHook = fn; };
+
+// Otorga XP por mano, refresca player.level en memoria y re-emite la sala. Fire-and-forget.
+const awardHandXp = async (room: Room, entries: { userId: string; amount: number }[]) => {
+  const merged = new Map<string, number>();
+  for (const e of entries) merged.set(e.userId, (merged.get(e.userId) ?? 0) + e.amount);
+  for (const [userId, amount] of merged) {
+    try {
+      await addXp(userId, amount);
+      const u = await getUser(userId);
+      const p = room.players.find(pl => pl.userId === userId);
+      if (u && p) p.level = levelFromXp(u.xp ?? 0);
+    } catch (err) {
+      console.error('Error otorgando XP de mano:', err);
+    }
+  }
+  broadcastHook?.(room.id);
+};
 import { broadcastRoom } from './socketHelpers';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -646,6 +683,17 @@ export const endRound = (room: Room) => {
 
   bumpMaxChips(room);
 
+  // XP a todos los que jugaron esta mano: ganadores mucha, perdedores poca; escala con la mano.
+  awardHandXp(
+    room,
+    room.players
+      .filter(p => p.isActive && !p.isSpectating && p.cards.length > 0)
+      .map(p => ({
+        userId: p.userId,
+        amount: pokerXp(!!room.winners?.some(w => w.id === p.id), p.handName),
+      }))
+  ).catch(err => console.error('Error XP poker:', err));
+
   // La sala se queda en 'showdown' esperando a que llamen a nextHand()
 };
 
@@ -1003,6 +1051,14 @@ export const finishBlackjackHand = (roomId: string) => {
   room.bjPhase = 'resolve';
   room.showdownAt = Date.now();
   bumpMaxChips(room);
+
+  // XP a los que apostaron: escala con el resultado (blackjack > win > push > derrota).
+  awardHandXp(
+    room,
+    room.players
+      .filter(p => p.isActive && (p.bet || 0) > 0)
+      .map(p => ({ userId: p.userId, amount: blackjackXp(p.bjResult) }))
+  ).catch(err => console.error('Error XP blackjack:', err));
   
   // Auto-continuar a los que NO apostaron en esta ronda: no participaron,
   // así que no necesitan pulsar Continuar para admirar nada.

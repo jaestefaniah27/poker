@@ -353,6 +353,10 @@ function App() {
       setUser(prev => prev ? { ...prev, balance } : prev);
     });
 
+    socket.on('userUpdated', (u) => {
+      if (u) setUser(u);
+    });
+
     socket.on('onlineCount', ({ count }: { count: number }) => {
       setOnlineCount(count);
     });
@@ -378,6 +382,7 @@ function App() {
       socket.off('roomUpdated');
       socket.off('playSound');
       socket.off('balanceUpdated');
+      socket.off('userUpdated');
     };
   }, []);
 
@@ -534,7 +539,16 @@ function App() {
   // --- Game Table ---
   const myPlayerIndex = currentRoom.players.findIndex((p: any) => p.userId === user?.id);
   const myPlayer = myPlayerIndex !== -1 ? currentRoom.players[myPlayerIndex] : null;
-  const opponents = currentRoom.players.filter((p: any) => p.userId !== user?.id && p.isActive);
+  let opponents: any[] = [];
+  if (myPlayerIndex !== -1) {
+    const rotated = [
+      ...currentRoom.players.slice(myPlayerIndex + 1),
+      ...currentRoom.players.slice(0, myPlayerIndex)
+    ];
+    opponents = rotated.filter((p: any) => p.isActive);
+  } else {
+    opponents = currentRoom.players.filter((p: any) => p.isActive);
+  }
 
   const isDealer = (index: number) => currentRoom.dealerIndex === index;
   const isMyTurn = currentRoom.currentTurnIndex === myPlayerIndex && !myPlayer?.isSpectating;
@@ -643,7 +657,12 @@ function App() {
               className="bg-[#1a1a1a] rounded-2xl p-6 mx-6 w-full max-w-xs shadow-2xl flex flex-col items-center gap-3"
               onClick={(e) => e.stopPropagation()}
             >
-              <Avatar seed={viewPlayer.avatar || viewPlayer.userId} />
+              <div className="relative">
+                <Avatar seed={viewPlayer.avatar || viewPlayer.userId} />
+                <span className="absolute -top-1 -left-1 z-10 min-w-[18px] h-5 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[10px] font-black text-black leading-none">
+                  {(viewPlayer as any).level ?? 1}
+                </span>
+              </div>
               <p className="text-white font-semibold text-base">{viewPlayer.name}</p>
               <div className="flex flex-col items-center gap-1">
                 <span className="text-gray-400 text-xs uppercase tracking-wider">Saldo</span>
@@ -733,6 +752,9 @@ function App() {
                   )}
                   <Avatar seed={p.avatar || p.userId} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} />
                   {isDealer(indexInRoom) && <DealerBadge />}
+                  <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
+                    {p.level ?? 1}
+                  </span>
                   {hasFolded && (
                      <div className="absolute inset-0 flex items-center justify-center">
                        <span className="text-[10px] bg-black/60 px-1 rounded font-semibold text-white">Fold</span>
@@ -1045,6 +1067,9 @@ function App() {
                    </div>
                  )}
                  <Avatar seed={user.avatar} />
+                 <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
+                   {myPlayer?.level ?? user.level ?? 1}
+                 </span>
                  {isDealer(myPlayerIndex) && <DealerBadge />}
               </div>
               <div className="text-[10px] text-gray-400 font-bold">{user.name}</div>

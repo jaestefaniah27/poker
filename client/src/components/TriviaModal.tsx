@@ -12,7 +12,7 @@ interface TriviaQuestion {
 interface TriviaResult {
   correct: boolean;
   correctIndex: number;
-  reward?: { type: 'chips'; amount: number } | { type: 'spin'; value: number };
+  reward?: { type: 'chips'; amount: number } | { type: 'spin'; value: number; spins?: number };
   newBalance?: number;
   newFreeSpins?: number;
 }
@@ -163,7 +163,9 @@ export const TriviaModal = ({
                             <p className="text-emerald-200 text-sm">+{fmtChips(result.reward.amount)} fichas</p>
                           )}
                           {result.reward?.type === 'spin' && (
-                            <p className="text-purple-300 text-sm">🎰 Recompensa: giro de jackpot de {fmtChips(result.reward.value)}</p>
+                            <p className="text-purple-300 text-sm">
+                              🎰 Recompensa: {(result.reward.spins ?? 1) > 1 ? `${result.reward.spins} giros` : 'giro'} de jackpot de {fmtChips(result.reward.value)}
+                            </p>
                           )}
                         </>
                       ) : (

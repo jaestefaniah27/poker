@@ -114,6 +114,31 @@ const MIGRATIONS = [
     name: '015_jackpot_unlock_level',
     sql: 'ALTER TABLE users ADD COLUMN jackpot_unlock_level INTEGER DEFAULT 0',
     ignoreError: 'duplicate column'
+  },
+  {
+    name: '016_xp',
+    sql: 'ALTER TABLE users ADD COLUMN xp INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '017_paguita_level',
+    sql: 'ALTER TABLE users ADD COLUMN paguita_level INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '018_dieta_level',
+    sql: 'ALTER TABLE users ADD COLUMN dieta_level INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '019_ruleta_level',
+    sql: 'ALTER TABLE users ADD COLUMN ruleta_level INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '020_trivia_level',
+    sql: 'ALTER TABLE users ADD COLUMN trivia_level INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
   }
 ];
 
@@ -186,23 +211,43 @@ export interface UserRow {
   free_spin_value: number;
   last_free_spins_claim: number;
   jackpot_unlock_level: number;
+  xp: number;
+  paguita_level: number;
+  dieta_level: number;
+  ruleta_level: number;
+  trivia_level: number;
 }
 
-import { PublicUser } from '../../shared/types';
+import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX } from '../../shared/types';
 
-export const toPublicUser = (row: UserRow): PublicUser => ({
-  id: row.id,
-  name: row.name,
-  balance: row.balance,
-  avatar: row.avatar || row.id,
-  hasPassword: !!row.password_hash,
-  lastDailyClaim: row.last_daily_claim ?? null,
-  lastHourlyClaim: row.last_hourly_claim ?? null,
-  freeSpinsLeft: row.free_spins_left ?? 0,
-  freeSpinValue: row.free_spin_value ?? 0,
-  lastFreeSpinsClaim: row.last_free_spins_claim ?? 0,
-  jackpotUnlockLevel: row.jackpot_unlock_level ?? 0,
-});
+export const toPublicUser = (row: UserRow): PublicUser => {
+  const xp = row.xp ?? 0;
+  const level = levelFromXp(xp);
+  const paguitaLevel = row.paguita_level ?? 0;
+  const dietaLevel = row.dieta_level ?? 0;
+  const ruletaLevel = row.ruleta_level ?? 0;
+  const triviaLevel = row.trivia_level ?? 0;
+  return {
+    id: row.id,
+    name: row.name,
+    balance: row.balance,
+    avatar: row.avatar || row.id,
+    hasPassword: !!row.password_hash,
+    lastDailyClaim: row.last_daily_claim ?? null,
+    lastHourlyClaim: row.last_hourly_claim ?? null,
+    freeSpinsLeft: row.free_spins_left ?? 0,
+    freeSpinValue: row.free_spin_value ?? 0,
+    lastFreeSpinsClaim: row.last_free_spins_claim ?? 0,
+    jackpotUnlockLevel: row.jackpot_unlock_level ?? 0,
+    xp,
+    level,
+    levelPoints: availableLevelPoints(level, paguitaLevel, dietaLevel, ruletaLevel, triviaLevel),
+    paguitaLevel,
+    dietaLevel,
+    ruletaLevel,
+    triviaLevel,
+  };
+};
 
 export const getAllUsersRanked = async (): Promise<UserRow[]> => {
   return dbAll<UserRow>("SELECT * FROM users WHERE name != 'Jorge' ORDER BY balance DESC");
@@ -264,8 +309,6 @@ export const applyBalanceDelta = async (id: string, delta: number): Promise<numb
   return row?.balance ?? 0;
 };
 
-const DAILY_AMOUNT = 10_000;
-const HOURLY_AMOUNT = 1_000;
 const HOURLY_COOLDOWN_MS = 30 * 60 * 1000;
 
 export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: number }> => {
@@ -273,7 +316,8 @@ export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?
   if (!row) return { ok: false, error: 'Usuario no encontrado' };
   const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
   if (row.last_daily_claim === today) return { ok: false, error: 'Ya recogiste el bono hoy' };
-  await dbRun('UPDATE users SET balance = balance + ?, last_daily_claim = ? WHERE id = ?', [DAILY_AMOUNT, today, id]);
+  const amount = dailyAmountFor(row.paguita_level ?? 0);
+  await dbRun('UPDATE users SET balance = balance + ?, last_daily_claim = ? WHERE id = ?', [amount, today, id]);
   const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   return { ok: true, newBalance: updated?.balance ?? 0 };
 };
@@ -285,9 +329,49 @@ export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error
   const last = row.last_hourly_claim ?? 0;
   const nextAt = last + HOURLY_COOLDOWN_MS;
   if (now < nextAt) return { ok: false, error: 'Demasiado pronto', nextClaimAt: nextAt };
-  await dbRun('UPDATE users SET balance = balance + ?, last_hourly_claim = ? WHERE id = ?', [HOURLY_AMOUNT, now, id]);
+  const amount = hourlyAmountFor(row.dieta_level ?? 0);
+  await dbRun('UPDATE users SET balance = balance + ?, last_hourly_claim = ? WHERE id = ?', [amount, now, id]);
   const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   return { ok: true, newBalance: updated?.balance ?? 0, nextClaimAt: now + HOURLY_COOLDOWN_MS };
+};
+
+// --- Niveles personales: XP y gasto de puntos ---
+export const resetUserLevels = async (id: string): Promise<void> => {
+  await dbRun(
+    'UPDATE users SET xp = 0, paguita_level = 0, dieta_level = 0, ruleta_level = 0, trivia_level = 0 WHERE id = ?',
+    [id]
+  );
+};
+
+export const addXp = async (id: string, amount: number): Promise<void> => {
+  if (amount <= 0) return;
+  await dbRun('UPDATE users SET xp = COALESCE(xp, 0) + ? WHERE id = ?', [amount, id]);
+};
+
+const TRACK_COLUMN: Record<LevelTrack, string> = {
+  paguita: 'paguita_level',
+  dieta: 'dieta_level',
+  ruleta: 'ruleta_level',
+  trivia: 'trivia_level',
+};
+
+export const spendLevelPoint = async (
+  id: string,
+  track: LevelTrack
+): Promise<{ ok: boolean; error?: string }> => {
+  const row = await dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
+  if (!row) return { ok: false, error: 'Usuario no encontrado' };
+  const level = levelFromXp(row.xp ?? 0);
+  const paguita = row.paguita_level ?? 0;
+  const dieta = row.dieta_level ?? 0;
+  const ruleta = row.ruleta_level ?? 0;
+  const trivia = row.trivia_level ?? 0;
+  const points = availableLevelPoints(level, paguita, dieta, ruleta, trivia);
+  if (points <= 0) return { ok: false, error: 'No tienes puntos disponibles' };
+  const current = { paguita, dieta, ruleta, trivia }[track];
+  if (current >= LEVEL_TRACK_MAX[track]) return { ok: false, error: 'Mejora al máximo' };
+  await dbRun(`UPDATE users SET ${TRACK_COLUMN[track]} = ${TRACK_COLUMN[track]} + 1 WHERE id = ?`, [id]);
+  return { ok: true };
 };
 
 export const recordJackpotSpin = async (userId: string, bet: number, symbols: string[], multiplier: number, winAmount: number): Promise<void> => {
@@ -380,13 +464,13 @@ export const setJackpotUnlockLevel = async (id: string, level: number): Promise<
   await dbRun('UPDATE users SET jackpot_unlock_level = ? WHERE id = ?', [level, id]);
 };
 
-export const addOneFreeSpin = async (id: string, value: number): Promise<void> => {
+export const addOneFreeSpin = async (id: string, value: number, count = 1): Promise<void> => {
   await dbRun(
     `UPDATE users SET
-      free_spins_left = free_spins_left + 1,
+      free_spins_left = free_spins_left + ?,
       free_spin_value = CASE WHEN free_spins_left = 0 THEN ? ELSE MAX(COALESCE(free_spin_value, ?), ?) END
     WHERE id = ?`,
-    [value, value, value, id]
+    [count, value, value, value, id]
   );
 };
 

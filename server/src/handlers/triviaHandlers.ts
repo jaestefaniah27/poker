@@ -1,21 +1,15 @@
 import { Socket } from 'socket.io';
 import { authUser } from '../socketHelpers';
-import { applyBalanceDelta, getUser, addOneFreeSpin, toPublicUser } from '../db';
+import { applyBalanceDelta, getUser, addOneFreeSpin, toPublicUser, addXp } from '../db';
 import { TRIVIA_QUESTIONS } from '../triviaQuestions';
-import { JACKPOT_TIERS } from '../../../shared/types';
-
-const COOLDOWN_MS = process.env.NODE_ENV === 'production' ? 10 * 1000 : 10 * 1000;
+import { triviaRewardsFor, TriviaReward, XP_PER_TRIVIA_CORRECT, triviaCooldownMs, triviaSpinCount } from '../../../shared/types';
 
 const triviaState = new Map<string, { lastAnswered: number; pendingId: number | null; seenIds: Set<number> }>();
 
-const CHIP_REWARDS = [1000, 2500, 5000, 10000, 25000, 50000, 100000];
-
-function pickReward(): { type: 'chips'; amount: number } | { type: 'spin'; value: number } {
-  if (Math.random() < 0.3) {
-    const value = JACKPOT_TIERS[Math.floor(Math.random() * JACKPOT_TIERS.length)];
-    return { type: 'spin', value };
-  }
-  return { type: 'chips', amount: CHIP_REWARDS[Math.floor(Math.random() * CHIP_REWARDS.length)] };
+// Elige recompensa del pool filtrado por el nivel de trivia del jugador.
+function pickReward(triviaLevel: number): TriviaReward {
+  const pool = triviaRewardsFor(triviaLevel);
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function pickQuestion(userId: string) {
@@ -32,8 +26,10 @@ export const triviaHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
 
+    const dbUser = await getUser(user.id);
+    const cooldownMs = triviaCooldownMs(dbUser?.trivia_level ?? 0);
     const state = triviaState.get(user.id);
-    const remaining = COOLDOWN_MS - (Date.now() - (state?.lastAnswered ?? 0));
+    const remaining = cooldownMs - (Date.now() - (state?.lastAnswered ?? 0));
     if (remaining > 0) { callback({ cooldown: Math.ceil(remaining / 1000) }); return; }
 
     // Si ya hay pregunta pendiente (salió y volvió a entrar), devolver la misma
@@ -70,18 +66,23 @@ export const triviaHandlers = (socket: Socket) => {
     const correct = answerIndex === q.correct;
     if (!correct) { callback({ correct: false, correctIndex: q.correct }); return; }
 
-    const reward = pickReward();
+    // XP por acierto (afecta nivel; se refleja en el user devuelto).
+    await addXp(user.id, XP_PER_TRIVIA_CORRECT);
+
+    const dbUser = await getUser(user.id);
+    const reward = pickReward(dbUser?.trivia_level ?? 0);
     if (reward.type === 'chips') {
       const newBalance = await applyBalanceDelta(user.id, reward.amount);
       socket.emit('balanceUpdated', { balance: newBalance });
       const updated = await getUser(user.id);
       callback({ correct: true, correctIndex: q.correct, reward, newBalance, user: updated ? toPublicUser(updated) : undefined });
     } else {
-      await addOneFreeSpin(user.id, reward.value);
+      const spins = triviaSpinCount(dbUser?.trivia_level ?? 0);
+      await addOneFreeSpin(user.id, reward.value, spins);
       const updated = await getUser(user.id);
       const newBalance = updated?.balance ?? user.balance;
       socket.emit('balanceUpdated', { balance: newBalance });
-      callback({ correct: true, correctIndex: q.correct, reward, newBalance, user: updated ? toPublicUser(updated) : undefined });
+      callback({ correct: true, correctIndex: q.correct, reward: { ...reward, spins }, newBalance, user: updated ? toPublicUser(updated) : undefined });
     }
   });
 };

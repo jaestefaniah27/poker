@@ -868,7 +868,12 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                   style={{ opacity, minWidth: 88 }}
                 >
                   <div className="flex items-center gap-1 self-stretch">
-                    <Avatar seed={p.avatar || p.userId} size={16} />
+                    <div className="relative shrink-0">
+                      <Avatar seed={p.avatar || p.userId} size={16} />
+                      <span className="absolute -top-1 -left-1 min-w-[12px] h-3 px-0.5 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[7px] font-black text-black leading-none">
+                        {p.level ?? 1}
+                      </span>
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[9px] font-bold truncate leading-tight">{p.name}</div>
                       <div className="text-[8px] text-white/50 font-mono leading-none">{fmtChips(p.chips)}</div>
@@ -1035,6 +1040,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         <div className="relative flex items-center gap-2 mb-2">
           <div className="relative shrink-0">
             <Avatar seed={user.avatar} size={32} />
+            <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
+              {myPlayer?.level ?? user.level ?? 1}
+            </span>
             {canAct && (
               <motion.div
                 className="absolute inset-0 rounded-full pointer-events-none"
