@@ -51,12 +51,16 @@ const INACTIVITY_LIMIT = 5 * 60 * 1000;
 const OFFLINE_KICK_LIMIT = 5 * 60 * 1000;
 const SWEEP_INTERVAL = 30 * 1000;
 
-import { initDB, loadRoomsFromDB } from './db';
+import { initDB, loadRoomsFromDB, setOnBalanceChanged } from './db';
 import { restoreRoom, resumeBlindTimers } from './roomManager';
 import { loadJackpotState } from './jackpotEngine';
 
 // Initialize io in helpers
 setIo(io);
+
+setOnBalanceChanged(() => {
+  io.emit('leaderboardUpdated');
+});
 
 const bootServer = async () => {
   console.log('Initializing database migrations...');

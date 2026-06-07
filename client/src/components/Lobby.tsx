@@ -134,9 +134,13 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   };
 
   useEffect(() => {
-    socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
-      if (Array.isArray(data)) setLeaderboard(data);
-    });
+    const fetchLeaderboard = () => {
+      socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
+        if (Array.isArray(data)) setLeaderboard(data);
+      });
+    };
+    fetchLeaderboard();
+    socket.on('leaderboardUpdated', fetchLeaderboard);
 
     socket.emit('getJackpotState', (state: any) => {
       if (state) setJackpotState(state);
@@ -145,6 +149,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     socket.on('jackpotStateUpdated', handleJackpotUpdate);
 
     return () => {
+      socket.off('leaderboardUpdated', fetchLeaderboard);
       socket.off('jackpotStateUpdated', handleJackpotUpdate);
     };
   }, []);
@@ -367,10 +372,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                             <SlotIcon symbol={win.type} className="w-3.5 h-3.5" />
                             <SlotIcon symbol={win.type} className="w-3.5 h-3.5" />
                             <SlotIcon symbol={win.type} className="w-3.5 h-3.5" />
+                            {win.winAmount > 0 && <span className="text-amber-400 font-bold shrink-0">+{fmtChips(win.winAmount)}</span>}
                           </span>
                           <span className="text-gray-400 truncate ml-2 text-right flex items-center gap-1.5">
                             {timeLabel} <span className="text-gray-300 font-semibold">{win.playerName}</span>
-                            {win.winAmount > 0 && <span className="text-amber-400 font-bold shrink-0">+{fmtChips(win.winAmount)}</span>}
+                            
                           </span>
                         </div>
                       );

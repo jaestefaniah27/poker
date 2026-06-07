@@ -293,12 +293,16 @@ export const updateUserName = async (id: string, name: string): Promise<void> =>
   await dbRun('UPDATE users SET name = ? WHERE id = ?', [name.trim(), id]);
 };
 
+let onBalanceChanged: () => void = () => {};
+export const setOnBalanceChanged = (cb: () => void) => { onBalanceChanged = cb; };
+
 export const updateUserAvatar = async (id: string, avatar: string): Promise<void> => {
   await dbRun('UPDATE users SET avatar = ? WHERE id = ?', [avatar, id]);
 };
 
 export const updateUserBalance = async (id: string, amount: number): Promise<void> => {
   await dbRun('UPDATE users SET balance = balance + ? WHERE id = ?', [amount, id]);
+  onBalanceChanged();
 };
 
 // Aplica un delta al saldo y devuelve el saldo resultante.
@@ -306,6 +310,7 @@ export const updateUserBalance = async (id: string, amount: number): Promise<voi
 export const applyBalanceDelta = async (id: string, delta: number): Promise<number> => {
   await dbRun('UPDATE users SET balance = MAX(0, balance + ?) WHERE id = ?', [delta, id]);
   const row = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
+  onBalanceChanged();
   return row?.balance ?? 0;
 };
 
@@ -319,6 +324,7 @@ export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?
   const amount = dailyAmountFor(row.paguita_level ?? 0);
   await dbRun('UPDATE users SET balance = balance + ?, last_daily_claim = ? WHERE id = ?', [amount, today, id]);
   const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
+  onBalanceChanged();
   return { ok: true, newBalance: updated?.balance ?? 0 };
 };
 
@@ -332,6 +338,7 @@ export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error
   const amount = hourlyAmountFor(row.dieta_level ?? 0);
   await dbRun('UPDATE users SET balance = balance + ?, last_hourly_claim = ? WHERE id = ?', [amount, now, id]);
   const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
+  onBalanceChanged();
   return { ok: true, newBalance: updated?.balance ?? 0, nextClaimAt: now + HOURLY_COOLDOWN_MS };
 };
 

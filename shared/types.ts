@@ -166,7 +166,7 @@ export const nextBlinds = (bigBlind: number): { smallBlind: number; bigBlind: nu
 
 // XP que se gana jugando / acertando trivia.
 export const XP_PER_POKER_HAND = 10;
-export const XP_PER_BLACKJACK_HAND = 6;
+export const XP_PER_BLACKJACK_HAND = 15;
 export const XP_PER_TRIVIA_PARTICIPATION = 4;
 export const XP_PER_TRIVIA_CORRECT = 12;
 export const XP_PER_JACKPOT_SPIN = 2;
