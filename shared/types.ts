@@ -167,7 +167,10 @@ export const nextBlinds = (bigBlind: number): { smallBlind: number; bigBlind: nu
 // XP que se gana jugando / acertando trivia.
 export const XP_PER_POKER_HAND = 10;
 export const XP_PER_BLACKJACK_HAND = 6;
-export const XP_PER_TRIVIA_CORRECT = 8;
+export const XP_PER_TRIVIA_PARTICIPATION = 4;
+export const XP_PER_TRIVIA_CORRECT = 12;
+export const XP_PER_JACKPOT_SPIN = 2;
+export const XP_PER_JACKPOT_WIN = 5;
 
 // XP TOTAL acumulada necesaria para estar EN el nivel dado. Nivel mínimo = 1.
 // Curva cuadrática suave: L2=100, L3=300, L4=600, L5=1000, L6=1500...

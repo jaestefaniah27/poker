@@ -2,7 +2,7 @@ import { Socket } from 'socket.io';
 import { authUser } from '../socketHelpers';
 import { applyBalanceDelta, getUser, addOneFreeSpin, toPublicUser, addXp } from '../db';
 import { TRIVIA_QUESTIONS } from '../triviaQuestions';
-import { triviaRewardsFor, TriviaReward, XP_PER_TRIVIA_CORRECT, triviaCooldownMs, triviaSpinCount } from '../../../shared/types';
+import { triviaRewardsFor, TriviaReward, XP_PER_TRIVIA_CORRECT, XP_PER_TRIVIA_PARTICIPATION, triviaCooldownMs, triviaSpinCount } from '../../../shared/types';
 
 const triviaState = new Map<string, { lastAnswered: number; pendingId: number | null; seenIds: Set<number> }>();
 
@@ -63,26 +63,28 @@ export const triviaHandlers = (socket: Socket) => {
 
     triviaState.set(user.id, { lastAnswered: Date.now(), pendingId: null, seenIds: state.seenIds });
 
-    const correct = answerIndex === q.correct;
-    if (!correct) { callback({ correct: false, correctIndex: q.correct }); return; }
-
-    // XP por acierto (afecta nivel; se refleja en el user devuelto).
-    await addXp(user.id, XP_PER_TRIVIA_CORRECT);
-
-    const dbUser = await getUser(user.id);
-    const reward = pickReward(dbUser?.trivia_level ?? 0);
-    if (reward.type === 'chips') {
-      const newBalance = await applyBalanceDelta(user.id, reward.amount);
-      socket.emit('balanceUpdated', { balance: newBalance });
-      const updated = await getUser(user.id);
-      callback({ correct: true, correctIndex: q.correct, reward, newBalance, user: updated ? toPublicUser(updated) : undefined });
+    const isCorrect = answerIndex === q.correct;
+    if (isCorrect) {
+      await addXp(user.id, XP_PER_TRIVIA_CORRECT);
+      const dbUser = await getUser(user.id);
+      const reward = pickReward(dbUser?.trivia_level ?? 0);
+      if (reward.type === 'chips') {
+        const newBalance = await applyBalanceDelta(user.id, reward.amount);
+        socket.emit('balanceUpdated', { balance: newBalance });
+        const updated = await getUser(user.id);
+        callback({ correct: true, correctIndex: q.correct, reward, newBalance, user: updated ? toPublicUser(updated) : undefined, addedXp: XP_PER_TRIVIA_CORRECT });
+      } else {
+        const spins = triviaSpinCount(dbUser?.trivia_level ?? 0);
+        await addOneFreeSpin(user.id, reward.value, spins);
+        const updated = await getUser(user.id);
+        const newBalance = updated?.balance ?? user.balance;
+        socket.emit('balanceUpdated', { balance: newBalance });
+        callback({ correct: true, correctIndex: q.correct, reward: { ...reward, spins }, newBalance, user: updated ? toPublicUser(updated) : undefined, addedXp: XP_PER_TRIVIA_CORRECT });
+      }
     } else {
-      const spins = triviaSpinCount(dbUser?.trivia_level ?? 0);
-      await addOneFreeSpin(user.id, reward.value, spins);
+      await addXp(user.id, XP_PER_TRIVIA_PARTICIPATION);
       const updated = await getUser(user.id);
-      const newBalance = updated?.balance ?? user.balance;
-      socket.emit('balanceUpdated', { balance: newBalance });
-      callback({ correct: true, correctIndex: q.correct, reward: { ...reward, spins }, newBalance, user: updated ? toPublicUser(updated) : undefined });
+      callback({ correct: false, correctIndex: q.correct, addedXp: XP_PER_TRIVIA_PARTICIPATION, user: updated ? toPublicUser(updated) : undefined });
     }
   });
 };

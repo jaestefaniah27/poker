@@ -172,6 +172,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                 {isWin
                   ? `${MULTIPLIER_LABEL[result.multiplier] ?? `x${result.multiplier}`} — +${fmtChips(result.winAmount)}`
                   : 'Sin suerte… inténtalo de nuevo'}
+                {(result as any).addedXp && <div className="text-[10px] text-emerald-300/80 mt-1 font-bold">+{(result as any).addedXp} XP</div>}
               </motion.div>
             )}
             {!result && !spinning && (

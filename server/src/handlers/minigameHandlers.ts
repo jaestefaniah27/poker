@@ -1,8 +1,8 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin, setJackpotUnlockLevel, spendLevelPoint } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
-import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, LevelTrack } from '../../../shared/types';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN } from '../../../shared/types';
 
 export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
@@ -100,6 +100,15 @@ export const minigameHandlers = (socket: Socket) => {
     const newBalance = await applyBalanceDelta(dbUser.id, delta);
     await recordJackpotSpin(dbUser.id, amount, symbols, multiplier, winAmount);
 
+    let extraXp = 0;
+    if (multiplier >= 50) extraXp = 500;
+    else if (multiplier >= 20) extraXp = 50;
+    else if (multiplier >= 10) extraXp = 20;
+    else if (multiplier > 0) extraXp = XP_PER_JACKPOT_WIN;
+
+    const addedXp = XP_PER_JACKPOT_SPIN + extraXp;
+    await addXp(dbUser.id, addedXp);
+
     const updatedUser = await getUser(dbUser.id);
 
     if (io) {
@@ -113,7 +122,8 @@ export const minigameHandlers = (socket: Socket) => {
       winAmount, 
       newBalance, 
       state, 
-      user: updatedUser ? toPublicUser(updatedUser) : undefined 
+      user: updatedUser ? toPublicUser(updatedUser) : undefined,
+      addedXp
     });
   });
 

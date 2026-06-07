@@ -15,6 +15,7 @@ interface TriviaResult {
   reward?: { type: 'chips'; amount: number } | { type: 'spin'; value: number; spins?: number };
   newBalance?: number;
   newFreeSpins?: number;
+  addedXp?: number;
 }
 
 type Phase = 'loading' | 'question' | 'answered' | 'cooldown';
@@ -159,6 +160,7 @@ export const TriviaModal = ({
                       {result.correct ? (
                         <>
                           <p className="text-emerald-300 font-bold text-base mb-1">✓ ¡Correcto!</p>
+                          {result.addedXp && <p className="text-emerald-200/80 text-xs mb-1">+{result.addedXp} XP</p>}
                           {result.reward?.type === 'chips' && (
                             <p className="text-emerald-200 text-sm">+{fmtChips(result.reward.amount)} fichas</p>
                           )}
@@ -171,6 +173,7 @@ export const TriviaModal = ({
                       ) : (
                         <>
                           <p className="text-rose-300 font-bold text-base mb-1">✗ Incorrecto</p>
+                          {result.addedXp && <p className="text-emerald-200/80 text-xs mb-1">+{result.addedXp} XP por participar</p>}
                           <p className="text-gray-400 text-xs">La respuesta correcta era la {String.fromCharCode(65 + result.correctIndex)}</p>
                         </>
                       )}
