@@ -581,7 +581,10 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     if (initialNetWorthRef.current === null) {
       initialNetWorthRef.current = user.balance + myPlayer.chips + (myPlayer.bet || 0);
     }
-    if (phase === 'betting' || phase === 'waiting') {
+    // Solo actualizamos el diff cuando la fase real del servidor es betting o waiting.
+    // Si la fase local es betting (porque le dimos a Continuar) pero el servidor sigue en resolve,
+    // myPlayer.bet aún tiene la apuesta vieja y causaría un pico temporal erróneo.
+    if ((phase === 'betting' && rawPhase === 'betting') || phase === 'waiting') {
       const currentNetWorth = user.balance + myPlayer.chips + (myPlayer.bet || 0);
       lastValidDiffRef.current = currentNetWorth - (initialNetWorthRef.current || currentNetWorth);
     }
