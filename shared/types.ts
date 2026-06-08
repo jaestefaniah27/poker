@@ -141,6 +141,7 @@ export interface PublicUser {
   ruletaLevel?: number;   // 0 = base, índice en RULETA_LEVELS
   triviaLevel?: number;   // 0 = base, nº de recompensas malas eliminadas
   lastSeen?: number;
+  paidIsrael?: boolean;
 }
 
 export const STAKE_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];

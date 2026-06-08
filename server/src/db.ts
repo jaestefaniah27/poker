@@ -153,6 +153,18 @@ const MIGRATIONS = [
   {
     name: '023_shift_jackpot_tiers',
     sql: 'UPDATE users SET jackpot_unlock_level = jackpot_unlock_level + 1 WHERE jackpot_unlock_level > 0'
+  },
+  {
+    name: '024_hacienda_state',
+    sql: `CREATE TABLE IF NOT EXISTS hacienda_state (
+      id INTEGER PRIMARY KEY,
+      total INTEGER NOT NULL DEFAULT 0
+    )`
+  },
+  {
+    name: '025_paid_israel',
+    sql: 'ALTER TABLE users ADD COLUMN paid_israel INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
   }
 ];
 
@@ -232,6 +244,7 @@ export interface UserRow {
   ruleta_level: number;
   trivia_level: number;
   last_seen?: number;
+  paid_israel?: number;
 }
 
 import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX } from '../../shared/types';
@@ -275,6 +288,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     ruletaLevel,
     triviaLevel,
     lastSeen: row.last_seen ?? undefined,
+    paidIsrael: !!row.paid_israel,
   };
 };
 
@@ -521,3 +535,18 @@ export const addOneFreeSpin = async (id: string, value: number, count = 1): Prom
   await dbRun('UPDATE users SET free_spins_pools = ? WHERE id = ?', [JSON.stringify(pools), id]);
 };
 
+export const getHaciendaTotal = async (): Promise<number> => {
+  const row = await dbGet<{ total: number }>('SELECT total FROM hacienda_state WHERE id = 1');
+  return row?.total ?? 0;
+};
+
+export const addHaciendaTotal = async (amount: number): Promise<number> => {
+  await dbRun('INSERT OR IGNORE INTO hacienda_state (id, total) VALUES (1, 0)');
+  await dbRun('UPDATE hacienda_state SET total = total + ? WHERE id = 1', [amount]);
+  return await getHaciendaTotal();
+};
+
+export const payIsrael = async (id: string): Promise<number> => {
+  await dbRun('UPDATE users SET paid_israel = 1 WHERE id = ?', [id]);
+  return applyBalanceDelta(id, -1_000_000_000);
+};

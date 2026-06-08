@@ -37,7 +37,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   ]);
   const [spinning, setSpinning] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
-  const [result, setResult] = useState<{ symbols: string[]; multiplier: number; winAmount: number } | null>(null);
+  const [result, setResult] = useState<{ symbols: string[]; multiplier: number; winAmount: number; finalWinAmount?: number; taxEvent?: { type: 'none'|'tax'|'fraud'; amount: number } } | null>(null);
   const intervalsRef = useRef<ReturnType<typeof setInterval>[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -205,7 +205,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                 className={`text-center font-extrabold text-lg ${isBig ? 'text-amber-300' : isWin ? 'text-emerald-400' : 'text-gray-500'}`}
               >
                 {isWin
-                  ? `${MULTIPLIER_LABEL[result.multiplier] ?? `x${result.multiplier}`} — +${fmtChips(result.winAmount)}`
+                  ? `${MULTIPLIER_LABEL[result.multiplier] ?? `x${result.multiplier}`} — +${fmtChips(result.finalWinAmount ?? result.winAmount)}`
                   : 'Sin suerte… inténtalo de nuevo'}
                 {(result as any).addedXp && <div className="text-[10px] text-emerald-300/80 mt-1 font-bold">+{(result as any).addedXp} XP</div>}
               </motion.div>
@@ -222,6 +222,35 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
             )}
           </AnimatePresence>
         </div>
+
+        {/* Hacienda Tax Event Banner */}
+        <AnimatePresence>
+          {result?.taxEvent && result.taxEvent.type !== 'none' && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className={`mb-4 p-4 rounded-2xl border-2 flex flex-col items-center text-center shadow-[0_0_20px_rgba(225,29,72,0.3)] ${
+                result.taxEvent.type === 'fraud' 
+                  ? 'bg-red-950/90 border-red-500 text-red-100'
+                  : 'bg-rose-950/90 border-rose-500 text-rose-100'
+              }`}
+            >
+              <div className="text-3xl mb-1">🚨</div>
+              <h3 className="font-black text-lg mb-1 uppercase tracking-wider">
+                {result.taxEvent.type === 'fraud' ? '¡INVESTIGACIÓN POR FRAUDE!' : 'HACIENDA SOMOS TODOS'}
+              </h3>
+              <p className="text-[11px] font-medium opacity-90 leading-tight">
+                {result.taxEvent.type === 'fraud' 
+                  ? 'Hacienda ha detectado irregularidades y te ha embargado el 100% de tu premio.'
+                  : 'Hacienda se ha llevado el 10% de tu premio en concepto de impuestos.'}
+              </p>
+              <div className="mt-2 font-mono text-xl font-bold text-red-400">
+                -{fmtChips(result.taxEvent.amount)}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Selector de apuesta */}
         <div className="mb-2">

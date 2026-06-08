@@ -106,6 +106,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [giftTarget, setGiftTarget] = useState<LeaderboardEntry | null>(null);
   const [giftAlert, setGiftAlert] = useState<{from: string, amount: number} | null>(null);
 
+  // Hacienda
+  const [haciendaTotal, setHaciendaTotal] = useState<number>(0);
+
   // MINISTERIO DE DERECHOS SOCIALES
   const [now, setNow] = useState(Date.now());
   const [claimingDaily, setClaimingDaily] = useState(false);
@@ -200,13 +203,23 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     socket.on('jackpot_viewers', handleJackpotViewers);
     socket.on('roulette_players', handleRoulettePlayers);
 
-    const handleGiftReceived = (data: { from: string, amount: number }) => {
-      setGiftAlert(data);
+    const handleGiftReceived = (data: { from: string, amount: number, updatedUser?: any }) => {
+      setGiftAlert({ from: data.from, amount: data.amount });
       playCheckSound();
       if (typeof window !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(100);
       setTimeout(() => setGiftAlert(null), 5000);
+      if (data.updatedUser) {
+        onUpdateUser(data.updatedUser);
+      }
     };
     socket.on('giftReceived', handleGiftReceived);
+
+    socket.emit('getHaciendaTotal', (data: any) => {
+      if (data?.total !== undefined) setHaciendaTotal(data.total);
+    });
+
+    const handleHaciendaUpdate = (data: { total: number }) => setHaciendaTotal(data.total);
+    socket.on('haciendaUpdated', handleHaciendaUpdate);
 
     return () => {
       socket.off('leaderboardUpdated', fetchLeaderboard);
@@ -214,6 +227,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       socket.off('jackpot_viewers', handleJackpotViewers);
       socket.off('roulette_players', handleRoulettePlayers);
       socket.off('giftReceived', handleGiftReceived);
+      socket.off('haciendaUpdated', handleHaciendaUpdate);
     };
   }, []);
 
@@ -766,6 +780,18 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 })}
               </div>
             )}
+          </div>
+
+          {/* ---- Hacienda Somos Todos ---- */}
+          <div className="bg-surface p-5 rounded-3xl border border-surfaceLight flex flex-col items-center">
+            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-2">Hacienda Somos Todos</h2>
+            <div className="text-center">
+              <span className="text-xs text-rose-500/80 font-medium uppercase tracking-widest block mb-1">Total Recaudado</span>
+              <span className="text-4xl font-black text-rose-500">${fmtChips(haciendaTotal)}</span>
+            </div>
+            <p className="text-[10px] text-gray-500 mt-2 text-center max-w-[250px]">
+              El 20% de todas las donaciones se destina a mantener la economía estable.
+            </p>
           </div>
         </div>
       </div>

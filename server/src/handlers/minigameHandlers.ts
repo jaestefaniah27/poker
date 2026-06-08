@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, addHaciendaTotal } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
@@ -142,14 +142,35 @@ export const minigameHandlers = (socket: Socket) => {
 
     const { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount);
 
-    let delta = 0;
     const winAmount = Math.floor(amount * multiplier);
+    let finalWinAmount = winAmount;
+    let taxAmount = 0;
+    let eventType: 'none' | 'tax' | 'fraud' = 'none';
 
+    if (multiplier >= 10) {
+      const r = Math.random();
+      if (r < 0.01) {
+        eventType = 'fraud';
+        taxAmount = winAmount;
+        finalWinAmount = 0;
+      } else if (r < 0.21) {
+        eventType = 'tax';
+        taxAmount = Math.floor(winAmount * 0.1);
+        finalWinAmount = winAmount - taxAmount;
+      }
+    }
+
+    let delta = 0;
     if (doFreeSpin) {
-      delta = winAmount;
+      delta = finalWinAmount;
       await consumeFreeSpin(dbUser.id, amount);
     } else {
-      delta = winAmount - amount;
+      delta = finalWinAmount - amount;
+    }
+
+    if (taxAmount > 0) {
+      const newTotal = await addHaciendaTotal(taxAmount);
+      if (io) io.emit('haciendaUpdated', { total: newTotal });
     }
 
     const newBalance = await applyBalanceDelta(dbUser.id, delta);
@@ -175,6 +196,8 @@ export const minigameHandlers = (socket: Socket) => {
       symbols, 
       multiplier, 
       winAmount, 
+      finalWinAmount,
+      taxEvent: { type: eventType, amount: taxAmount },
       newBalance, 
       state, 
       user: updatedUser ? toPublicUser(updatedUser) : undefined,

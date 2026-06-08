@@ -102,6 +102,18 @@ export default function GiftModal({ targetName, targetAvatar, targetLevel, balan
             <span className="text-xs text-gray-500 font-medium">Saldo disponible:</span>
             <span className="text-sm font-bold text-emerald-400">${fmtChips(balance)}</span>
           </div>
+          {parsedAmount > 0 && valid && (
+            <>
+              <div className="flex justify-between items-center px-2 mt-2">
+                <span className="text-xs text-rose-500/80 font-medium">Hacienda (20%):</span>
+                <span className="text-sm font-bold text-rose-500/80">-${fmtChips(Math.floor(parsedAmount * 0.2))}</span>
+              </div>
+              <div className="flex justify-between items-center px-2 mt-1">
+                <span className="text-xs text-emerald-400/80 font-medium">{targetName} recibe:</span>
+                <span className="text-sm font-bold text-emerald-400/80">${fmtChips(parsedAmount - Math.floor(parsedAmount * 0.2))}</span>
+              </div>
+            </>
+          )}
         </div>
 
         <button

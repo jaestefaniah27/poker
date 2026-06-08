@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels, setJackpotUnlockLevel, updateLastSeen } from '../db';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels, setJackpotUnlockLevel, updateLastSeen, addHaciendaTotal, getHaciendaTotal, payIsrael } from '../db';
 import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
 import { levelFromXp } from '../../../shared/types';
 import { sanitizeInput } from '../security';
@@ -124,6 +124,36 @@ export const authHandlers = (socket: Socket) => {
     })));
   });
 
+  socket.on('getHaciendaTotal', async (_data, callback) => {
+    const total = await getHaciendaTotal();
+    callback({ total });
+  });
+
+  socket.on('payIsrael', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    
+    await payIsrael(user.id);
+    
+    const israelUser = await getUserByName('Israel');
+    if (israelUser) {
+      await applyBalanceDelta(israelUser.id, 1_000_000_000);
+      
+      const { notifyUser } = require('../socketHelpers');
+      const updatedIsrael = await getUser(israelUser.id);
+      if (updatedIsrael) {
+        notifyUser(israelUser.id, 'userUpdated', toPublicUser(updatedIsrael));
+        notifyUser(israelUser.id, 'giftReceived', { 
+          from: 'Deuda de Padre', 
+          amount: 1_000_000_000
+        });
+      }
+    }
+    
+    const updatedUser = await getUser(user.id);
+    callback({ ok: true, user: updatedUser ? toPublicUser(updatedUser) : undefined });
+  });
+
   socket.on('getAdminUsers', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
@@ -235,15 +265,32 @@ export const authHandlers = (socket: Socket) => {
     }
     
     await applyBalanceDelta(user.id, -amt);
-    await applyBalanceDelta(target.id, amt);
+    
+    const tax = Math.floor(amt * 0.2);
+    const finalAmount = amt - tax;
+    await applyBalanceDelta(target.id, finalAmount);
+    
+    if (tax > 0) {
+      const newTotal = await addHaciendaTotal(tax);
+      const { io } = require('../socketHelpers');
+      if (io) io.emit('haciendaUpdated', { total: newTotal });
+    }
     
     const xpReward = 100 + Math.floor(amt / 1_000_000);
     await addXp(user.id, xpReward);
     
     const updated = await getUser(user.id);
+    const updatedTarget = await getUser(target.id);
     
     const { notifyUser, broadcastPresence } = require('../socketHelpers');
-    notifyUser(target.id, 'giftReceived', { from: user.name, amount: amt });
+    notifyUser(target.id, 'giftReceived', { 
+      from: user.name, 
+      amount: finalAmount,
+      updatedUser: updatedTarget ? toPublicUser(updatedTarget) : undefined
+    });
+    if (updatedTarget) {
+      notifyUser(target.id, 'userUpdated', toPublicUser(updatedTarget));
+    }
     broadcastPresence();
     
     callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
