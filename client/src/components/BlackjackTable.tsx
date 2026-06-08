@@ -714,7 +714,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const activeHandIndex = Math.min(myPlayer?.bjActiveHandIndex ?? 0, Math.max(0, myHands.length - 1));
 
   const originalBetAmount = (myHands.length > 0 && myHands[0])
-    ? (myHands[0].doubled ? myHands[0].bet / 2 : myHands[0].bet)
+    ? ((myHands[0] as any).doubled ? myHands[0].bet / 2 : myHands[0].bet)
     : (myPlayer?.bjDoubled ? myBet / 2 : myBet);
 
   const basePlacedChips = placedComposition.length > 0
