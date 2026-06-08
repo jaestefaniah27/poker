@@ -240,32 +240,27 @@ export const hourlyAmountFor = (dietaLevel: number): number =>
 // --- Ruleta: cada nivel mejora un valor del set de 8 premios ---
 const K = 1_000, M = 1_000_000;
 export const RULETA_LEVELS: number[][] = [
-  [1*K, 5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 0 (base)
-  [1*M, 5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 1
-  [1*M, 2*M, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 2
-  [1*M, 2*M, 5*M, 25*K, 50*K, 100*K, 250*K, 500*K],  // 3
-  [1*M, 2*M, 5*M, 10*M, 50*K, 100*K, 250*K, 500*K],  // 4
-  [1*M, 2*M, 5*M, 10*M, 100*K, 100*K, 250*K, 500*K], // 5
-  [1*M, 2*M, 5*M, 10*M, 100*K, 250*K, 250*K, 500*K], // 6
-  [1*M, 2*M, 5*M, 10*M, 100*K, 250*K, 500*K, 500*K], // 7
-  [1*M, 2*M, 5*M, 10*M, 100*K, 250*K, 500*K, 1*M],   // 8
-  [1*M, 2*M, 5*M, 10*M, 250*K, 250*K, 500*K, 1*M],   // 9
-  [1*M, 2*M, 5*M, 10*M, 250*K, 500*K, 500*K, 1*M],   // 10
-  [1*M, 2*M, 5*M, 10*M, 250*K, 500*K, 1*M, 1*M],     // 11
-  [1*M, 2*M, 5*M, 10*M, 500*K, 500*K, 1*M, 2*M],     // 12
-  [1*M, 2*M, 5*M, 10*M, 1*M, 500*K, 1*M, 2*M],       // 13
-  [1*M, 2*M, 5*M, 10*M, 2*M, 1*M, 1*M, 2*M],         // 14
-  [1*M, 2*M, 5*M, 10*M, 2*M, 5*M, 2*M, 2*M],         // 15
-  [1*M, 2*M, 5*M, 10*M, 2*M, 5*M, 10*M, 5*M],        // 16
-  [2*M, 5*M, 5*M, 10*M, 2*M, 5*M, 10*M, 5*M],        // 17
-  [5*M, 10*M, 5*M, 10*M, 2*M, 5*M, 10*M, 5*M],       // 18
-  [5*M, 10*M, 5*M, 10*M, 5*M, 5*M, 10*M, 10*M],      // 19
-  [10*M, 10*M, 5*M, 10*M, 5*M, 10*M, 10*M, 10*M],    // 20
-  [10*M, 10*M, 10*M, 10*M, 5*M, 10*M, 10*M, 10*M],   // 21 (máx)
+  [1*K, 5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 0
+  [5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K, 1*M], // 1
+  [10*K, 25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M], // 2
+  [25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M],  // 3
+  [25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M],  // 4
+  [50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M],  // 5
+  [100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M],  // 6
+  [250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M],   // 7
+  [500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M],    // 8
+  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 9
+  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 10
 ];
-export const RULETA_MAX_LEVEL = RULETA_LEVELS.length - 1; // 21
+export const RULETA_MAX_LEVEL = RULETA_LEVELS.length - 1; // 10
 export const ruletaOptionsFor = (ruletaLevel: number): number[] =>
   RULETA_LEVELS[Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL))];
+export const ruletaSpinsFor = (ruletaLevel: number): number => {
+  const lvl = Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL));
+  if (lvl >= 10) return 50;
+  if (lvl >= 4) return 25;
+  return 10;
+};
 
 // --- Trivia: track de 10 niveles ---
 //   Las mejoras de "quitar peor premio" y "reducir tiempo" van INTERCALADAS.

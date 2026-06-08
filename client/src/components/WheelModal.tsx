@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
-import { ruletaOptionsFor } from '../../../shared/types';
+import { ruletaOptionsFor, ruletaSpinsFor } from '../../../shared/types';
 
 interface WheelModalProps {
   user: any;
@@ -41,8 +41,9 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const expectedSpins = ruletaSpinsFor(user.ruletaLevel ?? 0);
   const [wonValue, setWonValue] = useState<number | null>(null);
-  const [wonSpins, setWonSpins] = useState<number>(10);
+  const [wonSpins, setWonSpins] = useState<number>(expectedSpins);
   const [hasSpun, setHasSpun] = useState(false);
 
   const wheelOptions = useMemo(() => shuffle(ruletaOptionsFor(user.ruletaLevel ?? 0)), [user.ruletaLevel]);
@@ -70,7 +71,7 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
         setIsSpinning(false);
         setHasSpun(true);
         setWonValue(chosenValue);
-        setWonSpins(freeSpins || 10);
+        setWonSpins(freeSpins || expectedSpins);
         if (updatedUser) onUpdateUser(updatedUser);
       }, 4200);
     });
@@ -106,7 +107,7 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
 
         <h2 className="text-2xl font-black text-white mb-0.5 tracking-tight">Ruleta de Tiradas</h2>
         <p className="text-xs text-gray-500 text-center mb-5">
-          Gira para conseguir 10 tiradas gratis
+          Gira para conseguir {expectedSpins} tiradas gratis
         </p>
 
         {error && (

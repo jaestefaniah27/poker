@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
 import {
-  xpForLevel, dailyAmountFor, hourlyAmountFor, ruletaOptionsFor, triviaRewardsFor,
+  xpForLevel, dailyAmountFor, hourlyAmountFor, ruletaOptionsFor, ruletaSpinsFor, triviaRewardsFor,
   RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL,
   triviaCooldownMs, triviaSpinCount,
 } from '../../../shared/types';
@@ -41,7 +41,9 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
   };
 
   const ruletaBest = Math.max(...ruletaOptionsFor(ruletaLevel));
+  const ruletaSpins = ruletaSpinsFor(ruletaLevel);
   const ruletaBestNext = Math.max(...ruletaOptionsFor(ruletaLevel + 1));
+  const ruletaSpinsNext = ruletaSpinsFor(ruletaLevel + 1);
   const worstTier = (r: { type: 'spin'; value: number } | { type: 'chips'; amount: number }) =>
     r.type === 'spin' ? r.value : r.amount;
   const triviaDesc = (lvl: number) => {
@@ -73,8 +75,8 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
     },
     {
       key: 'ruleta', name: 'Ruleta', emoji: '🎡', color: '#a855f7', lvl: ruletaLevel, maxed: ruletaLevel >= RULETA_MAX_LEVEL,
-      current: `Premio máx: $${fmtChips(ruletaBest)}`,
-      next: ruletaLevel >= RULETA_MAX_LEVEL ? null : `Premio máx: $${fmtChips(ruletaBestNext)}`,
+      current: `${ruletaSpins} giros (Premio máx: $${fmtChips(ruletaBest)})`,
+      next: ruletaLevel >= RULETA_MAX_LEVEL ? null : `${ruletaSpinsNext} giros (Premio máx: $${fmtChips(ruletaBestNext)})`,
     },
     {
       key: 'trivia', name: 'Trivia', emoji: '🧠', color: '#ec4899', lvl: triviaLevel, maxed: triviaLevel >= TRIVIA_MAX_LEVEL,

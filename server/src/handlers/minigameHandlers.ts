@@ -2,7 +2,7 @@ import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
 import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
-import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
 
 interface MinesGame {
   userId: string;
@@ -72,7 +72,8 @@ export const minigameHandlers = (socket: Socket) => {
     const spinValue = options[chosenIndex];
     await claimFreeSpins(dbUser.id, spinValue);
     const updated = await getUser(dbUser.id);
-    callback({ ok: true, chosenValue: spinValue, freeSpins: 10, nextClaimAt: now + COOLDOWN_MS, user: updated ? toPublicUser(updated) : undefined });
+    const earnedSpins = ruletaSpinsFor(dbUser.ruleta_level ?? 0);
+    callback({ ok: true, chosenValue: spinValue, freeSpins: earnedSpins, nextClaimAt: now + COOLDOWN_MS, user: updated ? toPublicUser(updated) : undefined });
   });
 
   socket.on('playJackpot', async ({ token, bet, useFreeSpin }, callback) => {
