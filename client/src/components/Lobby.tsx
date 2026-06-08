@@ -456,7 +456,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                   <div className="absolute inset-0" style={{ background: 'conic-gradient(#ef4444 0deg 90deg, #1f2937 90deg 180deg, #ef4444 180deg 270deg, #1f2937 270deg 360deg)' }} />
                   <div className="w-4 h-4 rounded-full bg-gradient-to-br from-amber-200 to-amber-600 border border-amber-900/50 relative z-10" />
                 </div>
-                <span className="text-xs font-bold text-emerald-400 mt-1">Ruleta VIP</span>
+                <span className="text-xs font-bold text-emerald-400 mt-1">Ruleta</span>
                 <span className="text-[10px] text-gray-500 mb-1">Apuesta y gana hasta x36</span>
               </button>
 
