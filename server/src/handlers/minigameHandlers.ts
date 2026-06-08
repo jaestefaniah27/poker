@@ -27,6 +27,14 @@ function minesMultiplier(numMines: number, revealed: number): number {
 
 const wordleClaimedSlots = new Map<string, string>(); // userId → YYYY-MM-DDTHH
 
+const jackpotViewers = new Map<string, { id: string; name: string; avatar: string }>();
+
+const broadcastJackpotViewers = () => {
+  if (!io) return;
+  const viewers = Array.from(jackpotViewers.values());
+  io.emit('jackpot_viewers', viewers);
+};
+
 export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
     const user = await authUser(token);
@@ -35,6 +43,27 @@ export const minigameHandlers = (socket: Socket) => {
     if (!result.ok) { callback({ error: result.error }); return; }
     const updated = await getUser(user.id);
     callback({ ok: true, newBalance: result.newBalance, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('jackpot_join', async ({ token }) => {
+    const user = await authUser(token);
+    if (!user) return;
+    jackpotViewers.set(user.id, { id: user.id, name: user.name, avatar: user.avatar || user.id });
+    broadcastJackpotViewers();
+  });
+
+  socket.on('jackpot_leave', async ({ token }) => {
+    const user = await authUser(token);
+    if (!user) return;
+    jackpotViewers.delete(user.id);
+    broadcastJackpotViewers();
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.data?.user?.id && jackpotViewers.has(socket.data.user.id)) {
+      jackpotViewers.delete(socket.data.user.id);
+      broadcastJackpotViewers();
+    }
   });
 
   socket.on('claimHourly', async ({ token }, callback) => {

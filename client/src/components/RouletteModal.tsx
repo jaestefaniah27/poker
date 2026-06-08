@@ -594,9 +594,8 @@ export default function RouletteModal({
 
           </div>
 
-          {/* Player Bar */}
-          {tablePlayers.filter(p => p.id !== userId).length > 0 && (
-            <div className="w-full max-w-xl mx-auto flex justify-center items-center gap-1.5 px-2 py-1 overflow-x-auto scrollbar-none shrink-0">
+          {/* Player Bar (Always rendered to maintain fixed height) */}
+          <div className="w-full max-w-xl mx-auto flex justify-center items-center gap-1.5 px-2 py-1 overflow-x-auto scrollbar-none shrink-0 h-[64px] sm:h-[76px]">
               {tablePlayers.filter(p => p.id !== userId).map(p => (
                 <div key={p.id} className="flex flex-col items-center shrink-0 bg-slate-800/60 rounded-lg px-1.5 py-1 border border-slate-700/40 min-w-[52px] sm:min-w-[64px]">
                   <Avatar seed={p.avatar} size={24} />
@@ -612,8 +611,6 @@ export default function RouletteModal({
                 </div>
               ))}
             </div>
-          )}
-
           {/* Betting Table (Vertical Casino Layout) */}
           <div className="w-full max-w-xl mx-auto flex-1 mt-auto grid gap-0.5 sm:gap-1 select-none overflow-hidden pb-0 px-1 sm:px-0" style={{ gridTemplateColumns: 'minmax(20px, 1fr) minmax(20px, 1fr) repeat(3, minmax(35px, 1.5fr))', gridTemplateRows: 'repeat(13, minmax(0, 1fr))' }}>
             {/* Zero */}

@@ -97,6 +97,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   // Jackpot State
   const [jackpotState, setJackpotState] = useState<{ globalSpins: number, recentWins: Array<{type: string, playerName: string, spinNumber: number, winAmount: number}> } | null>(null);
 
+  // Presence State
+  const [jackpotViewers, setJackpotViewers] = useState<{id: string, name: string, avatar: string}[]>([]);
+  const [roulettePlayers, setRoulettePlayers] = useState<{id: string, name: string, avatar: string}[]>([]);
+
   // MINISTERIO DE DERECHOS SOCIALES
   const [now, setNow] = useState(Date.now());
   const [claimingDaily, setClaimingDaily] = useState(false);
@@ -179,9 +183,16 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     const handleJackpotUpdate = (state: any) => setJackpotState(state);
     socket.on('jackpotStateUpdated', handleJackpotUpdate);
 
+    const handleJackpotViewers = (viewers: any[]) => setJackpotViewers(viewers);
+    const handleRoulettePlayers = (players: any[]) => setRoulettePlayers(players);
+    socket.on('jackpot_viewers', handleJackpotViewers);
+    socket.on('roulette_players', handleRoulettePlayers);
+
     return () => {
       socket.off('leaderboardUpdated', fetchLeaderboard);
       socket.off('jackpotStateUpdated', handleJackpotUpdate);
+      socket.off('jackpot_viewers', handleJackpotViewers);
+      socket.off('roulette_players', handleRoulettePlayers);
     };
   }, []);
 
@@ -446,8 +457,27 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                     })}
                   </div>
                 )}
+                
+                {/* Presence */}
+                {jackpotViewers.length > 0 && (
+                  <div className="flex items-center gap-1 mt-1 bg-black/40 rounded-full px-2 py-0.5">
+                    <div className="flex -space-x-1.5">
+                      {jackpotViewers.slice(0, 3).map(v => (
+                        <div key={v.id} className="relative z-10 w-4 h-4 rounded-full border border-black overflow-hidden bg-slate-800 shrink-0">
+                          <Avatar seed={v.avatar} size={16} />
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[9px] text-gray-400 ml-1 truncate max-w-[120px]">
+                      {jackpotViewers.length === 1 && jackpotViewers[0].name}
+                      {jackpotViewers.length === 2 && `${jackpotViewers[0].name}, ${jackpotViewers[1].name}`}
+                      {jackpotViewers.length > 2 && `${jackpotViewers[0].name}, ${jackpotViewers[1].name} y ${jackpotViewers.length - 2} más`}
+                    </span>
+                  </div>
+                )}
               </button>
               
+              {/* Roulette Button */}
               <button
                 onClick={() => setShowRoulette(true)}
                 className="w-full flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-emerald-900/40 hover:border-emerald-600/60 bg-emerald-500/8 active:scale-[0.98] transition-all text-left"
@@ -458,6 +488,24 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 </div>
                 <span className="text-xs font-bold text-emerald-400 mt-1">Ruleta</span>
                 <span className="text-[10px] text-gray-500 mb-1">Apuesta y gana hasta x36</span>
+                
+                {/* Presence */}
+                {roulettePlayers.length > 0 && (
+                  <div className="flex items-center gap-1 mt-1 bg-black/40 rounded-full px-2 py-0.5">
+                    <div className="flex -space-x-1.5">
+                      {roulettePlayers.slice(0, 3).map(v => (
+                        <div key={v.id} className="relative z-10 w-4 h-4 rounded-full border border-black overflow-hidden bg-slate-800 shrink-0">
+                          <Avatar seed={v.avatar} size={16} />
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[9px] text-gray-400 ml-1 truncate max-w-[120px]">
+                      {roulettePlayers.length === 1 && roulettePlayers[0].name}
+                      {roulettePlayers.length === 2 && `${roulettePlayers[0].name}, ${roulettePlayers[1].name}`}
+                      {roulettePlayers.length > 2 && `${roulettePlayers[0].name}, ${roulettePlayers[1].name} y ${roulettePlayers.length - 2} más`}
+                    </span>
+                  </div>
+                )}
               </button>
 
               <div className="flex gap-2">

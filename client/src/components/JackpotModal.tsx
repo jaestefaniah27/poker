@@ -41,10 +41,14 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   const intervalsRef = useRef<ReturnType<typeof setInterval>[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  useEffect(() => () => {
-    intervalsRef.current.forEach(clearInterval);
-    timersRef.current.forEach(clearTimeout);
-  }, []);
+  useEffect(() => {
+    socket.emit('jackpot_join', { token });
+    return () => {
+      socket.emit('jackpot_leave', { token });
+      intervalsRef.current.forEach(clearInterval);
+      timersRef.current.forEach(clearTimeout);
+    };
+  }, [token]);
 
   const pools = user.freeSpinPools ?? {};
   const hasFreeSpins = Object.values(pools).some(c => c > 0);
