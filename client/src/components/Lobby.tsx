@@ -4,9 +4,9 @@ import ProfileModal from './ProfileModal';
 import MatchHistoryModal from './MatchHistoryModal';
 import JackpotModal from './JackpotModal';
 import SlotIcon from './SlotIcon';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import Slider from './Slider';
-import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage } from '../utils';
+import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage, playCheckSound } from '../utils';
 import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
 import TriviaModal from './TriviaModal';
@@ -16,6 +16,7 @@ import WordleModal from './WordleModal';
 import RouletteModal from './RouletteModal';
 import OnlinePlayersModal from './OnlinePlayersModal';
 import LevelsModal from './LevelsModal';
+import GiftModal from './GiftModal';
 
 interface LobbyProps {
   user: { 
@@ -100,6 +101,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   // Presence State
   const [jackpotViewers, setJackpotViewers] = useState<{id: string, name: string, avatar: string}[]>([]);
   const [roulettePlayers, setRoulettePlayers] = useState<{id: string, name: string, avatar: string}[]>([]);
+
+  // Gifts
+  const [giftTarget, setGiftTarget] = useState<LeaderboardEntry | null>(null);
+  const [giftAlert, setGiftAlert] = useState<{from: string, amount: number} | null>(null);
 
   // MINISTERIO DE DERECHOS SOCIALES
   const [now, setNow] = useState(Date.now());
@@ -195,11 +200,20 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     socket.on('jackpot_viewers', handleJackpotViewers);
     socket.on('roulette_players', handleRoulettePlayers);
 
+    const handleGiftReceived = (data: { from: string, amount: number }) => {
+      setGiftAlert(data);
+      playCheckSound();
+      if (typeof window !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(100);
+      setTimeout(() => setGiftAlert(null), 5000);
+    };
+    socket.on('giftReceived', handleGiftReceived);
+
     return () => {
       socket.off('leaderboardUpdated', fetchLeaderboard);
       socket.off('jackpotStateUpdated', handleJackpotUpdate);
       socket.off('jackpot_viewers', handleJackpotViewers);
       socket.off('roulette_players', handleRoulettePlayers);
+      socket.off('giftReceived', handleGiftReceived);
     };
   }, []);
 
@@ -245,6 +259,19 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   };
 
   const medals = ['🥇', '🥈', '🥉'];
+
+  const handleSendGift = (amount: number) => {
+    if (!giftTarget) return;
+    socket.emit('sendGift', { token, targetName: giftTarget.name, amount }, (res: any) => {
+      if (res?.ok) {
+        if (res.user) onUpdateUser(res.user);
+        setGiftTarget(null);
+      } else {
+        alert(res?.error || 'Error enviando regalo');
+        setGiftTarget(null);
+      }
+    });
+  };
 
   return (
     <div className="h-full w-full overflow-y-auto scrollbar-hide bg-background text-primary flex flex-col items-center font-sans" style={{ padding: 'max(1.5rem, env(safe-area-inset-top, 0px)) 1.5rem max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
@@ -711,7 +738,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                   return (
                     <div
                       key={entry.name}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors border ${bgCls} ${borderCls}`}
+                      onClick={() => !isMe && setGiftTarget(entry)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors border ${bgCls} ${borderCls} ${!isMe ? 'cursor-pointer hover:bg-white/5 active:scale-[0.98]' : ''}`}
                     >
                       <span className="w-7 text-center text-sm font-bold shrink-0">
                         {i < 3 ? medals[i] : <span className="text-gray-600">{i + 1}</span>}
@@ -851,6 +879,38 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
           Creado por Jorge Alejandro Estefanía Hidalgo
         </p>
       </div>
+
+      {giftTarget && (
+        <GiftModal
+          targetName={giftTarget.name}
+          targetAvatar={parseInt(giftTarget.avatar, 10) || 1}
+          targetLevel={giftTarget.level}
+          balance={user.balance}
+          onClose={() => setGiftTarget(null)}
+          onSend={handleSendGift}
+        />
+      )}
+
+      <AnimatePresence>
+        {giftAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.8 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed top-[10%] left-1/2 -translate-x-1/2 z-[300] bg-gradient-to-r from-amber-500 to-yellow-400 p-1 rounded-2xl shadow-[0_0_40px_rgba(245,158,11,0.5)] pointer-events-none"
+          >
+            <div className="bg-black/90 px-6 py-4 rounded-xl flex flex-col items-center border border-amber-500/30">
+              <span className="text-3xl mb-1">🎁</span>
+              <p className="text-white font-bold text-lg text-center">
+                ¡<span className="text-amber-400">{giftAlert.from}</span> te ha regalado!
+              </p>
+              <p className="text-2xl font-black text-emerald-400 mt-1 drop-shadow-md">
+                +${fmtChips(giftAlert.amount)}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

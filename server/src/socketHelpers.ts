@@ -19,6 +19,15 @@ export const broadcastPresence = () => {
   io.emit('leaderboardUpdated');
 };
 
+export const notifyUser = (userId: string, event: string, payload: any) => {
+  if (!io) return;
+  for (const [, s] of io.sockets.sockets) {
+    if (s.data?.user?.id === userId) {
+      s.emit(event, payload);
+    }
+  }
+};
+
 export const TURN_TIME = 15000;
 export const GRACE_TIME = 5000;
 export const OFFLINE_REDUCED_TIME = 8000;

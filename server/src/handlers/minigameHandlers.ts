@@ -107,9 +107,9 @@ export const minigameHandlers = (socket: Socket) => {
       }
     }
     const spinValue = options[chosenIndex];
-    await claimFreeSpins(dbUser.id, spinValue);
-    const updated = await getUser(dbUser.id);
     const earnedSpins = ruletaSpinsFor(dbUser.ruleta_level ?? 0);
+    await claimFreeSpins(dbUser.id, spinValue, earnedSpins);
+    const updated = await getUser(dbUser.id);
     callback({ ok: true, chosenValue: spinValue, freeSpins: earnedSpins, nextClaimAt: now + COOLDOWN_MS, user: updated ? toPublicUser(updated) : undefined });
   });
 

@@ -210,4 +210,42 @@ export const authHandlers = (socket: Socket) => {
       .map(u => toPublicUser(u!));
     callback({ ok: true, players });
   });
+
+  socket.on('sendGift', async ({ token, targetName, amount }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+    
+    const amt = Math.floor(Number(amount));
+    if (isNaN(amt) || amt <= 0) {
+      callback({ error: 'Cantidad inválida' }); return;
+    }
+    
+    const dbUser = await getUser(user.id);
+    if (!dbUser || dbUser.balance < amt) {
+      callback({ error: 'Saldo insuficiente' }); return;
+    }
+    
+    const target = await getUserByName(targetName);
+    if (!target) {
+      callback({ error: 'Usuario no encontrado' }); return;
+    }
+    
+    if (target.id === user.id) {
+      callback({ error: 'No puedes regalarte a ti mismo' }); return;
+    }
+    
+    await applyBalanceDelta(user.id, -amt);
+    await applyBalanceDelta(target.id, amt);
+    
+    const xpReward = 100 + Math.floor(amt / 1_000_000);
+    await addXp(user.id, xpReward);
+    
+    const updated = await getUser(user.id);
+    
+    const { notifyUser, broadcastPresence } = require('../socketHelpers');
+    notifyUser(target.id, 'giftReceived', { from: user.name, amount: amt });
+    broadcastPresence();
+    
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
 };

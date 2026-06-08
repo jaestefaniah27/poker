@@ -489,10 +489,10 @@ export const getMatchHistoryForUser = async (userId: string, limit = 30): Promis
   );
 };
 
-export const claimFreeSpins = async (id: string, value: number): Promise<void> => {
+export const claimFreeSpins = async (id: string, value: number, amount: number = 10): Promise<void> => {
   const user = await getUser(id);
   const pools = parsePools(user?.free_spins_pools ?? null);
-  pools[String(value)] = (pools[String(value)] || 0) + 10;
+  pools[String(value)] = (pools[String(value)] || 0) + amount;
   await dbRun(
     'UPDATE users SET free_spins_pools = ?, last_free_spins_claim = ? WHERE id = ?',
     [JSON.stringify(pools), Date.now(), id]
