@@ -1153,8 +1153,22 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             const isHandActive = idx === activeHandIndex && canAct;
             const hCards = (idx === 0 && !dealDone) ? displayMyCards : hand.cards;
             const hTotals = handTotalDisplay(hCards);
+            
+            let classStr = '';
+            if (showResult && hand.result) {
+              if (hand.result === 'win' || hand.result === 'blackjack') {
+                classStr = 'scale-105 z-20';
+              } else if (hand.result === 'push') {
+                classStr = 'scale-95 opacity-70 z-10';
+              } else {
+                classStr = 'scale-90 opacity-30 brightness-50 z-10';
+              }
+            } else {
+              classStr = isHandActive ? 'scale-110 z-20' : myHands.length > 1 ? 'scale-90 opacity-40 brightness-75 z-10' : '';
+            }
+
             return (
-              <div key={idx} className={`relative flex items-center transition-all duration-300 ${isHandActive ? 'scale-110 z-20' : myHands.length > 1 ? 'scale-90 opacity-40 brightness-75 z-10' : ''}`}>
+              <div key={idx} className={`relative flex items-center transition-all duration-300 ${classStr}`}>
                 <CardFan cards={hCards} big={myHands.length === 1} mini={myHands.length === 3} micro={myHands.length === 4} />
                 {hTotals && hCards.length >= 2 && (
                   <AnimatePresence>

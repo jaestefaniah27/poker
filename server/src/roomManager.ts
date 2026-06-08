@@ -310,6 +310,8 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
   player.isActive = false;
   player.hasCashedOut = true;
   player.cards = [];
+  player.bjHands = undefined;
+  player.bjActiveHandIndex = undefined;
   player.handName = undefined;
 
   if (isInHand && room.gameType !== 'blackjack') {
