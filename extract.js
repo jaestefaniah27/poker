@@ -1,0 +1,27 @@
+const fs = require('fs');
+const path = require('path');
+const p = path.join(process.cwd(), 'client', 'src', 'components', 'BlackjackTable.tsx');
+const lines = fs.readFileSync(p, 'utf-8').split('\n');
+const extracted = lines.slice(35, 442).join('\n');
+const prefix = "import { useState, useEffect, useRef } from 'react';\nimport { motion, AnimatePresence } from 'framer-motion';\nimport { fmtChips } from '../utils';\n\n";
+let content = prefix + extracted;
+content = content.replace(/type ChipDenom/g, 'export type ChipDenom');
+content = content.replace(/const CHIP_DEFS/g, 'export const CHIP_DEFS');
+content = content.replace(/const defByValue/g, 'export const defByValue');
+content = content.replace(/const CHIP_PAGE_VALUES/g, 'export const CHIP_PAGE_VALUES');
+content = content.replace(/const CHIP_PAGES/g, 'export const CHIP_PAGES');
+content = content.replace(/const pageForAmount/g, 'export const pageForAmount');
+content = content.replace(/const isPlaque/g, 'export const isPlaque');
+content = content.replace(/const isSmooth/g, 'export const isSmooth');
+content = content.replace(/const sizeForValue/g, 'export const sizeForValue');
+content = content.replace(/const Chip =/g, 'export const Chip =');
+content = content.replace(/const CustomChipControl =/g, 'export const CustomChipControl =');
+content = content.replace(/const ChipRail =/g, 'export const ChipRail =');
+content = content.replace(/const chipsFromAmount =/g, 'export const chipsFromAmount =');
+content = content.replace(/const ChipPile =/g, 'export const ChipPile =');
+content = content.replace(/const chunkArray =/g, 'export const chunkArray =');
+content = content.replace(/const createColumns =/g, 'export const createColumns =');
+content = content.replace(/const ChipStack =/g, 'export const ChipStack =');
+
+fs.writeFileSync(path.join(process.cwd(), 'client', 'src', 'components', 'Chips.tsx'), content);
+console.log('Created Chips.tsx');

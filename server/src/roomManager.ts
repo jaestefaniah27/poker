@@ -280,27 +280,31 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
     return null;
   }
 
+  const isInHand = room.gameType === 'blackjack'
+    ? (room.bjPhase != null && room.bjPhase !== 'waiting' && room.bjPhase !== 'betting' && room.bjPhase !== 'resolve')
+    : (room.phase !== 'waiting' && room.phase !== 'showdown' && !player.isSpectating);
+
   const cashOut = { userId: player.userId, chips: player.chips };
 
-  // Blackjack: si el jugador se va con fichas apostadas (le dio a LISTO), pierde esa apuesta.
-  if (room.gameType === 'blackjack' && (player.bet || 0) > 0) {
-    const lostBet = player.bet || 0;
+  // Blackjack: si el jugador se va a mitad de mano (isInHand), pierde su apuesta total de esa mano.
+  if (isInHand && room.gameType === 'blackjack' && (player.bet || 0) > 0) {
+    let lostBet = player.bet || 0;
+    if (player.bjHands && player.bjHands.length > 0) {
+       lostBet = player.bjHands.reduce((sum, h) => sum + h.bet, 0);
+    }
     player.chips = Math.max(0, player.chips - lostBet);
     cashOut.chips = player.chips;
     player.bet = 0;
     player.bjStatus = 'idle';
   }
+  
   closePlayerSession(room, player, player.chips);
 
-  const isInHand = room.gameType === 'blackjack'
-    ? (room.bjPhase != null && room.bjPhase !== 'waiting' && room.bjPhase !== 'betting' && room.bjPhase !== 'resolve')
-    : (room.phase !== 'waiting' && room.phase !== 'showdown' && !player.isSpectating);
   if (isInHand && room.gameType !== 'blackjack') {
     player.hasFolded = true;
   }
   if (isInHand && room.gameType === 'blackjack') {
     // En blackjack, el jugador que se va abandona la mano: bet a 0, status idle.
-    // Si era su turno, hay que avanzar al siguiente actor (lo hace el handler tras leaveRoom).
     player.bet = 0;
     player.bjStatus = 'idle';
   }

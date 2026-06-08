@@ -13,6 +13,7 @@ import TriviaModal from './TriviaModal';
 import MinesModal from './MinesModal';
 import CrashModal from './CrashModal';
 import WordleModal from './WordleModal';
+import RouletteModal from './RouletteModal';
 import OnlinePlayersModal from './OnlinePlayersModal';
 import LevelsModal from './LevelsModal';
 
@@ -77,6 +78,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showWordle, setShowWordle] = useState(false);
   const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
   const [showLevels, setShowLevels] = useState(false);
+  const [showRoulette, setShowRoulette] = useState(false);
 
   // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
@@ -262,6 +264,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       {showOnlinePlayers && (
         <OnlinePlayersModal onClose={() => setShowOnlinePlayers(false)} />
       )}
+      <AnimatePresence>
+        {showRoulette && (
+          <RouletteModal balance={user.balance} updateBalance={(b) => onUpdateUser({...user, balance: b})} onClose={() => setShowRoulette(false)} />
+        )}
+      </AnimatePresence>
 
       <div className="w-full max-w-md">
         {/* Header */}
@@ -440,6 +447,19 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                   </div>
                 )}
               </button>
+              
+              <button
+                onClick={() => setShowRoulette(true)}
+                className="w-full flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border border-emerald-900/40 hover:border-emerald-600/60 bg-emerald-500/8 active:scale-[0.98] transition-all text-left"
+              >
+                <div className="relative w-10 h-10 rounded-full border-4 border-slate-800 shadow-[0_0_15px_rgba(16,185,129,0.3)] bg-slate-900 overflow-hidden flex items-center justify-center">
+                  <div className="absolute inset-0" style={{ background: 'conic-gradient(#ef4444 0deg 90deg, #1f2937 90deg 180deg, #ef4444 180deg 270deg, #1f2937 270deg 360deg)' }} />
+                  <div className="w-4 h-4 rounded-full bg-gradient-to-br from-amber-200 to-amber-600 border border-amber-900/50 relative z-10" />
+                </div>
+                <span className="text-xs font-bold text-emerald-400 mt-1">Ruleta VIP</span>
+                <span className="text-[10px] text-gray-500 mb-1">Apuesta y gana hasta x36</span>
+              </button>
+
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowTrivia(true)}

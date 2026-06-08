@@ -282,6 +282,67 @@ export const minigameHandlers = (socket: Socket) => {
     activeMinesGames.delete(socket.id);
   });
 
+  // --- ROULETTE ---
+  socket.on('play_roulette', async (bets, callback) => {
+    // In minigames token might not be explicitly passed inside bets, so we use socket.handshake or assume client passes it in the socket wrapper.
+    // Wait, client emits `socket.emit('play_roulette', bets, ...)` so token is NOT in the payload. We need to get it from socket auth.
+    // Wait, other minigames pass { token, ... }.
+    // If I didn't pass token in the frontend: `socket.emit('play_roulette', bets, ...)`
+    // I need to change frontend to send `{ token, bets }` OR I just use the token from handshake. But let's check how Lobby.tsx does it:
+    // It calls `socket.emit('play_roulette', bets, (res) => ...)` so `bets` is the first arg.
+    // The auth is available in `socket.handshake.auth.token`. But for consistency, let me just assume the client can send it in `socket.auth.token` or similar. Let's use `socket.handshake.auth.token`.
+    // Wait, in `poker/client/src/utils.ts`, it does: `export const socket = io(..., { auth: { token: getStorage().getItem('token') } })`. So `socket.handshake.auth.token` is ALWAYS VALID!
+    
+    const token = socket.handshake.auth?.token;
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const totalBet = Object.values(bets as Record<string, number>).reduce((a, b) => a + b, 0);
+    if (totalBet <= 0) { callback({ error: 'Apuesta inválida' }); return; }
+
+    const dbUser = await getUser(user.id);
+    if (!dbUser || dbUser.balance < totalBet) { callback({ error: 'Saldo insuficiente' }); return; }
+
+    await applyBalanceDelta(user.id, -totalBet);
+
+    const resultNum = Math.floor(Math.random() * 37); // 0-36
+    const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+    let winnings = 0;
+
+    for (const [zone, amt] of Object.entries(bets as Record<string, number>)) {
+      if (zone === resultNum.toString()) winnings += amt * 36;
+      else if (zone === 'red' && RED_NUMS.has(resultNum)) winnings += amt * 2;
+      else if (zone === 'black' && resultNum !== 0 && !RED_NUMS.has(resultNum)) winnings += amt * 2;
+      else if (zone === 'even' && resultNum !== 0 && resultNum % 2 === 0) winnings += amt * 2;
+      else if (zone === 'odd' && resultNum % 2 !== 0) winnings += amt * 2;
+      else if (zone === 'low' && resultNum >= 1 && resultNum <= 18) winnings += amt * 2;
+      else if (zone === 'high' && resultNum >= 19 && resultNum <= 36) winnings += amt * 2;
+      else if (zone.startsWith('dozen')) {
+        const d = parseInt(zone.split('_')[1]);
+        if (Math.ceil(resultNum / 12) === d && resultNum !== 0) winnings += amt * 3;
+      }
+      else if (zone.startsWith('col')) {
+        const c = parseInt(zone.split('_')[1]); // 1, 2, 3
+        if ((resultNum - c) % 3 === 0 && resultNum !== 0) winnings += amt * 3;
+      }
+    }
+
+    let newBalance = dbUser.balance - totalBet;
+    if (winnings > 0) {
+      newBalance = await applyBalanceDelta(user.id, winnings);
+    }
+    
+    await addXp(user.id, 10 + (winnings > totalBet ? 20 : 0));
+
+    callback({ 
+      ok: true, 
+      result: resultNum, 
+      winnings, 
+      net: winnings - totalBet,
+      balance: newBalance 
+    });
+  });
+
   // --- WORDLE ---
   socket.on('wordleComplete', async ({ token, won, attempts }, callback) => {
     const user = await authUser(token);

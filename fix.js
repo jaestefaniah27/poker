@@ -1,0 +1,10 @@
+const fs = require('fs');
+const execSync = require('child_process').execSync;
+const p = 'client/src/components/BlackjackTable.tsx';
+const content = execSync('git show HEAD:' + p).toString();
+const lines = content.split('\n');
+const extracted = lines.slice(0, 35).join('\n') + '\n' + lines.slice(442).join('\n');
+const imports = "import type { ChipDenom } from './Chips';\nimport { CHIP_DEFS, CHIP_PAGES, CHIP_PAGE_VALUES, defByValue, chipsFromAmount, Chip, CustomChipControl, ChipRail, ChipPile, ChipStack, pageForAmount } from './Chips';\n";
+const newContent = extracted.replace("import type { Room, Player, Card } from '../../../shared/types';", "import type { Room, Player, Card } from '../../../shared/types';\n" + imports);
+fs.writeFileSync(p, newContent);
+console.log('Fixed BlackjackTable.tsx completely.');
