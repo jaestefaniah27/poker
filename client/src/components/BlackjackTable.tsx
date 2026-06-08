@@ -721,7 +721,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer?.bjDelta || 0) > 0) {
     // Cuando el dealer paga, compactamos la apuesta original + el premio en las fichas más grandes
     // para evitar que la suma de dos montones pequeños sature y desborde el área visual.
-    finalCircleChips = chipsFromAmount(myBet + myPlayer.bjDelta);
+    finalCircleChips = chipsFromAmount(myBet + (myPlayer?.bjDelta || 0));
   }
 
   const circleChips = hideLostChips ? [] : finalCircleChips;
