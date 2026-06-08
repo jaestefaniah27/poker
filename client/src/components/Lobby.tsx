@@ -170,6 +170,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     });
   };
 
+  const handleAdminAddBalance500T = () => {
+    socket.emit('adminAddBalance500T', { token }, (res: any) => {
+      if (res?.user) onUpdateUser(res.user);
+    });
+  };
+
   const handleAdminAddXp = () => {
     socket.emit('adminAddXp', { token }, (res: any) => {
       if (res?.user) onUpdateUser(res.user);
@@ -465,6 +471,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                     className="flex-1 py-2 rounded-2xl text-xs font-bold text-purple-400 border border-purple-900/40 bg-purple-500/8 active:scale-95 transition-all"
                   >
                     💸 +500B (Admin)
+                  </button>
+                  <button
+                    onClick={handleAdminAddBalance500T}
+                    className="flex-1 py-2 rounded-2xl text-xs font-bold text-pink-400 border border-pink-900/40 bg-pink-500/8 active:scale-95 transition-all"
+                  >
+                    💸 +500T (Admin)
                   </button>
                   <button
                     onClick={handleAdminResetJackpotLevel}
