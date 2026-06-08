@@ -9,6 +9,16 @@ export const REVEAL_DELAY = 1100;
 export const COLLECT_DELAY = 700;
 export const SHOWDOWN_LOCK_MS = 5000;
 
+export const broadcastPresence = () => {
+  if (!io) return;
+  const ids = new Set<string>();
+  for (const [, s] of io.sockets.sockets) {
+    if (s.data?.user) ids.add(s.data.user.id);
+  }
+  io.emit('onlineCount', { count: ids.size });
+  io.emit('leaderboardUpdated');
+};
+
 export const TURN_TIME = 15000;
 export const GRACE_TIME = 5000;
 export const OFFLINE_REDUCED_TIME = 8000;

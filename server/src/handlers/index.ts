@@ -7,6 +7,7 @@ import { minigameHandlers } from './minigameHandlers';
 import { triviaHandlers } from './triviaHandlers';
 import { crashHandlers } from './crashHandler';
 import { updateLastSeen } from '../db';
+import { broadcastPresence } from '../socketHelpers';
 
 const MAX_EVENTS_PER_SEC = 20;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -65,7 +66,11 @@ export const registerAllHandlers = (socket: Socket) => {
   socket.on('disconnect', () => {
     rateLimits.delete(socket.id);
     if (socket.data?.user?.id) {
-      updateLastSeen(socket.data.user.id).catch(console.error);
+      updateLastSeen(socket.data.user.id)
+        .then(() => broadcastPresence())
+        .catch(console.error);
+    } else {
+      broadcastPresence();
     }
   });
 

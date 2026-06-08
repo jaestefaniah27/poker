@@ -2,22 +2,12 @@ import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels, setJackpotUnlockLevel, updateLastSeen } from '../db';
-import { issueToken, authUser } from '../socketHelpers';
+import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
 import { levelFromXp } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser } from '../roomManager';
 
 const BCRYPT_ROUNDS = 10;
-
-const emitOnlineCount = () => {
-  const { io } = require('../socketHelpers');
-  if (!io) return;
-  const ids = new Set<string>();
-  for (const [, s] of io.sockets.sockets) {
-    if (s.data.user) ids.add(s.data.user.id);
-  }
-  io.emit('onlineCount', { count: ids.size });
-};
 
 export const authHandlers = (socket: Socket) => {
   socket.on('login', async ({ name, password }, callback) => {
@@ -43,7 +33,7 @@ export const authHandlers = (socket: Socket) => {
     const publicUser = toPublicUser(user);
     socket.data.user = publicUser;
     updateLastSeen(user.id).catch(console.error);
-    emitOnlineCount();
+    broadcastPresence();
     callback({ user: publicUser, token, activeRoomId });
   });
 
@@ -54,7 +44,7 @@ export const authHandlers = (socket: Socket) => {
     const publicUser = toPublicUser(user);
     socket.data.user = publicUser;
     updateLastSeen(user.id).catch(console.error);
-    emitOnlineCount();
+    broadcastPresence();
     callback({ user: publicUser, token, activeRoomId });
   });
 
