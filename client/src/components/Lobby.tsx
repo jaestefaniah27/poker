@@ -214,7 +214,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     };
     socket.on('giftReceived', handleGiftReceived);
 
-    socket.emit('getHaciendaTotal', (data: any) => {
+    socket.emit('getHaciendaTotal', {}, (data: any) => {
       if (data?.total !== undefined) setHaciendaTotal(data.total);
     });
 
