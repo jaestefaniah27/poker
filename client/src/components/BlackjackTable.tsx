@@ -653,6 +653,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const addChip = (d: ChipDenom) => {
     if (!canBet) return;
     if (pendingTotal + d.v > maxBet) return;
+    if (pendingChips.length >= 16) return; // Strict limit: max 16 chips per bet to prevent overflow
     
     // Limitar visualmente para que no se salgan del rectángulo
     const newChips = [...pendingChips, d];
@@ -666,12 +667,12 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     const largeCols = Math.ceil(larges.length / 8);
     const customCols = Math.ceil(customs.length / 2);
 
-    if (largeCols > 3) return; // Límite estricto de 3 columnas para fichas grandes
+    if (largeCols > 2) return; // Límite estricto de 2 columnas para fichas grandes
 
     const totalCols = roundCols + plaqueCols + largeCols + customCols;
     const totalW = roundCols * 36 + plaqueCols * 46 + largeCols * 56 + customCols * 60 + Math.max(0, totalCols - 1) * 6;
 
-    if (totalW > 260) return; // Límite de anchura visual de la zona de apuestas
+    if (totalW > 220) return; // Límite de anchura visual de la zona de apuestas
 
     setPendingChips(s => [...s, d]);
     vibrate(20);
@@ -718,8 +719,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   let finalCircleChips = _circleChips;
   if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer?.bjDelta || 0) > 0) {
-    const prizeChips = chipsFromAmount(Math.abs(myPlayer.bjDelta || 0));
-    finalCircleChips = [..._circleChips, ...prizeChips];
+    // Cuando el dealer paga, compactamos la apuesta original + el premio en las fichas más grandes
+    // para evitar que la suma de dos montones pequeños sature y desborde el área visual.
+    finalCircleChips = chipsFromAmount(myBet + myPlayer.bjDelta);
   }
 
   const circleChips = hideLostChips ? [] : finalCircleChips;
