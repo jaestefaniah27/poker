@@ -236,9 +236,53 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
   const d: ChipDenom = { v: val, label: fmtChips(val), color: '', ring: '', isCustom: true };
   const disabled = !canBet || val > maxBet || pendingTotal + val > maxBet;
 
+  const longPressTimer = useRef<NodeJS.Timeout>();
+  const didLongPress = useRef(false);
+
+  const handlePointerDown = () => {
+    didLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true;
+      let scaleName = '';
+      let multiplier = 1;
+      if (val >= 1_000_000_000) { scaleName = 'B (billones)'; multiplier = 1_000_000_000; }
+      else if (val >= 1_000_000) { scaleName = 'M (millones)'; multiplier = 1_000_000; }
+      else if (val >= 1000) { scaleName = 'k (miles)'; multiplier = 1000; }
+      
+      const input = window.prompt(`Introduce el nuevo valor en ${scaleName || 'unidades'}:`);
+      if (input !== null) {
+        const num = parseFloat(input);
+        if (!isNaN(num) && num > 0) {
+          const upperLimit = Math.max(maxBet, MIN_PRO_CHIP);
+          setVal(Math.max(MIN_PRO_CHIP, Math.min(upperLimit, num * multiplier)));
+        }
+      }
+    }, 600);
+  };
+
+  const clearTimer = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (didLongPress.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    onAdd(d);
+  };
+
   return (
     <div className="flex items-center justify-between w-full px-2 gap-4 h-full">
-      <button onClick={() => onAdd(d)} disabled={disabled} className="active:scale-95 transition-transform disabled:opacity-30 shrink-0">
+      <button 
+        onPointerDown={handlePointerDown}
+        onPointerUp={clearTimer}
+        onPointerLeave={clearTimer}
+        onClick={handleClick}
+        disabled={disabled} 
+        className="active:scale-95 transition-transform disabled:opacity-30 shrink-0"
+      >
         <Chip d={d} size={42} />
       </button>
       <div className="grid grid-cols-2 grid-rows-2 gap-1.5 flex-1 h-full py-1">
