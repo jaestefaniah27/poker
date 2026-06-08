@@ -414,7 +414,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const activeHandBet = myHands.length > 0 ? (myHands[activeHandIndex]?.bet ?? myBet) : myBet;
   const canDoubleHand = canAct && myCards.length === 2 && myChips >= totalBet + activeHandBet;
 
-  const isPair = myCards.length === 2 && myCards[0].rank === myCards[1].rank;
+  const isPair = myCards.length === 2 && cardPoints(myCards[0].rank as string) === cardPoints(myCards[1].rank as string);
   const canSplit = canAct && isPair && myHands.length < 4 && myChips >= totalBet + activeHandBet;
 
   const canRebuy = !!myPlayer && myPlayer.isActive && myChips <= 0 && phase !== 'dealing';

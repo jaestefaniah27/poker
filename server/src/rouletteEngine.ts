@@ -85,7 +85,7 @@ export class RouletteEngine {
     this.broadcastPlayers();
   }
 
-  private getPlayersInfo() {
+  public getPlayersInfo() {
     const players: Array<{ id: string; name: string; avatar: string; totalBet: number; bets: Record<string, number> }> = [];
     // Include all viewers + anyone with active bets
     const allIds = new Set([...this.viewers, ...this.userBets.keys()]);

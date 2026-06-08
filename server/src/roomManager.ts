@@ -1030,7 +1030,7 @@ export const blackjackPlayerAction = (
       if (player.bjHands.length >= 4) return null; // Max splits
       const p1 = bjHandValue([hand.cards[0]]).total;
       const p2 = bjHandValue([hand.cards[1]]).total;
-      const isPair = hand.cards[0].rank === hand.cards[1].rank;
+      const isPair = p1 === p2;
       if (!isPair) return null;
 
       const totalBet = player.bjHands.reduce((sum, h) => sum + h.bet, 0);
