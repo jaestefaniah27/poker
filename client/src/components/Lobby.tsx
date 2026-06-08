@@ -35,6 +35,7 @@ interface LobbyProps {
     dietaLevel?: number;
     ruletaLevel?: number;
     triviaLevel?: number;
+    jackpotUnlockLevel?: number;
   };
   token: string | null;
   rooms: any[];
