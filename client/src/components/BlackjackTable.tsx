@@ -687,7 +687,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     setPlacedComposition([...pendingChips]); // snapshot exacto: no se reordena al repartir
     socket.emit('bjPlaceBet', { roomId: room.id, amount: pendingTotal });
   };
-  const sendAction = (action: 'Hit' | 'Stand' | 'Double') => {
+  const sendAction = (action: 'Hit' | 'Stand' | 'Double' | 'Surrender') => {
     socket.emit('bjAction', { roomId: room.id, action });
     vibrate(15);
   };
