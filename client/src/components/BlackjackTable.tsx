@@ -6,8 +6,7 @@ import Slider from './Slider';
 import Avatar from './Avatar';
 import AnimatedNumber from './AnimatedNumber';
 import type { Room, Player, Card } from '../../../shared/types';
-import type { ChipDenom } from './Chips';
-import { CHIP_DEFS, CHIP_PAGES, CHIP_PAGE_VALUES, defByValue, chipsFromAmount, Chip, CustomChipControl, ChipRail, ChipPile, ChipStack, pageForAmount } from './Chips';
+import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip } from './Chips';
 
 
 interface Props {
