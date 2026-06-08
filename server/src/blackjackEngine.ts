@@ -46,14 +46,8 @@ export const dealBlackjack = (room: Room) => {
   ensureDeck(room, players.length * 2 + 2);
   room.dealerCards = [room.deck.pop()!, room.deck.pop()!];
   players.forEach(p => {
-    let c1 = room.deck.pop()!;
-    let c2 = room.deck.pop()!;
-    if (Math.random() < 0.8) {
-      const lowRanks = ['2', '3', '4', '5'] as const;
-      const rank = lowRanks[Math.floor(Math.random() * lowRanks.length)];
-      c1 = { rank, suit: 'h' };
-      c2 = { rank, suit: 's' };
-    }
+    const c1 = room.deck.pop()!;
+    const c2 = room.deck.pop()!;
     p.cards = [c1, c2];
     p.bjDoubled = false;
     p.bjStatus = isBlackjack(p.cards) ? 'blackjack' : 'playing';

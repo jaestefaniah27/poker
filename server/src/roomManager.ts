@@ -1042,16 +1042,8 @@ export const blackjackPlayerAction = (
       player.bjHands.splice(activeIndex + 1, 0, newHand);
 
       if (room.deck.length < 2) { room.deck = createDeck(); shuffleDeck(room.deck); }
-      let c1 = room.deck.pop()!;
-      let c2 = room.deck.pop()!;
-      
-      if (Math.random() < 0.8) {
-        c1 = { ...splitCard, suit: splitCard.suit === 'h' ? 's' : 'h' };
-        c2 = { ...hand.cards[0], suit: hand.cards[0].suit === 'h' ? 's' : 'h' };
-      }
-      
-      newHand.cards.push(c1);
-      hand.cards.push(c2);
+      newHand.cards.push(room.deck.pop()!);
+      hand.cards.push(room.deck.pop()!);
 
       if (bjHandValue(newHand.cards).total === 21) newHand.status = 'stand';
       if (bjHandValue(hand.cards).total === 21) hand.status = 'stand';

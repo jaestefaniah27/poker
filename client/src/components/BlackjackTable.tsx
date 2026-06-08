@@ -810,7 +810,6 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   const myCards = myHands.length > 0 ? (myHands[activeHandIndex]?.cards || []) : [];
   const displayMyCards = dealDone ? myCards : myCards.slice(0, revealedPlayer);
-  const myTotals = myPlayer ? handTotalDisplay(displayMyCards) : null;
   const displayDealerCards = phase === 'resolve'
     ? dealer.cards.slice(0, dealerResolveCount)
     : (dealDone ? dealer.cards : dealer.cards.slice(0, revealedDealer));
