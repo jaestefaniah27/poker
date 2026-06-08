@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, addHaciendaTotal } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, addHaciendaTotal, deductIsraelPool } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
@@ -148,16 +148,28 @@ export const minigameHandlers = (socket: Socket) => {
     let eventType: 'none' | 'tax' | 'fraud' = 'none';
 
     if (multiplier >= 10) {
+      let probFraud = 0.01;
+      let probTax = 0.20;
+      if (dbUser.moved_to_andorra) {
+        probFraud /= 10;
+        probTax /= 10;
+      }
       const r = Math.random();
-      if (r < 0.01) {
+      if (r < probFraud) {
         eventType = 'fraud';
         taxAmount = winAmount;
         finalWinAmount = 0;
-      } else if (r < 0.21) {
+      } else if (r < probFraud + probTax) {
         eventType = 'tax';
         taxAmount = Math.floor(winAmount * 0.1);
         finalWinAmount = winAmount - taxAmount;
       }
+    }
+
+    let israelBonus = 0;
+    if (finalWinAmount > 0 && dbUser.israel_pool && dbUser.israel_pool > 0) {
+      israelBonus = await deductIsraelPool(dbUser.id, finalWinAmount);
+      finalWinAmount += israelBonus;
     }
 
     let delta = 0;
@@ -306,11 +318,20 @@ export const minigameHandlers = (socket: Socket) => {
     if (revealed === safeTiles) {
       game.active = false;
       activeMinesGames.delete(socket.id);
-      const newBalance = await applyBalanceDelta(user.id, winnable);
+      
+      const dbUser = await getUser(user.id);
+      let finalWinnable = winnable;
+      let israelBonus = 0;
+      if (dbUser && dbUser.israel_pool && dbUser.israel_pool > 0) {
+        israelBonus = await deductIsraelPool(user.id, winnable);
+        finalWinnable += israelBonus;
+      }
+
+      const newBalance = await applyBalanceDelta(user.id, finalWinnable);
       const xpWin = XP_PER_MINES_WIN + (multiplier >= 10 ? 20 : multiplier >= 5 ? 10 : 0);
       await addXp(user.id, xpWin);
-      const dbUser = await getUser(user.id);
-      callback({ ok: true, safe: true, multiplier, winnable, autoWin: true, newBalance, minePositions: Array.from(game.minePositions), user: dbUser ? toPublicUser(dbUser) : undefined, addedXp: xpWin });
+      const updatedUser = await getUser(user.id);
+      callback({ ok: true, safe: true, multiplier, winnable: finalWinnable, autoWin: true, newBalance, minePositions: Array.from(game.minePositions), user: updatedUser ? toPublicUser(updatedUser) : undefined, addedXp: xpWin });
       return;
     }
 
@@ -331,11 +352,19 @@ export const minigameHandlers = (socket: Socket) => {
     game.active = false;
     activeMinesGames.delete(socket.id);
 
-    const newBalance = await applyBalanceDelta(user.id, winAmount);
+    const dbUser = await getUser(user.id);
+    let finalWinAmount = winAmount;
+    let israelBonus = 0;
+    if (dbUser && dbUser.israel_pool && dbUser.israel_pool > 0) {
+      israelBonus = await deductIsraelPool(user.id, winAmount);
+      finalWinAmount += israelBonus;
+    }
+
+    const newBalance = await applyBalanceDelta(user.id, finalWinAmount);
     const xpWin = XP_PER_MINES_WIN + (multiplier >= 10 ? 20 : multiplier >= 5 ? 10 : 0);
     await addXp(user.id, xpWin);
-    const dbUser = await getUser(user.id);
-    callback({ ok: true, winAmount, multiplier, newBalance, minePositions: Array.from(game.minePositions), user: dbUser ? toPublicUser(dbUser) : undefined, addedXp: xpWin });
+    const updatedUser = await getUser(user.id);
+    callback({ ok: true, winAmount: finalWinAmount, multiplier, newBalance, minePositions: Array.from(game.minePositions), user: updatedUser ? toPublicUser(updatedUser) : undefined, addedXp: xpWin });
   });
 
   socket.on('disconnect', () => {

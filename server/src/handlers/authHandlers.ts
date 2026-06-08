@@ -1,9 +1,34 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels, setJackpotUnlockLevel, updateLastSeen, addHaciendaTotal, getHaciendaTotal, payIsrael } from '../db';
+import { 
+  createUser, 
+  getUser, 
+  getUserByName, 
+  isNameTaken, 
+  setPasswordHash, 
+  updateUserName, 
+  updateUserAvatar, 
+  toPublicUser, 
+  getAllUsersRanked, 
+  getAllUsersAdmin, 
+  deleteUser, 
+  getMatchHistoryForUser, 
+  applyBalanceDelta, 
+  addXp, 
+  resetUserLevels, 
+  setJackpotUnlockLevel, 
+  updateLastSeen, 
+  addHaciendaTotal, 
+  getHaciendaTotal, 
+  payIsrael,
+  addUnlockedShopItem,
+  equipShopItem,
+  setMovedToAndorra,
+  addIsraelDonation
+} from '../db';
 import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
-import { levelFromXp } from '../../../shared/types';
+import { levelFromXp, SHOP_CATALOG } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser } from '../roomManager';
 

@@ -147,6 +147,36 @@ const MiniHand = ({ cards, size = 'mini' }: { cards: Card[], size?: 'mini' | 'mi
   );
 };
 
+const feltRanks: Record<string, number> = {
+  'felt_red': 1,
+  'felt_blue': 2,
+  'felt_purple': 3,
+  'felt_vip': 4
+};
+
+const getHighestFelt = (players: Player[]) => {
+  let highest = '';
+  let maxRank = 0;
+  for (const p of players) {
+    if (p.isActive && p.equippedBjFelt) {
+      const rank = feltRanks[p.equippedBjFelt] || 0;
+      if (rank > maxRank) {
+        maxRank = rank;
+        highest = p.equippedBjFelt;
+      }
+    }
+  }
+  return highest;
+};
+
+const feltColors: Record<string, string> = {
+  'felt_red': 'radial-gradient(ellipse 130% 80% at 50% 35%, #7f1d1d 0%, #450a0a 40%, #220505 75%, #000000 100%)',
+  'felt_blue': 'radial-gradient(ellipse 130% 80% at 50% 35%, #1e3a8a 0%, #172554 40%, #020617 75%, #000000 100%)',
+  'felt_purple': 'radial-gradient(ellipse 130% 80% at 50% 35%, #581c87 0%, #3b0764 40%, #1e0231 75%, #000000 100%)',
+  'felt_vip': 'radial-gradient(ellipse 130% 80% at 50% 35%, #a16207 0%, #422006 40%, #1c0b01 75%, #000000 100%)',
+};
+const defaultFelt = 'radial-gradient(ellipse 130% 80% at 50% 35%, #14743f 0%, #0d4f2c 40%, #07321b 75%, #02110a 100%)';
+
 const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const myPlayer = room.players.find(p => p.userId === user.id) || null;
   const opponents = room.players.filter(p => p.userId !== user.id && p.isActive);
@@ -569,24 +599,35 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, myPlayer?.id]);
 
+  const activeFeltId = getHighestFelt(room.players);
+
   return (
     <div
-      className="text-white select-none overflow-hidden"
+      className="text-white select-none overflow-hidden relative bg-black"
       style={{
-        // Capa de fondo a PANTALLA COMPLETA (cubre safe-areas: sin franjas negras en standalone).
         position: 'fixed',
         inset: 0,
-        background: 'radial-gradient(ellipse 130% 80% at 50% 35%, #14743f 0%, #0d4f2c 40%, #07321b 75%, #02110a 100%)',
       }}
     >
+      <AnimatePresence>
+        <motion.div
+          key={activeFeltId || 'default'}
+          initial={{ y: '-100%' }}
+          animate={{ y: 0 }}
+          exit={{ y: '100%', zIndex: -1 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+          className="absolute inset-0"
+          style={{ background: activeFeltId ? feltColors[activeFeltId] : defaultFelt }}
+        />
+      </AnimatePresence>
       {/* Felt micro-texture */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-[0.06]"
+        className="absolute inset-0 pointer-events-none opacity-[0.06] z-0"
         style={{ backgroundImage: 'repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4) 0, rgba(255,255,255,0.4) 1px, transparent 1px, transparent 6px)' }}
       />
       {/* Outer gold rim arc — subtle casino frame */}
       <div
-        className="absolute inset-3 rounded-[40px] pointer-events-none"
+        className="absolute inset-3 rounded-[40px] pointer-events-none z-10"
         style={{ boxShadow: 'inset 0 0 0 2px rgba(217,164,65,0.18), inset 0 0 60px rgba(0,0,0,0.5)' }}
       />
 

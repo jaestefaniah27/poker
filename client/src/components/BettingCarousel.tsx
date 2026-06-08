@@ -1,4 +1,4 @@
-import { fmtChips } from '../utils';
+import React from 'react';
 
 interface Props {
   tiers: number[];

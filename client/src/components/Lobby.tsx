@@ -17,6 +17,7 @@ import RouletteModal from './RouletteModal';
 import OnlinePlayersModal from './OnlinePlayersModal';
 import LevelsModal from './LevelsModal';
 import GiftModal from './GiftModal';
+import { ShopModal } from './ShopModal';
 
 interface LobbyProps {
   user: { 
@@ -38,6 +39,14 @@ interface LobbyProps {
     ruletaLevel?: number;
     triviaLevel?: number;
     jackpotUnlockLevel?: number;
+    equippedAvatarDecoration?: string;
+    equippedNameDecoration?: string;
+    equippedBjFelt?: string;
+    unlockedAvatarDecorations?: string[];
+    unlockedNameDecorations?: string[];
+    unlockedBjFelts?: string[];
+    israelPool?: number;
+    movedToAndorra?: boolean;
   };
   token: string | null;
   rooms: any[];
@@ -80,6 +89,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
   const [showLevels, setShowLevels] = useState(false);
   const [showRoulette, setShowRoulette] = useState(false);
+  const [showShop, setShowShop] = useState(false);
 
   // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
@@ -307,6 +317,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       {showLevels && (
         <LevelsModal user={user} token={token} onClose={() => setShowLevels(false)} onUpdateUser={onUpdateUser} />
       )}
+      {showShop && (
+        <ShopModal user={user as any} onClose={() => setShowShop(false)} onUpdateUser={onUpdateUser} onError={(msg) => alert(msg)} />
+      )}
       {showProfile && (
         <ProfileModal user={user} token={token} onClose={() => setShowProfile(false)} onUpdate={onUpdateUser} />
       )}
@@ -372,12 +385,35 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               )}
             </button>
             <div className="flex flex-col items-end leading-tight">
-              <span className="text-xs text-gray-400 font-medium">{user.name}</span>
+              <span className="text-xs text-gray-400 font-medium relative">
+                {user.equippedNameDecoration === 'name_silver' && <span className="absolute -inset-1 bg-gradient-to-r from-gray-300 via-white to-gray-300 opacity-20 blur-sm rounded"></span>}
+                {user.equippedNameDecoration === 'name_gold' && <span className="absolute -inset-1 bg-gradient-to-r from-yellow-300 via-yellow-100 to-yellow-500 opacity-30 blur-sm rounded"></span>}
+                {user.equippedNameDecoration === 'name_diamond' && <span className="absolute -inset-1 bg-gradient-to-r from-cyan-300 via-blue-100 to-cyan-500 opacity-40 blur-sm rounded"></span>}
+                {user.equippedNameDecoration === 'name_rainbow' && <span className="absolute -inset-1 bg-gradient-to-r from-red-500 via-green-500 to-blue-500 opacity-50 blur-sm rounded animate-pulse"></span>}
+                <span className={`relative z-10 ${
+                  user.equippedNameDecoration === 'name_silver' ? 'text-gray-200 drop-shadow-[0_0_2px_rgba(255,255,255,0.8)]' :
+                  user.equippedNameDecoration === 'name_gold' ? 'text-yellow-300 drop-shadow-[0_0_5px_rgba(253,224,71,0.8)] font-bold' :
+                  user.equippedNameDecoration === 'name_diamond' ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(103,232,249,0.9)] font-black' :
+                  user.equippedNameDecoration === 'name_ruby' ? 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.9)] font-black' :
+                  user.equippedNameDecoration === 'name_emerald' ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.9)] font-black' :
+                  user.equippedNameDecoration === 'name_rainbow' ? 'text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-400 to-blue-400 drop-shadow-[0_0_5px_rgba(255,255,255,0.5)] font-black animate-pulse' :
+                  ''
+                }`}>{user.name}</span>
+                {user.movedToAndorra && <span className="ml-1 text-[10px]" title="Empadronado en Andorra">🇦🇩</span>}
+              </span>
               <span className={`font-mono text-sm ${user.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                 {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
               </span>
             </div>
-            <button onClick={() => setShowProfile(true)} title="Mi perfil" className="rounded-full ring-2 ring-transparent hover:ring-gray-500 transition-all relative">
+            <button onClick={() => setShowProfile(true)} title="Mi perfil" className={`rounded-full transition-all relative ${
+              user.equippedAvatarDecoration === 'avatar_bronze' ? 'ring-4 ring-[#cd7f32] shadow-[0_0_10px_#cd7f32]' :
+              user.equippedAvatarDecoration === 'avatar_silver' ? 'ring-4 ring-gray-300 shadow-[0_0_15px_#d1d5db]' :
+              user.equippedAvatarDecoration === 'avatar_gold' ? 'ring-4 ring-yellow-400 shadow-[0_0_20px_#facc15]' :
+              user.equippedAvatarDecoration === 'avatar_diamond' ? 'ring-4 ring-cyan-300 shadow-[0_0_25px_#67e8f9] animate-pulse' :
+              user.equippedAvatarDecoration === 'avatar_ruby' ? 'ring-4 ring-red-500 shadow-[0_0_30px_#ef4444]' :
+              user.equippedAvatarDecoration === 'avatar_emerald' ? 'ring-4 ring-emerald-400 shadow-[0_0_30px_#34d399] animate-bounce' :
+              'ring-2 ring-transparent hover:ring-gray-500'
+            }`}>
               <Avatar seed={user.avatar} />
               {user.hasPassword && (
                 <span className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 rounded-full w-3.5 h-3.5 flex items-center justify-center">
@@ -390,6 +426,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
             <button onClick={() => window.location.reload()} title="Recargar" className="text-gray-500 hover:text-white transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            <button onClick={() => setShowShop(true)} title="Tienda" className="text-yellow-500 hover:text-yellow-400 transition-colors drop-shadow-[0_0_5px_rgba(234,179,8,0.5)] active:scale-95">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
             </button>
             <button onClick={onLogout} title="Cerrar sesión" className="text-gray-500 hover:text-white transition-colors">

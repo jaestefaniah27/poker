@@ -174,7 +174,16 @@ const MIGRATIONS = [
   {
     name: '027_padre_israel_debt',
     sql: "UPDATE users SET israel_debt = 1000000000 WHERE name = 'padre' COLLATE NOCASE AND paid_israel = 0"
-  }
+  },
+  { name: '028_shop_avatar_eq', sql: 'ALTER TABLE users ADD COLUMN equipped_avatar_decoration TEXT', ignoreError: 'duplicate column' },
+  { name: '029_shop_avatar_un', sql: "ALTER TABLE users ADD COLUMN unlocked_avatar_decorations TEXT DEFAULT '[]'", ignoreError: 'duplicate column' },
+  { name: '030_shop_name_eq', sql: 'ALTER TABLE users ADD COLUMN equipped_name_decoration TEXT', ignoreError: 'duplicate column' },
+  { name: '031_shop_name_un', sql: "ALTER TABLE users ADD COLUMN unlocked_name_decorations TEXT DEFAULT '[]'", ignoreError: 'duplicate column' },
+  { name: '032_shop_felt_eq', sql: 'ALTER TABLE users ADD COLUMN equipped_bj_felt TEXT', ignoreError: 'duplicate column' },
+  { name: '033_shop_felt_un', sql: "ALTER TABLE users ADD COLUMN unlocked_bj_felts TEXT DEFAULT '[]'", ignoreError: 'duplicate column' },
+  { name: '034_shop_israel_don', sql: 'ALTER TABLE users ADD COLUMN israel_donation INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
+  { name: '035_shop_israel_pool', sql: 'ALTER TABLE users ADD COLUMN israel_pool INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
+  { name: '036_shop_andorra', sql: 'ALTER TABLE users ADD COLUMN moved_to_andorra INTEGER DEFAULT 0', ignoreError: 'duplicate column' }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -255,6 +264,15 @@ export interface UserRow {
   last_seen?: number;
   paid_israel?: number;
   israel_debt?: number;
+  equipped_avatar_decoration?: string | null;
+  unlocked_avatar_decorations?: string | null;
+  equipped_name_decoration?: string | null;
+  unlocked_name_decorations?: string | null;
+  equipped_bj_felt?: string | null;
+  unlocked_bj_felts?: string | null;
+  israel_donation?: number;
+  israel_pool?: number;
+  moved_to_andorra?: number;
 }
 
 import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX } from '../../shared/types';
@@ -300,6 +318,15 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     lastSeen: row.last_seen ?? undefined,
     paidIsrael: !!row.paid_israel,
     israelDebt: row.israel_debt ?? 0,
+    equippedAvatarDecoration: row.equipped_avatar_decoration ?? undefined,
+    unlockedAvatarDecorations: row.unlocked_avatar_decorations ? JSON.parse(row.unlocked_avatar_decorations) : [],
+    equippedNameDecoration: row.equipped_name_decoration ?? undefined,
+    unlockedNameDecorations: row.unlocked_name_decorations ? JSON.parse(row.unlocked_name_decorations) : [],
+    equippedBjFelt: row.equipped_bj_felt ?? undefined,
+    unlockedBjFelts: row.unlocked_bj_felts ? JSON.parse(row.unlocked_bj_felts) : [],
+    israelDonation: row.israel_donation ?? 0,
+    israelPool: row.israel_pool ?? 0,
+    movedToAndorra: !!row.moved_to_andorra,
   };
 };
 
@@ -566,4 +593,52 @@ export const payIsrael = async (id: string): Promise<number> => {
   const balanceBefore = user?.balance ?? 0;
   await applyBalanceDelta(id, -debt);
   return Math.min(balanceBefore, debt); // Return what was actually able to be taken (if we only want to give Israel what Padre actually had), or we just return debt.
+}
+
+// --- Shop Helpers ---
+export const addUnlockedShopItem = async (id: string, type: 'avatar' | 'name' | 'felt', itemId: string): Promise<void> => {
+  const row = await getUser(id);
+  if (!row) return;
+  const colName = `unlocked_${type === 'avatar' ? 'avatar_decorations' : type === 'name' ? 'name_decorations' : 'bj_felts'}`;
+  const currentArr: string[] = row[colName as keyof UserRow] ? JSON.parse(row[colName as keyof UserRow] as string) : [];
+  if (!currentArr.includes(itemId)) {
+    currentArr.push(itemId);
+    await dbRun(`UPDATE users SET ${colName} = ? WHERE id = ?`, [JSON.stringify(currentArr), id]);
+  }
 };
+
+export const equipShopItem = async (id: string, type: 'avatar' | 'name' | 'felt', itemId: string | null): Promise<void> => {
+  const colName = `equipped_${type === 'avatar' ? 'avatar_decoration' : type === 'name' ? 'name_decoration' : 'bj_felt'}`;
+  await dbRun(`UPDATE users SET ${colName} = ? WHERE id = ?`, [itemId, id]);
+};
+
+export const setMovedToAndorra = async (id: string): Promise<void> => {
+  await dbRun('UPDATE users SET moved_to_andorra = 1 WHERE id = ?', [id]);
+};
+
+export const addIsraelDonation = async (donorId: string, amount: number): Promise<void> => {
+  // Transfer to Israel player
+  const israelUser = await getUserByName('Israel');
+  if (israelUser) {
+    await applyBalanceDelta(israelUser.id, amount);
+  } else {
+    // If Israel doesn't exist, just deduct from donor, or we could create him
+    await createUser('israel-id', 'Israel');
+    await applyBalanceDelta('israel-id', amount);
+  }
+  // Deduct from donor
+  await applyBalanceDelta(donorId, -amount);
+  
+  // Add to donor's stats
+  const poolAddition = Math.floor(amount * 1.5);
+  await dbRun('UPDATE users SET israel_donation = israel_donation + ?, israel_pool = israel_pool + ? WHERE id = ?', [amount, poolAddition, donorId]);
+};
+
+export const deductIsraelPool = async (id: string, amount: number): Promise<number> => {
+  const row = await getUser(id);
+  if (!row || !row.israel_pool || row.israel_pool <= 0) return 0;
+  const deducted = Math.min(amount, row.israel_pool);
+  await dbRun('UPDATE users SET israel_pool = israel_pool - ? WHERE id = ?', [deducted, id]);
+  return deducted;
+};
+

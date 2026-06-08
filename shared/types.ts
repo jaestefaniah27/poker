@@ -39,6 +39,7 @@ export interface Player {
   sessionMaxChips?: number; // Pico de fichas durante la sesión
   sessionStartedAt?: number; // Timestamp del primer buy-in de la sesión
   offlineSince?: number; // Timestamp en que pasó a offline (para expulsión automática)
+  equippedBjFelt?: string; // Tapete de blackjack equipado
   // --- BlackJack ---
   bet?: number; // Apuesta de la mano actual de blackjack (legacy para retrocompatibilidad rápida de monto total apostado/etc)
   bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'surrender'; // legacy
@@ -143,6 +144,21 @@ export interface PublicUser {
   lastSeen?: number;
   paidIsrael?: boolean;
   israelDebt?: number;
+  
+  // --- Tienda y Cosméticos ---
+  equippedAvatarDecoration?: string;
+  unlockedAvatarDecorations?: string[];
+  
+  equippedNameDecoration?: string;
+  unlockedNameDecorations?: string[];
+  
+  equippedBjFelt?: string;
+  unlockedBjFelts?: string[];
+  
+  // --- Beneficios Sociales ---
+  israelDonation?: number;
+  israelPool?: number; // 1.5x of donation pool remaining
+  movedToAndorra?: boolean;
 }
 
 export const STAKE_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];
@@ -332,3 +348,43 @@ export const LEVEL_TRACK_MAX: Record<LevelTrack, number> = {
   ruleta: RULETA_MAX_LEVEL,
   trivia: TRIVIA_MAX_LEVEL,
 };
+
+// ============================================================
+// Tienda de Cosméticos y Beneficios Sociales
+// ============================================================
+
+export interface ShopItem {
+  id: string;
+  name: string;
+  price: number;
+  type: 'avatar' | 'name' | 'felt' | 'social';
+  description?: string;
+}
+
+export const SHOP_CATALOG: ShopItem[] = [
+  // --- Avatar Decorations ---
+  { id: 'avatar_bronze', name: 'Marco de Bronce', price: 5_000_000, type: 'avatar' },
+  { id: 'avatar_silver', name: 'Marco de Plata', price: 50_000_000, type: 'avatar' },
+  { id: 'avatar_gold', name: 'Marco de Oro', price: 500_000_000, type: 'avatar' },
+  { id: 'avatar_diamond', name: 'Aura de Diamante', price: 5_000_000_000, type: 'avatar' },
+  { id: 'avatar_ruby', name: 'Partículas de Rubí', price: 25_000_000_000, type: 'avatar' },
+  { id: 'avatar_emerald', name: 'Aura Esmeralda Mística', price: 100_000_000_000, type: 'avatar' },
+
+  // --- Name Decorations ---
+  { id: 'name_silver', name: 'Placa de Plata', price: 200_000_000, type: 'name' },
+  { id: 'name_gold', name: 'Placa de Oro', price: 2_000_000_000, type: 'name' },
+  { id: 'name_diamond', name: 'Placa de Diamante', price: 10_000_000_000, type: 'name' },
+  { id: 'name_ruby', name: 'Placa de Rubí', price: 50_000_000_000, type: 'name' },
+  { id: 'name_emerald', name: 'Placa de Esmeralda', price: 150_000_000_000, type: 'name' },
+  { id: 'name_rainbow', name: 'Brillo Arcoíris Animado', price: 300_000_000_000, type: 'name' },
+
+  // --- Blackjack Felts ---
+  { id: 'felt_red', name: 'Tapete Rojo Casino', price: 100_000_000, type: 'felt' },
+  { id: 'felt_blue', name: 'Tapete Azul Noche', price: 500_000_000, type: 'felt' },
+  { id: 'felt_purple', name: 'Tapete Morado Neón', price: 2_000_000_000, type: 'felt' },
+  { id: 'felt_vip', name: 'Tapete VIP Negro y Oro', price: 10_000_000_000, type: 'felt' },
+
+  // --- Social Benefits ---
+  { id: 'social_andorra', name: 'Mudanza a Andorra', price: 500_000_000_000, type: 'social', description: 'Otorga una exención fiscal que reduce la posibilidad de que Hacienda te incaute dinero a 1/10. Además, añade el sello de Andorra a tu nombre de forma permanente.' },
+];
+
