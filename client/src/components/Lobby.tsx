@@ -183,6 +183,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     };
   }, []);
 
+  const [, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
+
   const openStakeSlider = () => {
     if (!newRoomName.trim()) return;
     setCreateTierIndex(STAKE_TIERS.length - 1);
