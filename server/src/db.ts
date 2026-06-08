@@ -144,6 +144,11 @@ const MIGRATIONS = [
     name: '021_free_spins_pools',
     sql: "ALTER TABLE users ADD COLUMN free_spins_pools TEXT DEFAULT '{}'",
     ignoreError: 'duplicate column'
+  },
+  {
+    name: '022_last_seen',
+    sql: 'ALTER TABLE users ADD COLUMN last_seen INTEGER',
+    ignoreError: 'duplicate column'
   }
 ];
 
@@ -222,6 +227,7 @@ export interface UserRow {
   dieta_level: number;
   ruleta_level: number;
   trivia_level: number;
+  last_seen?: number;
 }
 
 import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX } from '../../shared/types';
@@ -264,6 +270,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     dietaLevel,
     ruletaLevel,
     triviaLevel,
+    lastSeen: row.last_seen ?? undefined,
   };
 };
 
@@ -297,6 +304,10 @@ export const isNameTaken = async (name: string, exceptId: string): Promise<boole
     [name.trim(), exceptId]
   );
   return !!row;
+};
+
+export const updateLastSeen = async (id: string): Promise<void> => {
+  await dbRun('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), id]);
 };
 
 export const createUser = async (id: string, name: string): Promise<void> => {

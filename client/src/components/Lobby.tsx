@@ -51,7 +51,21 @@ interface LeaderboardEntry {
   balance: number;
   avatar: string;
   level?: number;
+  lastSeen?: number;
+  isOnline?: boolean;
 }
+
+const formatLastSeen = (ts?: number) => {
+  if (!ts) return 'nunca';
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'hace <1m';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `hace ${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `hace ${hours}h ${mins % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days}d`;
+};
 
 const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineCount = 0 }: LobbyProps) => {
   const [showProfile, setShowProfile] = useState(false);
@@ -633,9 +647,14 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                           {entry.level ?? 1}
                         </span>
                       </div>
-                      <span className={`text-sm font-medium truncate flex-1 ${isMe ? 'text-emerald-300' : 'text-gray-300'}`}>
-                        {entry.name}
-                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm font-medium truncate flex-1 ${isMe ? 'text-emerald-300' : 'text-gray-300'}`}>
+                          {entry.name}
+                        </div>
+                        <div className="text-[10px] text-gray-500 font-medium">
+                          {entry.isOnline ? <span className="text-emerald-400">En línea</span> : formatLastSeen(entry.lastSeen)}
+                        </div>
+                      </div>
                       <span className={`font-mono text-sm font-semibold shrink-0 ${entry.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                         {entry.balance < 0 ? `-$${fmtChips(Math.abs(entry.balance))}` : `$${fmtChips(entry.balance)}`}
                       </span>

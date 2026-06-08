@@ -114,8 +114,22 @@ export const authHandlers = (socket: Socket) => {
   });
 
   socket.on('getLeaderboard', async (_data, callback) => {
+    const { io } = require('../socketHelpers');
+    const onlineUserIds = new Set<string>();
+    if (io) {
+      for (const [, s] of io.sockets.sockets) {
+        if (s.data?.user?.id) onlineUserIds.add(s.data.user.id);
+      }
+    }
     const users = await getAllUsersRanked();
-    callback(users.map(u => ({ name: u.name, balance: u.balance, avatar: u.avatar || u.id, level: levelFromXp(u.xp ?? 0) })));
+    callback(users.map(u => ({
+      name: u.name,
+      balance: u.balance,
+      avatar: u.avatar || u.id,
+      level: levelFromXp(u.xp ?? 0),
+      lastSeen: u.last_seen,
+      isOnline: onlineUserIds.has(u.id)
+    })));
   });
 
   socket.on('getAdminUsers', async ({ token }, callback) => {
