@@ -183,6 +183,13 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     const handleJackpotUpdate = (state: any) => setJackpotState(state);
     socket.on('jackpotStateUpdated', handleJackpotUpdate);
 
+    socket.emit('getPresence', (res: any) => {
+      if (res) {
+        if (res.jackpot) setJackpotViewers(res.jackpot);
+        if (res.roulette) setRoulettePlayers(res.roulette);
+      }
+    });
+
     const handleJackpotViewers = (viewers: any[]) => setJackpotViewers(viewers);
     const handleRoulettePlayers = (players: any[]) => setRoulettePlayers(players);
     socket.on('jackpot_viewers', handleJackpotViewers);

@@ -45,6 +45,13 @@ export const minigameHandlers = (socket: Socket) => {
     callback({ ok: true, newBalance: result.newBalance, user: updated ? toPublicUser(updated) : undefined });
   });
 
+  socket.on('getPresence', (callback) => {
+    callback({
+      jackpot: Array.from(jackpotViewers.values()),
+      roulette: rouletteEngine.getPlayersInfo()
+    });
+  });
+
   socket.on('jackpot_join', async ({ token }) => {
     const user = await authUser(token);
     if (!user) return;
