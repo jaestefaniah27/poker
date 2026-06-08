@@ -37,8 +37,6 @@ export const CHIP_PAGE_VALUES: number[][] = [
   [5000, 10000, 25000, 50000, 100000],
   [100000, 200000, 250000, 500000],
   [500000, 1000000, 2000000, 5000000],
-  [5000000, 10000000, 50000000, 100000000, 500000000],
-  [100000000, 500000000, 1000000000, 5000000000]
 ];
 export const CHIP_PAGES = CHIP_PAGE_VALUES.length + 1;
 
@@ -49,9 +47,8 @@ export const pageForAmount = (amount: number): number => {
   if (amount < 50000) return 1;
   if (amount < 250000) return 2;
   if (amount < 2000000) return 3;
-  if (amount < 10000000) return 4;
-  if (amount < 200000000) return 5;
-  return 6;
+  if (amount < 120000000) return 4;
+  return 5;
 };
 
 export const isPlaque = (v: number) => v >= 1000;
