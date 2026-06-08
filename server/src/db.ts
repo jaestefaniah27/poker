@@ -149,6 +149,10 @@ const MIGRATIONS = [
     name: '022_last_seen',
     sql: 'ALTER TABLE users ADD COLUMN last_seen INTEGER',
     ignoreError: 'duplicate column'
+  },
+  {
+    name: '023_shift_jackpot_tiers',
+    sql: 'UPDATE users SET jackpot_unlock_level = jackpot_unlock_level + 1 WHERE jackpot_unlock_level > 0'
   }
 ];
 
