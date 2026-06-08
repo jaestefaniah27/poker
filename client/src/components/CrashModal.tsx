@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
+import BettingCarousel from './BettingCarousel';
 
 interface CrashModalProps {
   user: { id: string; name: string; balance: number; jackpotUnlockLevel?: number };
@@ -186,15 +187,17 @@ export default function CrashModal({ user, token, onClose, onUpdateUser }: Crash
             <>
               <div>
                 <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
-                <div className="flex gap-1.5 flex-wrap justify-center">
-                  {JACKPOT_TIERS.slice(0, Math.max(unlockLevel, 1)).map((t, i) => (
-                    <button key={i} onClick={() => setBetIndex(i)}
+                <BettingCarousel
+                  tiers={JACKPOT_TIERS}
+                  unlockLevel={unlockLevel}
+                  renderItem={(t, i) => (
+                    <button onClick={() => setBetIndex(i)}
                       disabled={balance < t || i >= unlockLevel}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}>
+                      className={`w-full px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}>
                       {fmtChips(t)}
                     </button>
-                  ))}
-                </div>
+                  )}
+                />
                 {!isMaxLevel && (
                   <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3 mt-3">
                     <div>

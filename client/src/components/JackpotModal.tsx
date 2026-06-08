@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate } from '../utils';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 import SlotIcon from './SlotIcon';
+import BettingCarousel from './BettingCarousel';
 
 const SYMBOLS = ['club', 'diamond', 'heart', 'spade', 'chip', 'crown', 'ace'];
 
@@ -262,8 +263,10 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <div className="flex gap-1.5 flex-wrap justify-center">
-                {JACKPOT_TIERS.slice(0, Math.max(unlockLevel, 1)).map((t, i) => {
+              <BettingCarousel
+                tiers={JACKPOT_TIERS}
+                unlockLevel={unlockLevel}
+                renderItem={(t, i) => {
                   const poolCount = pools[String(t)] || 0;
                   const isFreeSpinTier = poolCount > 0;
                   const isSelected = isFreeSpinTier
@@ -272,7 +275,6 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                   const isDisabled = spinning || (i >= unlockLevel && !isFreeSpinTier) || (!isFreeSpinTier && balance < t);
                   return (
                     <button
-                      key={i}
                       onClick={() => {
                         if (isFreeSpinTier) {
                           setFreeSpinSelected(t);
@@ -282,7 +284,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                         }
                       }}
                       disabled={isDisabled}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none border ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none border w-full ${
                         isSelected
                           ? isFreeSpinTier
                             ? 'bg-pink-600 text-white border-transparent shadow-[0_0_10px_rgba(236,72,153,0.5)]'
@@ -295,8 +297,8 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                       {fmtChips(t)}
                     </button>
                   );
-                })}
-              </div>
+                }}
+              />
 
               {!isMaxLevel && (
                 <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-2 mt-2">
