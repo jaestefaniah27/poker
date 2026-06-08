@@ -1,4 +1,4 @@
-import { fmtChips } from '../utils';
+// import { fmtChips } from '../utils';
 
 interface Props {
   tiers: number[];
