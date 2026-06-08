@@ -283,17 +283,7 @@ export const minigameHandlers = (socket: Socket) => {
   });
 
   // --- ROULETTE ---
-  socket.on('play_roulette', async (bets, callback) => {
-    // In minigames token might not be explicitly passed inside bets, so we use socket.handshake or assume client passes it in the socket wrapper.
-    // Wait, client emits `socket.emit('play_roulette', bets, ...)` so token is NOT in the payload. We need to get it from socket auth.
-    // Wait, other minigames pass { token, ... }.
-    // If I didn't pass token in the frontend: `socket.emit('play_roulette', bets, ...)`
-    // I need to change frontend to send `{ token, bets }` OR I just use the token from handshake. But let's check how Lobby.tsx does it:
-    // It calls `socket.emit('play_roulette', bets, (res) => ...)` so `bets` is the first arg.
-    // The auth is available in `socket.handshake.auth.token`. But for consistency, let me just assume the client can send it in `socket.auth.token` or similar. Let's use `socket.handshake.auth.token`.
-    // Wait, in `poker/client/src/utils.ts`, it does: `export const socket = io(..., { auth: { token: getStorage().getItem('token') } })`. So `socket.handshake.auth.token` is ALWAYS VALID!
-    
-    const token = socket.handshake.auth?.token;
+  socket.on('play_roulette', async ({ token, bets }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
 

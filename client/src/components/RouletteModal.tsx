@@ -8,9 +8,9 @@ const ROULETTE_NUMBERS = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11
 const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 
 export default function RouletteModal({
-  onClose, balance, updateBalance
+  onClose, balance, updateBalance, token
 }: {
-  onClose: () => void; balance: number; updateBalance: (newBalance: number) => void;
+  onClose: () => void; balance: number; updateBalance: (newBalance: number) => void; token: string;
 }) {
   const [bets, setBets] = useState<Record<string, number>>({});
   const [activeChipPage, setActiveChipPage] = useState(0);
@@ -46,7 +46,7 @@ export default function RouletteModal({
     if (totalBet <= 0 || spinning || totalBet > balance) return;
     setSpinning(true);
     setResult(null);
-    socket.emit('play_roulette', bets, (res: any) => {
+    socket.emit('play_roulette', { token, bets }, (res: any) => {
       if (res.error) {
         alert(res.error);
         setSpinning(false);
@@ -92,13 +92,13 @@ export default function RouletteModal({
         onClick={(e) => placeBet(zone, e)}
         onContextMenu={(e) => placeBet(zone, e)}
       >
-        <span className="z-0 pointer-events-none text-sm sm:text-base">{label}</span>
+        <span className="z-0 pointer-events-none text-[10px] sm:text-base leading-none">{label}</span>
         {betAmt > 0 && (
           <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none drop-shadow-md">
-            <div className="scale-50 sm:scale-75 origin-center">
+            <div className="scale-[0.4] sm:scale-75 origin-center">
               <ChipStack chips={chips} size={28} />
             </div>
-            <div className="absolute bg-black/60 rounded px-1 text-[9px] text-white bottom-0.5 right-0.5">
+            <div className="absolute bg-black/60 rounded px-1 text-[8px] sm:text-[9px] text-white bottom-0.5 right-0.5">
               {fmtChips(betAmt)}
             </div>
           </div>
@@ -120,7 +120,8 @@ export default function RouletteModal({
       initial={{ opacity: 0, scale: 0.95, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 20 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-4 bg-black/60 backdrop-blur-md"
+      style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)', paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
     >
       <div className="w-full max-w-5xl bg-slate-900 border border-slate-700/50 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-full">
         {/* Header */}
@@ -151,8 +152,8 @@ export default function RouletteModal({
         <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col p-4 sm:p-6 gap-6 relative">
           
           {/* Wheel Section */}
-          <div className="flex justify-center items-center py-2 relative">
-             <div className="relative w-48 h-48 sm:w-64 sm:h-64 rounded-full border-8 border-slate-800 shadow-[0_0_40px_rgba(0,0,0,0.8)] bg-slate-900 overflow-hidden shrink-0">
+          <div className="flex justify-center items-center py-0 sm:py-2 relative shrink-0">
+             <div className="relative w-40 h-40 sm:w-64 sm:h-64 rounded-full border-[6px] sm:border-8 border-slate-800 shadow-[0_0_40px_rgba(0,0,0,0.8)] bg-slate-900 overflow-hidden shrink-0">
                <motion.div 
                  className="absolute inset-0 rounded-full"
                  animate={{ rotate: spinDeg }}
@@ -201,15 +202,15 @@ export default function RouletteModal({
           </div>
 
           {/* Betting Table */}
-          <div className="w-full max-w-4xl mx-auto flex gap-1 select-none overflow-x-auto pb-4">
+          <div className="w-full max-w-4xl mx-auto flex gap-0.5 sm:gap-1 select-none overflow-hidden pb-2 px-1 sm:px-0">
              {/* Zero */}
-             <div className="flex-shrink-0 w-12 sm:w-16 flex flex-col">
+             <div className="flex-shrink-0 w-8 sm:w-16 flex flex-col">
                {renderZone('0', '0', 1, 3, '#10b981', 'white', 'border-emerald-500/50 rounded-l-2xl h-full')}
              </div>
              
              {/* Numbers grid & Columns */}
-             <div className="flex-1 flex flex-col gap-1 min-w-[600px]">
-                <div className="grid grid-cols-13 gap-1 flex-1">
+             <div className="flex-1 flex flex-col gap-0.5 sm:gap-1 min-w-0">
+                <div className="grid grid-cols-13 gap-0.5 sm:gap-1 flex-1">
                   {/* Rows of numbers (12 cols) + 1 col for 2to1 */}
                   {rows.map((row, rIdx) => (
                     <div key={rIdx} className="contents">
@@ -220,18 +221,18 @@ export default function RouletteModal({
                 </div>
                 
                 {/* Dozens */}
-                <div className="grid grid-cols-12 gap-1 h-10 sm:h-12 mt-1">
+                <div className="grid grid-cols-12 gap-0.5 sm:gap-1 h-8 sm:h-12 mt-0.5 sm:mt-1">
                   {renderZone('dozen_1', '1st 12', 4, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600 rounded-bl-lg')}
                   {renderZone('dozen_2', '2nd 12', 4, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
                   {renderZone('dozen_3', '3rd 12', 4, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
                 </div>
                 
                 {/* Halves, Colors, Evens */}
-                <div className="grid grid-cols-12 gap-1 h-10 sm:h-12">
+                <div className="grid grid-cols-12 gap-0.5 sm:gap-1 h-8 sm:h-12">
                   {renderZone('low', '1-18', 2, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600 rounded-bl-lg')}
                   {renderZone('even', 'EVEN', 2, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
-                  {renderZone('red', <div className="w-4 h-4 sm:w-6 sm:h-6 bg-red-500 rounded-full mx-auto shadow-inner border border-red-700"/>, 2, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
-                  {renderZone('black', <div className="w-4 h-4 sm:w-6 sm:h-6 bg-slate-800 rounded-full mx-auto shadow-inner border border-slate-900"/>, 2, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
+                  {renderZone('red', <div className="w-3 h-3 sm:w-6 sm:h-6 bg-red-500 rounded-full mx-auto shadow-inner border border-red-700"/>, 2, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
+                  {renderZone('black', <div className="w-3 h-3 sm:w-6 sm:h-6 bg-slate-800 rounded-full mx-auto shadow-inner border border-slate-900"/>, 2, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
                   {renderZone('odd', 'ODD', 2, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
                   {renderZone('high', '19-36', 2, 1, 'rgba(255,255,255,0.05)', 'white', 'border-slate-600')}
                 </div>
