@@ -236,7 +236,7 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
   const d: ChipDenom = { v: val, label: fmtChips(val), color: '', ring: '', isCustom: true };
   const disabled = !canBet || val > maxBet || pendingTotal + val > maxBet;
 
-  const longPressTimer = useRef<NodeJS.Timeout>();
+  const longPressTimer = useRef<any>(null);
   const didLongPress = useRef(false);
 
   const handlePointerDown = () => {
