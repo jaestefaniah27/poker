@@ -54,9 +54,11 @@ const SWEEP_INTERVAL = 30 * 1000;
 import { initDB, loadRoomsFromDB, setOnBalanceChanged } from './db';
 import { restoreRoom, resumeBlindTimers } from './roomManager';
 import { loadJackpotState } from './jackpotEngine';
+import { rouletteEngine } from './rouletteEngine';
 
 // Initialize io in helpers
 setIo(io);
+rouletteEngine.init(io);
 
 setOnBalanceChanged(() => {
   io.emit('leaderboardUpdated');

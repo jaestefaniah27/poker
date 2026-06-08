@@ -588,7 +588,7 @@ function App() {
           ⚠️ Servidor reiniciando en {restartCountdown}s — tus fichas se guardan automáticamente
         </div>
       )}
-      <div className="absolute inset-0 bg-background text-primary font-sans flex justify-center" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
+      <div className="absolute inset-0 bg-background text-primary font-sans flex justify-center" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
       <div className="w-full max-w-md h-full relative flex flex-col overflow-hidden">
 
         {flyingChips.map(chip => (
