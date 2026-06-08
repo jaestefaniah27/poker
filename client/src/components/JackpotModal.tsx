@@ -153,8 +153,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-        className="w-full max-w-md bg-[#111] rounded-t-3xl border-t border-white/10 p-5 flex flex-col"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="w-full max-w-md bg-[#111] rounded-t-3xl border-t border-white/10 p-6 pb-6 flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
