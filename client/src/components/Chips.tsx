@@ -185,16 +185,17 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
     return Math.floor(num / magnitude) * magnitude;
   };
 
+  const MIN_PRO_CHIP = 30_000_000;
   const [val, setVal] = useState(() => {
     const stored = localStorage.getItem('customChipValue');
-    let init = stored ? parseInt(stored, 10) : 1000;
-    if (init > maxBet && maxBet > 0) init = getMostSignificantDigitValue(maxBet);
-    return Math.max(1, init);
+    let init = stored ? parseInt(stored, 10) : MIN_PRO_CHIP;
+    if (init > maxBet && maxBet >= MIN_PRO_CHIP) init = getMostSignificantDigitValue(maxBet);
+    return Math.max(MIN_PRO_CHIP, init);
   });
 
   useEffect(() => {
-    if (val > maxBet && maxBet > 0) {
-      setVal(getMostSignificantDigitValue(maxBet));
+    if (val > maxBet && maxBet >= 30_000_000) {
+      setVal(Math.max(30_000_000, getMostSignificantDigitValue(maxBet)));
     }
   }, [maxBet, val]);
 
@@ -227,7 +228,8 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
         }
       }
       
-      return Math.max(1, Math.min(maxBet, nv));
+      const upperLimit = Math.max(maxBet, 30_000_000);
+      return Math.max(30_000_000, Math.min(upperLimit, nv));
     });
   };
 
@@ -313,7 +315,7 @@ export const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet }:
 
 // Build a stack of chip glyphs from an amount (greedy biggest denoms first, cap at 6 visual chips)
 export const chipsFromAmount = (amount: number): ChipDenom[] => {
-  if (amount > 120_000_000) {
+  if (amount >= 30_000_000) {
     return [{ v: amount, label: fmtChips(amount), color: '', ring: '', isCustom: true }];
   }
 
@@ -408,4 +410,4 @@ export const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: num
       {customCols.map((col, i) => renderCol(col, 'customs', i))}
     </motion.div>
   );
-};
+};

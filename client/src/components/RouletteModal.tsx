@@ -644,7 +644,7 @@ export default function RouletteModal({
               page={activeChipPage} 
               setPage={setActiveChipPage} 
               onAdd={(d) => setActiveChip(d)} 
-              maxBet={Math.max(0, balance - totalBet)} 
+              maxBet={Math.max(0, balance)} 
               pendingTotal={0} 
               canBet={!spinning} 
             />
