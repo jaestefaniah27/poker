@@ -99,9 +99,9 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
 
       const isTease = res.symbols[0] === res.symbols[1];
       const delay1 = 200 + Math.random() * 400;
-      const delay2 = delay1 + 300 + Math.random() * 400;
-      const teaseExtra = (isTease && Math.random() < 0.7) ? (1500 + Math.random() * 2000) : 0;
-      const delay3 = delay2 + 00 + Math.random() * 500 + teaseExtra;
+      const delay2 = delay1 + 250 + Math.random() * 400;
+      const teaseExtra = (isTease && Math.random() < 0.5) ? (1000 + Math.random() * 1500) : 0;
+      const delay3 = delay2 + 250 + Math.random() * 500 + teaseExtra;
 
       const stops = [delay1, delay2, delay3];
       stops.forEach((delay, i) => {
@@ -158,7 +158,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-xl font-extrabold tracking-tight text-white">Jackpot</h2>
             <p className="text-xs text-gray-500 mt-0.5">{fmtChips(balance)}</p>
@@ -167,11 +167,11 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Carretes */}
-        <div className="flex justify-center gap-2 mb-4">
+        <div className="flex justify-center gap-3 mb-6">
           {reels.map((reel, i) => (
             <div
               key={i}
-              className="w-20 h-20 rounded-xl bg-[#1c1c1c] border border-white/10 flex items-center justify-center shadow-inner overflow-hidden relative"
+              className="w-24 h-24 rounded-2xl bg-[#1c1c1c] border border-white/10 flex items-center justify-center shadow-inner overflow-hidden relative"
             >
               <AnimatePresence>
                 <motion.div
@@ -182,7 +182,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                   transition={{ duration: 0.07, ease: "linear" }}
                   className="absolute flex items-center justify-center w-full h-full"
                 >
-                  <SlotIcon symbol={reel.symbol} className="w-12 h-12" />
+                  <SlotIcon symbol={reel.symbol} className="w-16 h-16" />
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -190,7 +190,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Resultado */}
-        <div className="h-10 flex items-center justify-center mb-3">
+        <div className="h-10 flex items-center justify-center mb-5">
           <AnimatePresence mode="wait">
             {result && (
               <motion.div
@@ -220,7 +220,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Selector de apuesta */}
-        <div className="mb-3">
+        <div className="mb-5">
           <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
 
           {isLocked ? (
