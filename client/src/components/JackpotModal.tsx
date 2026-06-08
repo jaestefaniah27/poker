@@ -157,12 +157,12 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-        className="w-full max-w-md bg-[#111] rounded-t-3xl border-t border-white/10 px-6 pt-6 pb-2 flex flex-col"
-        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}
+        className="w-full max-w-md bg-[#111] rounded-t-3xl border-t border-white/10 px-4 pt-4 pb-1 flex flex-col"
+        style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom, 0px))' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-xl font-extrabold tracking-tight text-white">Jackpot</h2>
             <p className="text-xs text-gray-500 mt-0.5">{fmtChips(balance)}</p>
@@ -171,7 +171,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Carretes */}
-        <div className="flex justify-center gap-3 mb-6">
+        <div className="flex justify-center gap-3 mb-4">
           {reels.map((reel, i) => (
             <div
               key={i}
@@ -194,7 +194,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Resultado */}
-        <div className="h-10 flex items-center justify-center mb-5">
+        <div className="h-10 flex items-center justify-center mb-3">
           <AnimatePresence mode="wait">
             {result && (
               <motion.div
@@ -224,7 +224,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Selector de apuesta */}
-        <div className="mb-3">
+        <div className="mb-2">
           <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
 
           {isLocked ? (
@@ -270,7 +270,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
               </div>
 
               {!isMaxLevel && (
-                <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3 mt-3">
+                <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-2 mt-2">
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-widest">Nivel {unlockLevel + 1}</p>
                     <p className="text-sm font-bold text-gray-200">{fmtChips(JACKPOT_TIERS[unlockLevel])}</p>
@@ -290,7 +290,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
           <button
             onClick={handleUnlock}
             disabled={unlocking}
-            className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none"
+            className="w-full py-3 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none"
             style={{ background: unlocking ? '#333' : 'linear-gradient(180deg, #f59e0b, #b45309)', color: unlocking ? '#888' : '#000' }}
           >
             {unlocking ? 'Desbloqueando…' : `🔓 DESBLOQUEAR — ${fmtChips(JACKPOT_UNLOCK_COSTS[0])}`}
@@ -299,7 +299,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
           <button
             onClick={handleSpin}
             disabled={spinDisabled}
-            className="w-full py-4 rounded-2xl font-extrabold text-lg tracking-wider shadow-lg active:scale-95 transition-transform disabled:opacity-30 disabled:pointer-events-none disabled:active:scale-100"
+            className="w-full py-3 rounded-2xl font-extrabold text-xl tracking-wider shadow-[0_0_20px_rgba(236,72,153,0.3)] active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none disabled:active:scale-100"
             style={{
               background: spinDisabled
                 ? '#333'
