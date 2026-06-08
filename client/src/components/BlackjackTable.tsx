@@ -464,10 +464,10 @@ const TotalPill = ({ total, soft, bust, hasHidden, accent = 'sky', size = 'sm' }
 // Linear card row — cards laid out left-to-right with controlled overlap.
 // Each card's top-left rank stays visible (overlap eats only right side).
 // Step decreases as n grows → existing cards slide together to make room for the new one.
-const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; big?: boolean; faceDownDeal?: boolean }) => {
-  const cardW = big ? 72 : 50;
-  const cardH = big ? 108 : 72;
-  const cls = big ? 'w-[72px] h-[108px]' : 'w-[50px] h-[72px]';
+const CardFan = ({ cards, big = false, mini = false, micro = false, faceDownDeal = false }: { cards: Card[]; big?: boolean; mini?: boolean; micro?: boolean; faceDownDeal?: boolean }) => {
+  const cardW = micro ? 32 : (mini ? 38 : (big ? 72 : 50));
+  const cardH = micro ? 44 : (mini ? 54 : (big ? 108 : 72));
+  const cls = micro ? 'w-[32px] h-[44px]' : (mini ? 'w-[38px] h-[54px]' : (big ? 'w-[72px] h-[108px]' : 'w-[50px] h-[72px]'));
   const n = cards.length;
   const step = n <= 1 ? cardW
     : n === 2 ? Math.round(cardW * 0.74)
@@ -532,16 +532,19 @@ const CardFan = ({ cards, big = false, faceDownDeal = false }: { cards: Card[]; 
 
 
 // Mano compacta para oponentes: cartas pequeñas muy superpuestas (estilo escritorio).
-const MiniHand = ({ cards }: { cards: Card[] }) => {
+const MiniHand = ({ cards, size = 'mini' }: { cards: Card[], size?: 'mini' | 'micro' }) => {
   const n = cards.length;
-  const cw = 32, ch = 44, step = 16;
+  const cw = size === 'micro' ? 24 : 32;
+  const ch = size === 'micro' ? 34 : 44;
+  const step = size === 'micro' ? 12 : 16;
+  const cardCls = size === 'micro' ? 'w-6 h-[34px]' : 'w-8 h-11';
   return (
     <div className="relative" style={{ width: cw + step * Math.max(0, n - 1), height: ch }}>
       {cards.map((c, i) => {
         const hidden = (c.rank as unknown as string) === '?';
         return (
           <div key={i} className="absolute" style={{ left: i * step, top: 0, zIndex: i }}>
-            <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} compact className="w-8 h-11" />
+            <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} compact className={cardCls} />
           </div>
         );
       })}
@@ -691,7 +694,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     setPlacedComposition([...pendingChips]); // snapshot exacto: no se reordena al repartir
     socket.emit('bjPlaceBet', { roomId: room.id, amount: pendingTotal });
   };
-  const sendAction = (action: 'Hit' | 'Stand' | 'Double' | 'Surrender') => {
+  const sendAction = (action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split') => {
     socket.emit('bjAction', { roomId: room.id, action });
     vibrate(15);
   };
@@ -707,18 +710,32 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     if (phase === 'betting') setPrizeArrived(false);
   }, [phase]);
 
-  // Chips visibles en el círculo: pendientes mientras apuestas, o la composición exacta apostada.
+  const myHands = (phase === 'betting' || phase === 'waiting') ? [] : (myPlayer?.bjHands || (myPlayer?.cards?.length ? [{ cards: myPlayer.cards, bet: myBet, status: myPlayer?.bjStatus || 'playing' }] : []));
+  const activeHandIndex = Math.min(myPlayer?.bjActiveHandIndex ?? 0, Math.max(0, myHands.length - 1));
+
+  const originalBetAmount = (myHands.length > 0 && myHands[0])
+    ? (myHands[0].doubled ? myHands[0].bet / 2 : myHands[0].bet)
+    : (myPlayer?.bjDoubled ? myBet / 2 : myBet);
+
   const basePlacedChips = placedComposition.length > 0
     ? placedComposition
-    : myBet > 0
-      ? chipsFromAmount(myPlayer?.bjDoubled ? myBet / 2 : myBet)
+    : originalBetAmount > 0
+      ? chipsFromAmount(originalBetAmount)
       : [];
 
-  const _circleChips = pendingChips.length > 0
-    ? pendingChips
-    : myPlayer?.bjDoubled
-      ? [...basePlacedChips, ...basePlacedChips]
-      : basePlacedChips;
+  let _circleChips = pendingChips.length > 0 ? pendingChips : [];
+  if (pendingChips.length === 0) {
+    if (myHands.length > 0) {
+      _circleChips = [];
+      myHands.forEach((h: any) => {
+        if (!h) return;
+        _circleChips.push(...basePlacedChips);
+        if (h.doubled) _circleChips.push(...basePlacedChips);
+      });
+    } else {
+      _circleChips = myPlayer?.bjDoubled ? [...basePlacedChips, ...basePlacedChips] : basePlacedChips;
+    }
+  }
 
   let finalCircleChips = _circleChips;
   if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer?.bjDelta || 0) > 0) {
@@ -791,16 +808,21 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const [dealDone, setDealDone] = useState(true);
   const dealingRef = useRef(false);
 
-  const myCards = (phase === 'betting' || phase === 'waiting') ? [] : (myPlayer?.cards || []);
-  // Sliced versions for sequential deal animation (dealDone → show all)
+  const myCards = myHands.length > 0 ? (myHands[activeHandIndex]?.cards || []) : [];
   const displayMyCards = dealDone ? myCards : myCards.slice(0, revealedPlayer);
+  const myTotals = myPlayer ? handTotalDisplay(displayMyCards) : null;
   const displayDealerCards = phase === 'resolve'
     ? dealer.cards.slice(0, dealerResolveCount)
     : (dealDone ? dealer.cards : dealer.cards.slice(0, revealedDealer));
-  const myTotals = myPlayer ? handTotalDisplay(displayMyCards) : null;
   const displayDealerTotals = handTotalDisplay(displayDealerCards);
 
-  const canDouble = canAct && myCards.length === 2 && myChips >= myBet * 2;
+  const totalBet = myHands.reduce((acc: number, h: any) => acc + h.bet, 0);
+  const activeHandBet = myHands.length > 0 ? (myHands[activeHandIndex]?.bet ?? myBet) : myBet;
+  const canDoubleHand = canAct && myCards.length === 2 && myChips >= totalBet + activeHandBet;
+
+  const isPair = myCards.length === 2 && myCards[0].rank === myCards[1].rank;
+  const canSplit = canAct && isPair && myHands.length < 4 && myChips >= totalBet + activeHandBet;
+
   const canRebuy = !!myPlayer && myPlayer.isActive && myChips <= 0 && phase !== 'dealing';
 
   // Fichas disponibles mostradas: restan la apuesta en mesa (ves cuánto te queda en todo momento).
@@ -1059,6 +1081,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               const isBust = p.bjStatus === 'bust' || t.bust;
               const result = showResult ? p.bjResult : undefined;
               const opacity = p.isOnline === false ? 0.5 : 1;
+              const oppHands = p.bjHands && p.bjHands.length > 0 ? p.bjHands : ((p.cards?.length || 0) > 0 ? [{ cards: p.cards, status: p.bjStatus }] : []);
+              const totalOppBet = oppHands.reduce((acc: number, h: any) => acc + (h.bet || 0), 0) || p.bet || 0;
               return (
                 <motion.div
                   key={p.userId}
@@ -1076,14 +1100,27 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                       <div className="text-[9px] font-bold truncate leading-tight">{p.name}</div>
                       <div className="text-[8px] text-white/50 font-mono leading-none">{fmtChips(p.chips)}</div>
                     </div>
-                    {(p.cards?.length || 0) > 0 && (
+                    {oppHands.length === 1 && (oppHands[0].cards?.length || 0) > 0 && (
                       <TotalPill total={t.total} soft={t.soft} bust={isBust} hasHidden={t.hasHidden}
                         accent={p.bjStatus === 'blackjack' ? 'amber' : 'sky'} size="xs" />
                     )}
                   </div>
-                  <div className="flex justify-center items-center" style={{ height: 44 }}>
-                    {(p.cards?.length || 0) > 0 ? (
-                      <MiniHand cards={p.cards || []} />
+                  <div className="flex justify-center items-center gap-1.5" style={{ minHeight: 44 }}>
+                    {oppHands.length > 0 ? (
+                      oppHands.length === 1 ? (
+                        <MiniHand cards={oppHands[0].cards} />
+                      ) : (
+                        oppHands.map((h: any, i: number) => {
+                          const ht = handTotalDisplay(h.cards);
+                          const hBust = h.status === 'bust' || ht.bust;
+                          return (
+                            <div key={i} className={`flex flex-col items-center justify-end gap-0.5 ${h.status === 'playing' ? 'scale-105 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : 'opacity-80 scale-95'}`}>
+                              <MiniHand cards={h.cards} size={oppHands.length > 2 ? 'micro' : 'mini'} />
+                              <TotalPill total={ht.total} soft={ht.soft} bust={hBust} hasHidden={ht.hasHidden} accent={h.status === 'blackjack' ? 'amber' : 'sky'} size="xs" />
+                            </div>
+                          );
+                        })
+                      )
                     ) : (
                       <div className="text-[9px] text-white/35 uppercase tracking-wider">
                         {(p.bet || 0) > 0 ? '· apostado ·' : '· esperando ·'}
@@ -1091,9 +1128,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                     )}
                   </div>
                   <div className="flex items-center gap-1 justify-center min-h-[12px]">
-                    {(p.bet || 0) > 0 && !result && (
+                    {totalOppBet > 0 && !result && (
                       <span className="text-[8px] font-bold text-yellow-200 bg-yellow-400/10 border border-yellow-300/30 px-1.5 rounded-full leading-tight">
-                        {fmtChips(p.bet || 0)}{p.bjDoubled ? '×2' : ''}
+                        {fmtChips(totalOppBet)}{p.bjDoubled ? '×2' : ''}
                       </span>
                     )}
                     {result && (
@@ -1124,32 +1161,52 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       {/* Cartas del jugador (slot fijo SIEMPRE reservado: placeholder cuando no hay cartas) */}
       <motion.div
         ref={playerCardsRef}
-        className="relative z-10 px-4 shrink-0 flex items-center justify-center gap-2"
-        style={{ height: 110 }}
+        className="relative z-10 w-full px-1 shrink-0 flex flex-wrap items-center justify-center gap-x-3 gap-y-2"
+        style={{ minHeight: 110 }}
         animate={collecting ? { x: playerCollectTarget.x, y: playerCollectTarget.y, opacity: 0, scale: 0.3 } : { x: 0, y: 0, opacity: 1, scale: 1 }}
         transition={{ duration: 0.45, delay: 0.07, ease: [0.4, 0, 1, 1] }}
       >
-        {myPlayer && myCards.length > 0 ? (
-          <>
-            {/* CardFan SIEMPRE montado (aunque vacío) → AnimatePresence anima la PRIMERA carta al añadirse */}
-            <CardFan cards={displayMyCards} big />
-            {myTotals && displayMyCards.length >= 2 && (
-              <AnimatePresence>
-                <motion.div
-                  key="player-total"
-                  layout
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 20, layout: { type: 'spring', stiffness: 320, damping: 30 } }}
-                  className="self-start mt-1"
-                >
-                  <TotalPill total={myTotals.total} soft={myTotals.soft} bust={myTotals.bust} hasHidden={false}
-                    accent={myPlayer.bjStatus === 'blackjack' ? 'amber' : 'sky'} />
-                </motion.div>
-              </AnimatePresence>
-            )}
-          </>
+        {myPlayer && myHands.length > 0 ? (
+          myHands.map((hand: any, idx: number) => {
+            const isHandActive = idx === activeHandIndex && canAct;
+            const hCards = (idx === 0 && !dealDone) ? displayMyCards : hand.cards;
+            const hTotals = handTotalDisplay(hCards);
+            
+            let classStr = '';
+            if (showResult && hand.result) {
+              if (hand.result === 'win' || hand.result === 'blackjack') {
+                classStr = 'scale-105 z-20';
+              } else if (hand.result === 'push') {
+                classStr = 'scale-95 opacity-70 z-10';
+              } else {
+                classStr = 'scale-90 opacity-30 brightness-50 z-10';
+              }
+            } else {
+              classStr = isHandActive ? 'scale-110 z-20' : myHands.length > 1 ? 'scale-90 opacity-40 brightness-75 z-10' : '';
+            }
+
+            return (
+              <div key={idx} className={`relative flex items-center transition-all duration-300 ${classStr}`}>
+                <CardFan cards={hCards} big={myHands.length === 1} mini={myHands.length === 3} micro={myHands.length === 4} />
+                {hTotals && hCards.length >= 2 && (
+                  <AnimatePresence>
+                    <motion.div
+                      layout
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0, opacity: 0 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 20, layout: { type: 'spring', stiffness: 320, damping: 30 } }}
+                      className="self-start mt-1 ml-1"
+                    >
+                      <TotalPill total={hTotals.total} soft={hTotals.soft} bust={hTotals.bust} hasHidden={false}
+                        accent={hand.status === 'blackjack' ? 'amber' : 'sky'} 
+                        size={myHands.length > 2 ? 'xs' : undefined} />
+                    </motion.div>
+                  </AnimatePresence>
+                )}
+              </div>
+            );
+          })
         ) : (
           <div className="w-[72px] h-[108px] rounded-xl border-2 border-dashed border-white/10" />
         )}
@@ -1315,11 +1372,21 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           )}
 
           {phase === 'playerAction' && canAct && (
-            <div className="flex-1 grid grid-cols-4 gap-2 items-stretch">
-              <ActionBtn label="CARTA" onClick={() => sendAction('Hit')} disabled={!dealDone} from="#34d399" to="#059669" />
-              <ActionBtn label="PLANTAR" onClick={() => sendAction('Stand')} disabled={!dealDone} from="#f87171" to="#b91c1c" />
-              <ActionBtn label="DOBLAR" onClick={() => sendAction('Double')} disabled={!dealDone || !canDouble} from="#fbbf24" to="#b45309" />
-              <ActionBtn label="RENDIR" onClick={() => sendAction('Surrender')} disabled={!dealDone || displayMyCards.length !== 2} from="#9ca3af" to="#4b5563" />
+            <div className={`flex-1 grid gap-2 items-stretch ${canSplit ? 'grid-rows-2' : ''}`}>
+              <div className={`grid gap-2 items-stretch ${canSplit ? 'grid-cols-3' : 'grid-cols-4'}`}>
+                <ActionBtn label="CARTA" onClick={() => sendAction('Hit')} disabled={!dealDone} from="#34d399" to="#059669" />
+                <ActionBtn label="PLANTAR" onClick={() => sendAction('Stand')} disabled={!dealDone} from="#f87171" to="#b91c1c" />
+                <ActionBtn label="DOBLAR" onClick={() => sendAction('Double')} disabled={!dealDone || !canDoubleHand} from="#fbbf24" to="#b45309" />
+                {!canSplit && (
+                  <ActionBtn label="RENDIR" onClick={() => sendAction('Surrender')} disabled={!dealDone || myCards.length !== 2} from="#9ca3af" to="#4b5563" />
+                )}
+              </div>
+              {canSplit && (
+                <div className="grid grid-cols-2 gap-2 items-stretch">
+                  <ActionBtn label="DIVIDIR" onClick={() => sendAction('Split')} disabled={!dealDone || !canSplit} from="#818cf8" to="#4f46e5" />
+                  <ActionBtn label="RENDIR" onClick={() => sendAction('Surrender')} disabled={!dealDone || myCards.length !== 2} from="#9ca3af" to="#4b5563" />
+                </div>
+              )}
             </div>
           )}
           {phase === 'playerAction' && !canAct && (

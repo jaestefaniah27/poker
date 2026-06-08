@@ -46,11 +46,26 @@ export const dealBlackjack = (room: Room) => {
   ensureDeck(room, players.length * 2 + 2);
   room.dealerCards = [room.deck.pop()!, room.deck.pop()!];
   players.forEach(p => {
-    p.cards = [room.deck.pop()!, room.deck.pop()!];
+    let c1 = room.deck.pop()!;
+    let c2 = room.deck.pop()!;
+    if (Math.random() < 0.8) {
+      const lowRanks = ['2', '3', '4', '5'] as const;
+      const rank = lowRanks[Math.floor(Math.random() * lowRanks.length)];
+      c1 = { rank, suit: 'h' };
+      c2 = { rank, suit: 's' };
+    }
+    p.cards = [c1, c2];
     p.bjDoubled = false;
     p.bjStatus = isBlackjack(p.cards) ? 'blackjack' : 'playing';
     p.bjResult = undefined;
     p.bjDelta = undefined;
+    
+    p.bjHands = [{
+      cards: [c1, c2],
+      bet: p.bet || 0,
+      status: p.bjStatus
+    }];
+    p.bjActiveHandIndex = 0;
   });
   // Jugadores sin bet: mano vacía, idle
   room.players
@@ -61,6 +76,8 @@ export const dealBlackjack = (room: Room) => {
       p.bjDoubled = false;
       p.bjResult = undefined;
       p.bjDelta = undefined;
+      p.bjHands = undefined;
+      p.bjActiveHandIndex = undefined;
     });
 };
 
@@ -88,45 +105,96 @@ export const resolveBlackjack = (room: Room) => {
   room.players
     .filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0)
     .forEach(p => {
-      const bet = p.bet || 0;
-      const player = handValue(p.cards);
-      const playerBJ = p.bjStatus === 'blackjack';
+      let totalDelta = 0;
 
-      let delta = 0;
-      let result: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender' = 'lose';
+      if (p.bjHands && p.bjHands.length > 0) {
+        for (const hand of p.bjHands) {
+          const bet = hand.bet;
+          const player = handValue(hand.cards);
+          const playerBJ = hand.status === 'blackjack';
 
-      if (p.bjStatus === 'bust' || player.total > 21) {
-        delta = -bet;
-        result = 'lose';
-      } else if (p.bjStatus === 'surrender') {
-        delta = -Math.ceil(bet / 2);
-        result = 'surrender';
-      } else if (playerBJ && dealerBJ) {
-        delta = 0; // push
-        result = 'push';
-      } else if (playerBJ) {
-        delta = Math.floor(bet * 1.5); // 3:2
-        result = 'blackjack';
-      } else if (dealerBJ) {
-        delta = -bet;
-        result = 'lose';
-      } else if (dealerBust) {
-        delta = bet;
-        result = 'win';
-      } else if (player.total > dealer.total) {
-        delta = bet;
-        result = 'win';
-      } else if (player.total < dealer.total) {
-        delta = -bet;
-        result = 'lose';
+          let delta = 0;
+          let result: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender' = 'lose';
+
+          if (hand.status === 'bust' || player.total > 21) {
+            delta = -bet;
+            result = 'lose';
+          } else if (hand.status === 'surrender') {
+            delta = -Math.ceil(bet / 2);
+            result = 'surrender';
+          } else if (playerBJ && dealerBJ) {
+            delta = 0; // push
+            result = 'push';
+          } else if (playerBJ) {
+            delta = Math.floor(bet * 1.5); // 3:2
+            result = 'blackjack';
+          } else if (dealerBJ) {
+            delta = -bet;
+            result = 'lose';
+          } else if (dealerBust) {
+            delta = bet;
+            result = 'win';
+          } else if (player.total > dealer.total) {
+            delta = bet;
+            result = 'win';
+          } else if (player.total < dealer.total) {
+            delta = -bet;
+            result = 'lose';
+          } else {
+            delta = 0;
+            result = 'push';
+          }
+
+          hand.delta = delta;
+          hand.result = result;
+          totalDelta += delta;
+        }
+
+        p.chips += totalDelta;
+        p.bjDelta = totalDelta;
+        p.bjResult = p.bjHands[0].result;
       } else {
-        delta = 0;
-        result = 'push';
-      }
+        // Fallback for legacy state without bjHands
+        const bet = p.bet || 0;
+        const player = handValue(p.cards);
+        const playerBJ = p.bjStatus === 'blackjack';
 
-      p.chips += delta;
-      p.bjDelta = delta;
-      p.bjResult = result;
+        let delta = 0;
+        let result: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender' = 'lose';
+
+        if (p.bjStatus === 'bust' || player.total > 21) {
+          delta = -bet;
+          result = 'lose';
+        } else if (p.bjStatus === 'surrender') {
+          delta = -Math.ceil(bet / 2);
+          result = 'surrender';
+        } else if (playerBJ && dealerBJ) {
+          delta = 0; // push
+          result = 'push';
+        } else if (playerBJ) {
+          delta = Math.floor(bet * 1.5); // 3:2
+          result = 'blackjack';
+        } else if (dealerBJ) {
+          delta = -bet;
+          result = 'lose';
+        } else if (dealerBust) {
+          delta = bet;
+          result = 'win';
+        } else if (player.total > dealer.total) {
+          delta = bet;
+          result = 'win';
+        } else if (player.total < dealer.total) {
+          delta = -bet;
+          result = 'lose';
+        } else {
+          delta = 0;
+          result = 'push';
+        }
+
+        p.chips += delta;
+        p.bjDelta = delta;
+        p.bjResult = result;
+      }
     });
 };
 
@@ -138,15 +206,21 @@ export const resetBlackjackHand = (room: Room) => {
     p.bet = 0;
     p.bjStatus = 'idle';
     p.bjDoubled = false;
+    p.bjHands = undefined;
+    p.bjActiveHandIndex = undefined;
     // mantener bjResult/bjDelta para que cliente los muestre durante 'resolve' antes de limpiar
   });
 };
 
 // Devuelve el siguiente jugador que debe actuar (bet > 0 y bjStatus === 'playing'), o undefined.
 export const nextBlackjackActor = (room: Room, afterUserId?: string): Player | undefined => {
-  const eligibles = room.players.filter(p =>
-    p.isActive && !p.isSpectating && (p.bet || 0) > 0 && p.bjStatus === 'playing'
-  );
+  const eligibles = room.players.filter(p => {
+    if (!p.isActive || p.isSpectating || (p.bet || 0) === 0) return false;
+    if (p.bjHands && p.bjHands.length > 0) {
+      return p.bjHands.some(h => h.status === 'playing');
+    }
+    return p.bjStatus === 'playing';
+  });
   if (eligibles.length === 0) return undefined;
   if (!afterUserId) return eligibles[0];
   const idx = eligibles.findIndex(p => p.userId === afterUserId);
