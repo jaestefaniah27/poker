@@ -513,7 +513,6 @@ function App() {
   }
 
   if (user.israelDebt && user.israelDebt > 0) {
-    const { fmtChips } = require('./utils');
     return (
       <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-6 text-center text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <h1 className="text-5xl font-black text-rose-500 mb-6 uppercase tracking-widest drop-shadow-[0_0_15px_rgba(225,29,72,0.5)]">Aviso Importante</h1>
