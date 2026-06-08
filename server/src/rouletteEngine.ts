@@ -15,6 +15,8 @@ export class RouletteEngine {
   private userBets = new Map<string, UserBet>(); // userId -> UserBet
   private history: number[] = [];
   private tickInterval?: NodeJS.Timeout;
+  private playerInfo = new Map<string, { name: string; avatar: string }>(); // userId -> display info
+  private viewers = new Set<string>(); // userIds currently watching
 
   public init(io: Server) {
     this.io = io;
@@ -63,8 +65,48 @@ export class RouletteEngine {
     return {
       phase: this.phase,
       timeRemainingMs: Math.max(0, this.phaseEndsAt - Date.now()),
-      history: this.history
+      history: this.history,
+      players: this.getPlayersInfo()
     };
+  }
+
+  public joinTable(userId: string, name: string, avatar: string) {
+    this.viewers.add(userId);
+    this.playerInfo.set(userId, { name, avatar });
+    this.broadcastPlayers();
+  }
+
+  public leaveTable(userId: string) {
+    this.viewers.delete(userId);
+    // Keep playerInfo around until end of round in case they have active bets
+    if (!this.userBets.has(userId)) {
+      this.playerInfo.delete(userId);
+    }
+    this.broadcastPlayers();
+  }
+
+  private getPlayersInfo() {
+    const players: Array<{ id: string; name: string; avatar: string; totalBet: number; bets: Record<string, number> }> = [];
+    // Include all viewers + anyone with active bets
+    const allIds = new Set([...this.viewers, ...this.userBets.keys()]);
+    for (const id of allIds) {
+      const info = this.playerInfo.get(id);
+      if (!info) continue;
+      const ub = this.userBets.get(id);
+      players.push({
+        id,
+        name: info.name,
+        avatar: info.avatar,
+        totalBet: ub?.total || 0,
+        bets: ub?.bets || {}
+      });
+    }
+    return players;
+  }
+
+  private broadcastPlayers() {
+    if (!this.io) return;
+    this.io.emit('roulette_players', this.getPlayersInfo());
   }
 
   private async tick() {
@@ -131,8 +173,16 @@ export class RouletteEngine {
     // Broadcast the result number globally so everyone spins
     if (this.io) {
       this.io.emit('roulette_spin', { resultNum });
-      // Broadcast payouts
-      const userUpdates = Object.fromEntries(resultsByUserId);
+      // Broadcast payouts with player names
+      const userUpdates: Record<string, any> = {};
+      for (const [userId, data] of resultsByUserId) {
+        const info = this.playerInfo.get(userId);
+        userUpdates[userId] = {
+          ...data,
+          name: info?.name || '???',
+          avatar: info?.avatar || userId
+        };
+      }
       this.io.emit('roulette_results', { results: userUpdates });
     }
   }

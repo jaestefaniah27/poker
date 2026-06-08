@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate } from '../utils';
 import { ChipRail, ChipStack, chipsFromAmount, pageForAmount, type ChipDenom } from './Chips';
 import AnimatedNumber from './AnimatedNumber';
+import Avatar from './Avatar';
 
 const TimerCircle = ({ total, current, color }: { total: number, current: number, color: string }) => {
   const radius = 22; 
@@ -48,9 +49,9 @@ const getZoneMultiplier = (zone: string) => {
 };
 
 export default function RouletteModal({
-  onClose, balance, updateBalance, token
+  onClose, balance, updateBalance, token, userId
 }: {
-  onClose: () => void; balance: number; updateBalance: (newBalance: number) => void; token: string;
+  onClose: () => void; balance: number; updateBalance: (newBalance: number) => void; token: string; userId: string;
 }) {
   const [bets, setBets] = useState<Record<string, number>>({});
   const [previousBets, setPreviousBets] = useState<Record<string, number>>({});
@@ -75,6 +76,28 @@ export default function RouletteModal({
   const [history, setHistory] = useState<number[]>([]);
   const [spinDeg, setSpinDeg] = useState(0);
 
+  interface TablePlayer {
+    id: string;
+    name: string;
+    avatar: string;
+    totalBet: number;
+    lastNet?: number; // filled after results
+    bets?: Record<string, number>;
+  }
+  const [tablePlayers, setTablePlayers] = useState<TablePlayer[]>([]);
+
+  const otherPlayersBets = useMemo(() => {
+    const aggregated: Record<string, number> = {};
+    tablePlayers.filter(p => p.id !== userId).forEach(p => {
+      if (p.bets) {
+        Object.entries(p.bets).forEach(([zone, amt]) => {
+          aggregated[zone] = (aggregated[zone] || 0) + amt;
+        });
+      }
+    });
+    return aggregated;
+  }, [tablePlayers, userId]);
+
   // Smooth local timer interpolation
   useEffect(() => {
     let animationFrameId: number;
@@ -94,8 +117,12 @@ export default function RouletteModal({
         if (res.state.timeRemainingMs !== undefined) setServerNextStateAt(Date.now() + res.state.timeRemainingMs);
         setHistory(res.state.history || []);
         setBets(res.myBets || {});
+        if (res.state.players) setTablePlayers(res.state.players);
       }
     });
+
+    // Join the roulette table
+    socket.emit('roulette_join', { token });
 
     const handleState = (state: any) => {
       setGlobalPhase(prevPhase => {
@@ -105,6 +132,7 @@ export default function RouletteModal({
             setResult(null);
             setBets({});
             setPayouts({});
+            setTablePlayers(prev => prev.map(p => ({ ...p, lastNet: undefined, totalBet: 0, bets: undefined })));
           }
         }
         return state.phase;
@@ -177,12 +205,33 @@ export default function RouletteModal({
       }, 4000);
     };
 
+    const handlePlayers = (players: TablePlayer[]) => {
+      setTablePlayers(players);
+    };
+
+    const handleResults = ({ results }: any) => {
+      if (!results) return;
+      // Delay showing results until after spin animation completes (4s)
+      setTimeout(() => {
+        setTablePlayers(prev => prev.map(p => {
+          const r = results[p.id];
+          if (r) return { ...p, lastNet: r.net };
+          return p;
+        }));
+      }, 4000);
+    };
+
     socket.on('roulette_state', handleState);
     socket.on('roulette_spin', handleSpin);
+    socket.on('roulette_players', handlePlayers);
+    socket.on('roulette_results', handleResults);
 
     return () => {
       socket.off('roulette_state', handleState);
       socket.off('roulette_spin', handleSpin);
+      socket.off('roulette_players', handlePlayers);
+      socket.off('roulette_results', handleResults);
+      socket.emit('roulette_leave', { token });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -274,6 +323,9 @@ export default function RouletteModal({
   const renderZone = (zone: string, label: React.ReactNode, colSpan = 1, rowSpan = 1, color = 'rgba(255,255,255,0.05)', textColor = 'white', border = 'border-white/10', customStyle?: React.CSSProperties) => {
     const betAmt = bets[zone] || 0;
     const chips = betAmt > 0 ? chipsFromAmount(betAmt) : [];
+    const otherAmt = otherPlayersBets[zone] || 0;
+    const otherChips = otherAmt > 0 ? chipsFromAmount(otherAmt) : [];
+
     return (
       <div 
         key={zone}
@@ -295,6 +347,23 @@ export default function RouletteModal({
               </div>
               <div className="absolute bg-black/60 rounded px-1 text-[8px] sm:text-[9px] text-white bottom-0.5 right-0.5">
                 {fmtChips(betAmt)}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {otherAmt > 0 && (
+            <motion.div 
+              key="other-bet"
+              initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0, opacity: 0 }}
+              className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none opacity-60 drop-shadow-md translate-x-2 -translate-y-2 sm:translate-x-4 sm:-translate-y-4"
+            >
+              <div className="scale-[0.35] sm:scale-[0.65] origin-center">
+                <ChipStack chips={otherChips} size={28} />
+              </div>
+              <div className="absolute bg-slate-800/80 rounded px-1 text-[6px] sm:text-[7px] text-slate-300 top-0.5 left-0.5">
+                {fmtChips(otherAmt)}
               </div>
             </motion.div>
           )}
@@ -524,6 +593,26 @@ export default function RouletteModal({
              </div>
 
           </div>
+
+          {/* Player Bar */}
+          {tablePlayers.filter(p => p.id !== userId).length > 0 && (
+            <div className="w-full max-w-xl mx-auto flex justify-center items-center gap-1.5 px-2 py-1 overflow-x-auto scrollbar-none shrink-0">
+              {tablePlayers.filter(p => p.id !== userId).map(p => (
+                <div key={p.id} className="flex flex-col items-center shrink-0 bg-slate-800/60 rounded-lg px-1.5 py-1 border border-slate-700/40 min-w-[52px] sm:min-w-[64px]">
+                  <Avatar seed={p.avatar} size={24} />
+                  <div className="text-[8px] sm:text-[9px] text-slate-300 font-semibold truncate max-w-[50px] sm:max-w-[60px] text-center leading-tight mt-0.5">{p.name}</div>
+                  {p.totalBet > 0 && (
+                    <div className="text-[7px] sm:text-[8px] font-bold text-amber-400 leading-tight">{fmtChips(p.totalBet)}</div>
+                  )}
+                  {p.lastNet !== undefined && p.lastNet !== 0 && (
+                    <div className={`text-[7px] sm:text-[8px] font-bold leading-tight ${p.lastNet > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {p.lastNet > 0 ? '+' : ''}{fmtChips(p.lastNet)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Betting Table (Vertical Casino Layout) */}
           <div className="w-full max-w-xl mx-auto flex-1 mt-auto grid gap-0.5 sm:gap-1 select-none overflow-hidden pb-0 px-1 sm:px-0" style={{ gridTemplateColumns: 'minmax(20px, 1fr) minmax(20px, 1fr) repeat(3, minmax(35px, 1.5fr))', gridTemplateRows: 'repeat(13, minmax(0, 1fr))' }}>

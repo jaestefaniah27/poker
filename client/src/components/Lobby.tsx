@@ -266,7 +266,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       )}
       <AnimatePresence>
         {showRoulette && (
-          <RouletteModal token={token || ''} balance={user.balance} updateBalance={(b) => onUpdateUser({...user, balance: b})} onClose={() => setShowRoulette(false)} />
+          <RouletteModal token={token || ''} balance={user.balance} userId={user.id} updateBalance={(b) => onUpdateUser({...user, balance: b})} onClose={() => setShowRoulette(false)} />
         )}
       </AnimatePresence>
 

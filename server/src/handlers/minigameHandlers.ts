@@ -294,6 +294,20 @@ export const minigameHandlers = (socket: Socket) => {
     callback({ ok: true, state, myBets });
   });
 
+  socket.on('roulette_join', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback?.({ error: 'No autenticado' }); return; }
+    const dbUser = await getUser(user.id);
+    rouletteEngine.joinTable(user.id, user.name, dbUser?.avatar || user.id);
+    callback?.({ ok: true });
+  });
+
+  socket.on('roulette_leave', async ({ token }) => {
+    const user = await authUser(token);
+    if (!user) return;
+    rouletteEngine.leaveTable(user.id);
+  });
+
   socket.on('roulette_place_bet', async ({ token, bets }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
@@ -313,6 +327,8 @@ export const minigameHandlers = (socket: Socket) => {
     rouletteEngine.placeBet(user.id, bets as Record<string, number>);
     
     const updatedUser = await getUser(user.id);
+    // Broadcast updated player list so others see the bet total change
+    socket.broadcast.emit('roulette_players', rouletteEngine.getState().players);
     callback({ ok: true, balance: updatedUser?.balance });
   });
 
