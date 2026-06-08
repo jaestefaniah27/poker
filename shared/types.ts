@@ -6,6 +6,15 @@ export interface Card {
   suit: Suit;
 }
 
+export interface BjHand {
+  cards: Card[];
+  bet: number;
+  status: 'playing' | 'stand' | 'bust' | 'blackjack' | 'surrender';
+  doubled?: boolean;
+  result?: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender';
+  delta?: number;
+}
+
 export interface Player {
   id: string; // Socket ID
   userId: string; // DB ID
@@ -31,13 +40,15 @@ export interface Player {
   sessionStartedAt?: number; // Timestamp del primer buy-in de la sesión
   offlineSince?: number; // Timestamp en que pasó a offline (para expulsión automática)
   // --- BlackJack ---
-  bet?: number; // Apuesta de la mano actual de blackjack
-  bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'surrender';
-  bjDoubled?: boolean;
-  bjResult?: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender'; // Resultado de la última mano
-  bjDelta?: number; // Cambio de chips de la última mano (para mostrar +N/-N)
-  lastBuyIn?: number; // Último buy-in elegido (para recompra rápida en blackjack)
-  bjHasContinued?: boolean; // True si el jugador ha pulsado continuar y está listo para la siguiente ronda
+  bet?: number; // Apuesta de la mano actual de blackjack (legacy para retrocompatibilidad rápida de monto total apostado/etc)
+  bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'surrender'; // legacy
+  bjDoubled?: boolean; // legacy
+  bjResult?: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender'; // legacy
+  bjDelta?: number; // legacy
+  lastBuyIn?: number;
+  bjHasContinued?: boolean;
+  bjHands?: BjHand[]; // <-- NUEVO: array de manos para soportar split
+  bjActiveHandIndex?: number; // <-- NUEVO: índice de la mano activa
 }
 
 export type GameType = 'poker' | 'blackjack';

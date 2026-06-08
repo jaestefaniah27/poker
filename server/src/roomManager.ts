@@ -978,62 +978,155 @@ export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerActi
 
 // ¿Queda algún jugador con mano viva ('playing')?
 const anyStillPlaying = (room: Room): boolean =>
-  room.players.some(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0 && p.bjStatus === 'playing');
+  room.players.some(p => {
+    if (!p.isActive || p.isSpectating || (p.bet || 0) === 0) return false;
+    if (p.bjHands && p.bjHands.length > 0) return p.bjHands.some(h => h.status === 'playing');
+    return p.bjStatus === 'playing';
+  });
 
-// Acción de jugador. Devuelve la nueva bjPhase ('playerAction' | 'dealerAction').
 export const blackjackPlayerAction = (
-  roomId: string, userId: string, action: 'Hit' | 'Stand' | 'Double' | 'Surrender'
+  roomId: string, userId: string, action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split'
 ): 'playerAction' | 'dealerAction' | null => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'playerAction') return null;
   // Concurrente: cada jugador actúa sobre SU mano cuando quiera (no hay turno).
   const player = room.players.find(p => p.userId === userId);
-  if (!player || player.bjStatus !== 'playing') return null;
+  if (!player) return null;
 
-  if (action === 'Hit') {
-    if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
-    player.cards.push(room.deck.pop()!);
-    const v = bjHandValue(player.cards);
-    if (v.total > 21) player.bjStatus = 'bust';
-    else if (v.total === 21) player.bjStatus = 'stand';
-  } else if (action === 'Stand') {
-    player.bjStatus = 'stand';
-  } else if (action === 'Double') {
-    // Solo con 2 cartas iniciales y fichas suficientes para CUBRIR la 2ª apuesta.
-    // La 1ª apuesta ya está comprometida en mesa → necesitas chips >= 2×bet (no puedes
-    // jugar con más fichas de las que tienes dentro de la mesa).
-    if (player.cards.length !== 2) return null;
-    if (player.chips < (player.bet || 0) * 2) return null;
-    player.bjDoubled = true;
-    player.bet = (player.bet || 0) * 2;
-    if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
-    player.cards.push(room.deck.pop()!);
-    const v = bjHandValue(player.cards);
-    player.bjStatus = v.total > 21 ? 'bust' : 'stand';
-  } else if (action === 'Surrender') {
-    if (player.cards.length !== 2) return null;
-    player.bjStatus = 'surrender';
+  if (player.bjHands && player.bjHands.length > 0) {
+    const activeIndex = player.bjActiveHandIndex ?? 0;
+    const hand = player.bjHands[activeIndex];
+    if (!hand || hand.status !== 'playing') return null;
+
+    if (action === 'Hit') {
+      if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      hand.cards.push(room.deck.pop()!);
+      const v = bjHandValue(hand.cards);
+      if (v.total > 21) hand.status = 'bust';
+      else if (v.total === 21) hand.status = 'stand';
+    } else if (action === 'Stand') {
+      hand.status = 'stand';
+    } else if (action === 'Double') {
+      if (hand.cards.length !== 2) return null;
+      const totalBet = player.bjHands.reduce((sum, h) => sum + h.bet, 0);
+      if (player.chips < totalBet + hand.bet) return null;
+      hand.doubled = true;
+      hand.bet *= 2;
+      if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      hand.cards.push(room.deck.pop()!);
+      const v = bjHandValue(hand.cards);
+      hand.status = v.total > 21 ? 'bust' : 'stand';
+    } else if (action === 'Surrender') {
+      if (hand.cards.length !== 2) return null;
+      hand.status = 'surrender';
+    } else if (action === 'Split') {
+      if (hand.cards.length !== 2) return null;
+      if (player.bjHands.length >= 4) return null; // Max splits
+      const p1 = bjHandValue([hand.cards[0]]).total;
+      const p2 = bjHandValue([hand.cards[1]]).total;
+      const isPair = hand.cards[0].rank === hand.cards[1].rank;
+      if (!isPair) return null;
+
+      const totalBet = player.bjHands.reduce((sum, h) => sum + h.bet, 0);
+      if (player.chips < totalBet + hand.bet) return null;
+
+      const splitCard = hand.cards.pop()!;
+      const newHand: import('../../shared/types').BjHand = {
+        cards: [splitCard],
+        bet: hand.bet,
+        status: 'playing'
+      };
+
+      player.bjHands.splice(activeIndex + 1, 0, newHand);
+
+      if (room.deck.length < 2) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      let c1 = room.deck.pop()!;
+      let c2 = room.deck.pop()!;
+      
+      if (Math.random() < 0.8) {
+        c1 = { ...splitCard, suit: splitCard.suit === 'h' ? 's' : 'h' };
+        c2 = { ...hand.cards[0], suit: hand.cards[0].suit === 'h' ? 's' : 'h' };
+      }
+      
+      newHand.cards.push(c1);
+      hand.cards.push(c2);
+
+      if (bjHandValue(newHand.cards).total === 21) newHand.status = 'stand';
+      if (bjHandValue(hand.cards).total === 21) hand.status = 'stand';
+
+      player.bjActiveHandIndex = activeIndex + 1; // Play the new hand first
+    } else {
+      return null;
+    }
+
+    if (player.bjHands[player.bjActiveHandIndex!].status !== 'playing') {
+      let nextActive = -1;
+      for (let i = player.bjHands.length - 1; i >= 0; i--) {
+        if (player.bjHands[i].status === 'playing') {
+          nextActive = i;
+          break;
+        }
+      }
+      if (nextActive !== -1) player.bjActiveHandIndex = nextActive;
+    }
+
+    player.bjStatus = player.bjHands.some(h => h.status === 'playing') ? 'playing' : player.bjHands[0].status;
+    player.cards = player.bjHands[0].cards;
+    player.bet = player.bjHands.reduce((acc, h) => acc + h.bet, 0);
+
   } else {
-    return null;
+    // legacy mode
+    if (player.bjStatus !== 'playing') return null;
+    if (action === 'Hit') {
+      if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      player.cards.push(room.deck.pop()!);
+      const v = bjHandValue(player.cards);
+      if (v.total > 21) player.bjStatus = 'bust';
+      else if (v.total === 21) player.bjStatus = 'stand';
+    } else if (action === 'Stand') {
+      player.bjStatus = 'stand';
+    } else if (action === 'Double') {
+      if (player.cards.length !== 2) return null;
+      if (player.chips < (player.bet || 0) * 2) return null;
+      player.bjDoubled = true;
+      player.bet = (player.bet || 0) * 2;
+      if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      player.cards.push(room.deck.pop()!);
+      const v = bjHandValue(player.cards);
+      player.bjStatus = v.total > 21 ? 'bust' : 'stand';
+    } else if (action === 'Surrender') {
+      if (player.cards.length !== 2) return null;
+      player.bjStatus = 'surrender';
+    } else {
+      return null;
+    }
   }
 
   room.lastActivityAt = Date.now();
-  // ¿Quedan manos vivas? Si sí, seguimos en playerAction. Si no, juega el dealer.
   if (anyStillPlaying(room)) return 'playerAction';
   room.bjPhase = 'dealerAction';
   room.bjTurnUserId = undefined;
   return 'dealerAction';
 };
 
-// Fuerza plantarse a todos los que sigan vivos (timeout de fase). Devuelve true si había alguno.
 export const forceStandRemaining = (roomId: string): boolean => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'playerAction') return false;
   let changed = false;
   room.players.forEach(p => {
-    if (p.isActive && !p.isSpectating && (p.bet || 0) > 0 && p.bjStatus === 'playing') {
-      p.bjStatus = 'stand';
-      changed = true;
+    if (p.isActive && !p.isSpectating && (p.bet || 0) > 0) {
+      if (p.bjHands && p.bjHands.length > 0) {
+        p.bjHands.forEach(h => {
+          if (h.status === 'playing') {
+            h.status = 'stand';
+            changed = true;
+          }
+        });
+        p.bjStatus = p.bjHands.some(h => h.status === 'playing') ? 'playing' : p.bjHands[0].status;
+      } else if (p.bjStatus === 'playing') {
+        p.bjStatus = 'stand';
+        changed = true;
+      }
     }
   });
   room.bjPhase = 'dealerAction';
