@@ -8,7 +8,7 @@ interface PlayingCardProps {
 }
 
 const PlayingCard = ({ rank, suit, hidden = false, className = '', style, compact = false }: PlayingCardProps) => {
-  const isMini = className.includes('w-10') || className.includes('w-8') || className.includes('w-[38px]') || className.includes('w-[32px]');
+  const isMini = className.includes('w-10') || className.includes('w-8') || className.includes('w-[38px]') || className.includes('w-[32px]') || className.includes('w-6');
   const isSmall = className.includes('w-16') || className.includes('w-14') || className.includes('w-[50px]') || className.includes('w-[48px]');
 
   const pClass = isMini ? 'p-0.5' : isSmall ? 'p-1.5' : 'p-2';

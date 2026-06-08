@@ -532,16 +532,19 @@ const CardFan = ({ cards, big = false, mini = false, micro = false, faceDownDeal
 
 
 // Mano compacta para oponentes: cartas pequeñas muy superpuestas (estilo escritorio).
-const MiniHand = ({ cards }: { cards: Card[] }) => {
+const MiniHand = ({ cards, size = 'mini' }: { cards: Card[], size?: 'mini' | 'micro' }) => {
   const n = cards.length;
-  const cw = 32, ch = 44, step = 16;
+  const cw = size === 'micro' ? 24 : 32;
+  const ch = size === 'micro' ? 34 : 44;
+  const step = size === 'micro' ? 12 : 16;
+  const cardCls = size === 'micro' ? 'w-6 h-[34px]' : 'w-8 h-11';
   return (
     <div className="relative" style={{ width: cw + step * Math.max(0, n - 1), height: ch }}>
       {cards.map((c, i) => {
         const hidden = (c.rank as unknown as string) === '?';
         return (
           <div key={i} className="absolute" style={{ left: i * step, top: 0, zIndex: i }}>
-            <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} compact className="w-8 h-11" />
+            <PlayingCard rank={c.rank} suit={c.suit} hidden={hidden} compact className={cardCls} />
           </div>
         );
       })}
@@ -1078,6 +1081,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               const isBust = p.bjStatus === 'bust' || t.bust;
               const result = showResult ? p.bjResult : undefined;
               const opacity = p.isOnline === false ? 0.5 : 1;
+              const oppHands = p.bjHands && p.bjHands.length > 0 ? p.bjHands : ((p.cards?.length || 0) > 0 ? [{ cards: p.cards, status: p.bjStatus }] : []);
+              const totalOppBet = oppHands.reduce((acc: number, h: any) => acc + (h.bet || 0), 0) || p.bet || 0;
               return (
                 <motion.div
                   key={p.userId}
@@ -1095,14 +1100,27 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                       <div className="text-[9px] font-bold truncate leading-tight">{p.name}</div>
                       <div className="text-[8px] text-white/50 font-mono leading-none">{fmtChips(p.chips)}</div>
                     </div>
-                    {(p.cards?.length || 0) > 0 && (
+                    {oppHands.length === 1 && (oppHands[0].cards?.length || 0) > 0 && (
                       <TotalPill total={t.total} soft={t.soft} bust={isBust} hasHidden={t.hasHidden}
                         accent={p.bjStatus === 'blackjack' ? 'amber' : 'sky'} size="xs" />
                     )}
                   </div>
-                  <div className="flex justify-center items-center" style={{ height: 44 }}>
-                    {(p.cards?.length || 0) > 0 ? (
-                      <MiniHand cards={p.cards || []} />
+                  <div className="flex justify-center items-center gap-1.5" style={{ minHeight: 44 }}>
+                    {oppHands.length > 0 ? (
+                      oppHands.length === 1 ? (
+                        <MiniHand cards={oppHands[0].cards} />
+                      ) : (
+                        oppHands.map((h: any, i: number) => {
+                          const ht = handTotalDisplay(h.cards);
+                          const hBust = h.status === 'bust' || ht.bust;
+                          return (
+                            <div key={i} className={`flex flex-col items-center justify-end gap-0.5 ${h.status === 'playing' ? 'scale-105 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]' : 'opacity-80 scale-95'}`}>
+                              <MiniHand cards={h.cards} size={oppHands.length > 2 ? 'micro' : 'mini'} />
+                              <TotalPill total={ht.total} soft={ht.soft} bust={hBust} hasHidden={ht.hasHidden} accent={h.status === 'blackjack' ? 'amber' : 'sky'} size="xs" />
+                            </div>
+                          );
+                        })
+                      )
                     ) : (
                       <div className="text-[9px] text-white/35 uppercase tracking-wider">
                         {(p.bet || 0) > 0 ? '· apostado ·' : '· esperando ·'}
@@ -1110,9 +1128,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                     )}
                   </div>
                   <div className="flex items-center gap-1 justify-center min-h-[12px]">
-                    {(p.bet || 0) > 0 && !result && (
+                    {totalOppBet > 0 && !result && (
                       <span className="text-[8px] font-bold text-yellow-200 bg-yellow-400/10 border border-yellow-300/30 px-1.5 rounded-full leading-tight">
-                        {fmtChips(p.bet || 0)}{p.bjDoubled ? '×2' : ''}
+                        {fmtChips(totalOppBet)}{p.bjDoubled ? '×2' : ''}
                       </span>
                     )}
                     {result && (
