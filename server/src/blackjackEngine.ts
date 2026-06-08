@@ -93,11 +93,14 @@ export const resolveBlackjack = (room: Room) => {
       const playerBJ = p.bjStatus === 'blackjack';
 
       let delta = 0;
-      let result: 'win' | 'lose' | 'push' | 'blackjack' = 'lose';
+      let result: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender' = 'lose';
 
       if (p.bjStatus === 'bust' || player.total > 21) {
         delta = -bet;
         result = 'lose';
+      } else if (p.bjStatus === 'surrender') {
+        delta = -Math.ceil(bet / 2);
+        result = 'surrender';
       } else if (playerBJ && dealerBJ) {
         delta = 0; // push
         result = 'push';

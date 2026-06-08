@@ -601,7 +601,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   // Ocultar fichas automáticamente si se pierde la mano
   useEffect(() => {
     if (phase === 'resolve' && myPlayer && myBet > 0) {
-      if (myPlayer.bjResult === 'lose' || myPlayer.bjStatus === 'bust') {
+      if (myPlayer.bjResult === 'lose' || myPlayer.bjStatus === 'bust' || myPlayer.bjResult === 'surrender') {
         // Un pequeño timeout para que el usuario vea el resultado un instante antes de que desaparezcan
         const t = setTimeout(() => setHideLostChips(true), 1200);
         return () => clearTimeout(t);
@@ -1310,15 +1310,16 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           )}
 
           {phase === 'playerAction' && canAct && (
-            <div className="flex-1 grid grid-cols-3 gap-2 items-stretch">
+            <div className="flex-1 grid grid-cols-4 gap-2 items-stretch">
               <ActionBtn label="CARTA" onClick={() => sendAction('Hit')} disabled={!dealDone} from="#34d399" to="#059669" />
               <ActionBtn label="PLANTAR" onClick={() => sendAction('Stand')} disabled={!dealDone} from="#f87171" to="#b91c1c" />
               <ActionBtn label="DOBLAR" onClick={() => sendAction('Double')} disabled={!dealDone || !canDouble} from="#fbbf24" to="#b45309" />
+              <ActionBtn label="RENDIR" onClick={() => sendAction('Surrender')} disabled={!dealDone || displayMyCards.length !== 2} from="#9ca3af" to="#4b5563" />
             </div>
           )}
           {phase === 'playerAction' && !canAct && (
             <div className="flex-1 flex items-center justify-center text-[11px] text-white/40">
-              {myPlayer?.bjStatus === 'bust' ? 'Te pasaste · esperando al dealer' : 'Plantado · esperando a los demás'}
+              {myPlayer?.bjStatus === 'bust' ? 'Te pasaste · esperando al dealer' : myPlayer?.bjStatus === 'surrender' ? 'Te rendiste · esperando al resto' : 'Plantado · esperando a los demás'}
             </div>
           )}
           {(phase === 'dealerAction' || (phase === 'resolve' && !resolveReady)) && (
@@ -1329,7 +1330,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               className={`flex-1 w-full font-extrabold rounded-2xl tracking-wider shadow-lg active:scale-95 flex flex-col items-center justify-center gap-0.5 ${
                 myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack'
                   ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 text-white'
-                  : myPlayer?.bjResult === 'lose'
+                  : myPlayer?.bjResult === 'lose' || myPlayer?.bjResult === 'surrender'
                   ? 'bg-gradient-to-b from-slate-500 to-slate-700 text-white'
                   : myPlayer?.bjResult === 'push'
                   ? 'bg-gradient-to-b from-sky-400 to-sky-600 text-white'
@@ -1339,6 +1340,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               {myPlayer?.bjResult === 'win' && <span className="text-sm font-black leading-none">GANAS</span>}
               {myPlayer?.bjResult === 'lose' && <span className="text-sm font-black leading-none">PIERDES</span>}
               {myPlayer?.bjResult === 'push' && <span className="text-sm font-black leading-none">EMPATE</span>}
+              {myPlayer?.bjResult === 'surrender' && <span className="text-sm font-black leading-none">TE RINDES</span>}
               <span className="text-base leading-none">CONTINUAR</span>
             </button>
           )}

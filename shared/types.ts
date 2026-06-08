@@ -32,9 +32,9 @@ export interface Player {
   offlineSince?: number; // Timestamp en que pasó a offline (para expulsión automática)
   // --- BlackJack ---
   bet?: number; // Apuesta de la mano actual de blackjack
-  bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack';
+  bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'surrender';
   bjDoubled?: boolean;
-  bjResult?: 'win' | 'lose' | 'push' | 'blackjack'; // Resultado de la última mano
+  bjResult?: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender'; // Resultado de la última mano
   bjDelta?: number; // Cambio de chips de la última mano (para mostrar +N/-N)
   lastBuyIn?: number; // Último buy-in elegido (para recompra rápida en blackjack)
   bjHasContinued?: boolean; // True si el jugador ha pulsado continuar y está listo para la siguiente ronda

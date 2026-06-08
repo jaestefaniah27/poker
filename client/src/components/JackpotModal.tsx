@@ -153,7 +153,8 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-        className="w-full max-w-md bg-[#111] rounded-t-3xl border-t border-white/10 p-6 pb-6 flex flex-col"
+        className="w-full max-w-md bg-[#111] rounded-t-3xl border-t border-white/10 px-6 pt-6 pb-2 flex flex-col"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -219,7 +220,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Selector de apuesta */}
-        <div className="mb-5">
+        <div className="mb-3">
           <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
 
           {isLocked ? (
@@ -313,7 +314,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         )}
 
         {/* Tabla de premios */}
-        <div className="mt-5 rounded-2xl bg-white/4 p-4 text-[11px] text-gray-500 space-y-1">
+        <div className="mt-3 rounded-2xl bg-white/4 p-3 text-[11px] text-gray-500 space-y-1">
           <p className="text-gray-400 font-semibold mb-2 uppercase tracking-wider text-[10px]">Premios</p>
           {([
             [['ace', 'ace', 'ace'], 'x50'],

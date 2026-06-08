@@ -982,7 +982,7 @@ const anyStillPlaying = (room: Room): boolean =>
 
 // Acción de jugador. Devuelve la nueva bjPhase ('playerAction' | 'dealerAction').
 export const blackjackPlayerAction = (
-  roomId: string, userId: string, action: 'Hit' | 'Stand' | 'Double'
+  roomId: string, userId: string, action: 'Hit' | 'Stand' | 'Double' | 'Surrender'
 ): 'playerAction' | 'dealerAction' | null => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'playerAction') return null;
@@ -1010,6 +1010,9 @@ export const blackjackPlayerAction = (
     player.cards.push(room.deck.pop()!);
     const v = bjHandValue(player.cards);
     player.bjStatus = v.total > 21 ? 'bust' : 'stand';
+  } else if (action === 'Surrender') {
+    if (player.cards.length !== 2) return null;
+    player.bjStatus = 'surrender';
   } else {
     return null;
   }
