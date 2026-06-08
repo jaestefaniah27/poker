@@ -141,6 +141,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     });
   };
 
+  const handleAdminResetJackpotLevel = () => {
+    socket.emit('adminResetJackpotLevel', { token }, (res: any) => {
+      if (res?.user) onUpdateUser(res.user);
+    });
+  };
+
   useEffect(() => {
     const fetchLeaderboard = () => {
       socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
@@ -360,19 +366,32 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                     ⭐ +1000 XP (Admin)
                   </button>
                 </div>
-                <button
-                  onClick={handleAdminAddBalance1B}
-                  className="w-full py-2 rounded-2xl text-xs font-bold text-emerald-400 border border-emerald-900/40 bg-emerald-500/8 active:scale-95 transition-all"
-                >
-                  💸 +1B (Admin)
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAdminAddBalance1B}
+                    className="flex-1 py-2 rounded-2xl text-xs font-bold text-emerald-400 border border-emerald-900/40 bg-emerald-500/8 active:scale-95 transition-all"
+                  >
+                    💸 +1B (Admin)
+                  </button>
+                  <button
+                    onClick={handleAdminResetJackpotLevel}
+                    className="flex-1 py-2 rounded-2xl text-xs font-bold text-blue-400 border border-blue-900/40 bg-blue-500/8 active:scale-95 transition-all"
+                  >
+                    🔄 Nivel Jackpot
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
           {/* ---- Mini-juegos ---- */}
           <div className="bg-surface p-5 rounded-3xl border border-surfaceLight">
-            <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold mb-4">MINIJUEGOS</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm text-gray-400 uppercase tracking-wider font-semibold">MINIJUEGOS</h2>
+              <span className="text-amber-500/80 text-[11px] font-bold uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                Nivel {(user.jackpotUnlockLevel ?? 0) + 1}
+              </span>
+            </div>
             <div className="flex flex-col gap-3 mb-4">
               <button
                 onClick={() => setShowJackpot(true)}

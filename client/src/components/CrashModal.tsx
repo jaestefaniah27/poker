@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
-import { JACKPOT_TIERS } from '../../../shared/types';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 
 interface CrashModalProps {
-  user: { id: string; name: string; balance: number };
+  user: { id: string; name: string; balance: number; jackpotUnlockLevel?: number };
   token: string | null;
   onClose: () => void;
   onUpdateUser: (u: any) => void;
@@ -31,6 +31,12 @@ function historyColor(m: number): string {
 export default function CrashModal({ user, token, onClose, onUpdateUser }: CrashModalProps) {
   const [phase, setPhase]       = useState<Phase>('config');
   const [betIndex, setBetIndex] = useState(0);
+  
+  const unlockLevel = user.jackpotUnlockLevel ?? 0;
+  const isMaxLevel = unlockLevel >= JACKPOT_TIERS.length;
+  const maxBetIndex = Math.max(0, unlockLevel - 1);
+  const clampedBetIndex = Math.min(betIndex, maxBetIndex);
+  
   const [balance, setBalance]   = useState(user.balance);
   const [multiplier, setMultiplier] = useState(1.00);
   const [crashPoint, setCrashPoint] = useState(0);
@@ -38,6 +44,17 @@ export default function CrashModal({ user, token, onClose, onUpdateUser }: Crash
   const [bet, setBet]               = useState(0);
   const [loading, setLoading]       = useState(false);
   const [history, setHistory]       = useState<number[]>([]);
+  const [unlocking, setUnlocking] = useState(false);
+
+  const handleUnlock = () => {
+    if (unlocking) return;
+    setUnlocking(true);
+    socket.emit('unlockJackpotLevel', { token }, (res: any) => {
+      setUnlocking(false);
+      if (res?.error) return;
+      if (res?.user) { onUpdateUser(res.user); setBalance(res.user.balance); }
+    });
+  };
 
   // Listen for server ticks
   useEffect(() => {
@@ -55,7 +72,7 @@ export default function CrashModal({ user, token, onClose, onUpdateUser }: Crash
 
   const startGame = useCallback(() => {
     if (!token || loading) return;
-    const betAmt = JACKPOT_TIERS[betIndex];
+    const betAmt = JACKPOT_TIERS[clampedBetIndex];
     setLoading(true);
     socket.emit('crashStart', { token, bet: betAmt }, (res: any) => {
       setLoading(false);
@@ -65,7 +82,7 @@ export default function CrashModal({ user, token, onClose, onUpdateUser }: Crash
       setMultiplier(1.00);
       setPhase('playing');
     });
-  }, [token, loading, betIndex, balance]);
+  }, [token, loading, clampedBetIndex, balance]);
 
   const cashout = useCallback(() => {
     if (!token || loading || phase !== 'playing') return;
@@ -170,18 +187,30 @@ export default function CrashModal({ user, token, onClose, onUpdateUser }: Crash
               <div>
                 <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
                 <div className="flex gap-1.5 flex-wrap justify-center">
-                  {JACKPOT_TIERS.map((t, i) => (
+                  {JACKPOT_TIERS.slice(0, Math.max(unlockLevel, 1)).map((t, i) => (
                     <button key={i} onClick={() => setBetIndex(i)}
-                      disabled={balance < t}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${betIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}>
+                      disabled={balance < t || i >= unlockLevel}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}>
                       {fmtChips(t)}
                     </button>
                   ))}
                 </div>
+                {!isMaxLevel && (
+                  <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3 mt-3">
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-widest">Nivel {unlockLevel + 1}</p>
+                      <p className="text-sm font-bold text-gray-200">{fmtChips(JACKPOT_TIERS[unlockLevel])}</p>
+                    </div>
+                    <button onClick={handleUnlock} disabled={unlocking || balance < JACKPOT_UNLOCK_COSTS[unlockLevel]}
+                      className="px-4 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/50 rounded-lg text-xs font-bold active:scale-95 transition-all disabled:opacity-30">
+                      {unlocking ? '...' : fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}
+                    </button>
+                  </div>
+                )}
               </div>
-              <button onClick={startGame} disabled={loading || balance < JACKPOT_TIERS[betIndex]}
+              <button onClick={startGame} disabled={loading || balance < JACKPOT_TIERS[clampedBetIndex]}
                 className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-2xl active:scale-95 transition-all disabled:opacity-40 text-sm">
-                {loading ? 'Iniciando...' : `Apostar ${fmtChips(JACKPOT_TIERS[betIndex])}`}
+                {loading ? 'Iniciando...' : `Apostar ${fmtChips(JACKPOT_TIERS[clampedBetIndex])}`}
               </button>
             </>
           )}

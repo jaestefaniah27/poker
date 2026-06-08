@@ -30,7 +30,11 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   const [betIndex, setBetIndex] = useState(0);
   // null = paying; number = using free spin of this value
   const [freeSpinSelected, setFreeSpinSelected] = useState<number | null>(null);
-  const [reels, setReels] = useState<string[]>(['spin', 'spin', 'spin']);
+  const [reels, setReels] = useState<{ symbol: string; tick: number }[]>([
+    { symbol: 'spin', tick: 0 },
+    { symbol: 'spin', tick: 0 },
+    { symbol: 'spin', tick: 0 }
+  ]);
   const [spinning, setSpinning] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [result, setResult] = useState<{ symbols: string[]; multiplier: number; winAmount: number } | null>(null);
@@ -78,7 +82,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
       setInterval(() => {
         setReels(prev => {
           const next = [...prev];
-          next[i] = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+          next[i] = { symbol: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)], tick: prev[i].tick + 1 };
           return next;
         });
       }, 75)
@@ -93,13 +97,19 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         return;
       }
 
-      const stops = [900, 1500, 2100];
+      const isTease = res.symbols[0] === res.symbols[1];
+      const delay1 = 200 + Math.random() * 400;
+      const delay2 = delay1 + 300 + Math.random() * 400;
+      const teaseExtra = (isTease && Math.random() < 0.7) ? (1500 + Math.random() * 2000) : 0;
+      const delay3 = delay2 + 00 + Math.random() * 500 + teaseExtra;
+
+      const stops = [delay1, delay2, delay3];
       stops.forEach((delay, i) => {
         const t = setTimeout(() => {
           clearInterval(intervals[i]);
           setReels(prev => {
             const next = [...prev];
-            next[i] = res.symbols[i];
+            next[i] = { symbol: res.symbols[i], tick: prev[i].tick + 1 };
             return next;
           });
           vibrate(30);
@@ -143,11 +153,12 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-        className="w-full max-w-md bg-[#111] rounded-t-3xl border-t border-white/10 p-6 pb-10"
+        className="w-full max-w-md bg-[#111] rounded-t-3xl border-t border-white/10 p-5 flex flex-col"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-xl font-extrabold tracking-tight text-white">Jackpot</h2>
             <p className="text-xs text-gray-500 mt-0.5">{fmtChips(balance)}</p>
@@ -156,22 +167,30 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Carretes */}
-        <div className="flex justify-center gap-3 mb-6">
-          {reels.map((sym, i) => (
-            <motion.div
+        <div className="flex justify-center gap-2 mb-4">
+          {reels.map((reel, i) => (
+            <div
               key={i}
-              className="w-24 h-24 rounded-2xl bg-[#1c1c1c] border border-white/10 flex items-center justify-center p-3 shadow-inner"
-              animate={spinning && i >= (result ? 3 : 0)
-                ? { scale: [1, 1.04, 1], transition: { repeat: Infinity, duration: 0.15 } }
-                : { scale: 1 }}
+              className="w-20 h-20 rounded-xl bg-[#1c1c1c] border border-white/10 flex items-center justify-center shadow-inner overflow-hidden relative"
             >
-              <SlotIcon symbol={sym} className="w-16 h-16" />
-            </motion.div>
+              <AnimatePresence>
+                <motion.div
+                  key={`${i}-${reel.tick}`}
+                  initial={{ y: -90, filter: 'blur(3px)' }}
+                  animate={{ y: 0, filter: 'blur(0px)' }}
+                  exit={{ y: 90, filter: 'blur(3px)' }}
+                  transition={{ duration: 0.07, ease: "linear" }}
+                  className="absolute flex items-center justify-center w-full h-full"
+                >
+                  <SlotIcon symbol={reel.symbol} className="w-12 h-12" />
+                </motion.div>
+              </AnimatePresence>
+            </div>
           ))}
         </div>
 
         {/* Resultado */}
-        <div className="h-10 flex items-center justify-center mb-5">
+        <div className="h-10 flex items-center justify-center mb-3">
           <AnimatePresence mode="wait">
             {result && (
               <motion.div
@@ -201,7 +220,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
 
         {/* Selector de apuesta */}
-        <div className="mb-5">
+        <div className="mb-3">
           <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
 
           {isLocked ? (
@@ -247,16 +266,14 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
               </div>
 
               {!isMaxLevel && (
-                <div className="flex items-center justify-between bg-white/4 rounded-xl px-3 py-2">
-                  <span className="text-[11px] text-gray-500">
-                    Siguiente: <span className="text-gray-300 font-bold">{fmtChips(JACKPOT_TIERS[unlockLevel])}</span>
-                  </span>
-                  <button
-                    onClick={handleUnlock}
-                    disabled={unlocking || spinning || balance < JACKPOT_UNLOCK_COSTS[unlockLevel]}
-                    className="px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-600/30 text-amber-400 hover:bg-amber-600/50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                  >
-                    {unlocking ? '…' : `Subir nivel — ${fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}`}
+                <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3 mt-3">
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest">Nivel {unlockLevel + 1}</p>
+                    <p className="text-sm font-bold text-gray-200">{fmtChips(JACKPOT_TIERS[unlockLevel])}</p>
+                  </div>
+                  <button onClick={handleUnlock} disabled={unlocking || spinning || balance < JACKPOT_UNLOCK_COSTS[unlockLevel]}
+                    className="px-4 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/50 rounded-lg text-xs font-bold active:scale-95 transition-all disabled:opacity-30">
+                    {unlocking ? '...' : fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}
                   </button>
                 </div>
               )}

@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels } from '../db';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels, setJackpotUnlockLevel } from '../db';
 import { issueToken, authUser } from '../socketHelpers';
 import { levelFromXp } from '../../../shared/types';
 import { sanitizeInput } from '../security';
@@ -162,6 +162,14 @@ export const authHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
     await addXp(user.id, 1000);
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('adminResetJackpotLevel', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    await setJackpotUnlockLevel(user.id, 0);
     const updated = await getUser(user.id);
     callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
   });

@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
-import { JACKPOT_TIERS } from '../../../shared/types';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 
 interface MinesModalProps {
-  user: { id: string; name: string; balance: number };
+  user: { id: string; name: string; balance: number; jackpotUnlockLevel?: number };
   token: string | null;
   onClose: () => void;
   onUpdateUser: (u: any) => void;
@@ -18,7 +18,13 @@ const MINES_PRESETS = [1, 3, 5, 10, 15, 24];
 export default function MinesModal({ user, token, onClose, onUpdateUser }: MinesModalProps) {
   const [phase, setPhase] = useState<Phase>('config');
   const [betIndex, setBetIndex] = useState(0);
-  const bet = JACKPOT_TIERS[betIndex];
+  
+  const unlockLevel = user.jackpotUnlockLevel ?? 0;
+  const isMaxLevel = unlockLevel >= JACKPOT_TIERS.length;
+  const maxBetIndex = Math.max(0, unlockLevel - 1);
+  const clampedBetIndex = Math.min(betIndex, maxBetIndex);
+  const bet = JACKPOT_TIERS[clampedBetIndex];
+  const [unlocking, setUnlocking] = useState(false);
   const [numMines, setNumMines] = useState(3);
   const [cells, setCells] = useState<CellState[]>(Array(25).fill('hidden'));
   const [multiplier, setMultiplier] = useState(1);
@@ -26,6 +32,16 @@ export default function MinesModal({ user, token, onClose, onUpdateUser }: Mines
   const [winAmount, setWinAmount] = useState(0);
   const [balance, setBalance] = useState(user.balance);
   const [loading, setLoading] = useState(false);
+
+  const handleUnlock = () => {
+    if (unlocking) return;
+    setUnlocking(true);
+    socket.emit('unlockJackpotLevel', { token }, (res: any) => {
+      setUnlocking(false);
+      if (res?.error) return;
+      if (res?.user) { onUpdateUser(res.user); setBalance(res.user.balance); }
+    });
+  };
 
   const startGame = useCallback(() => {
     if (!token || loading) return;
@@ -115,8 +131,8 @@ export default function MinesModal({ user, token, onClose, onUpdateUser }: Mines
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="w-full max-w-md bg-[#111] rounded-t-3xl p-6"
-        style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 0px))' }}
+        className="w-full max-w-md bg-[#111] rounded-t-3xl p-5"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -136,14 +152,26 @@ export default function MinesModal({ user, token, onClose, onUpdateUser }: Mines
             <div>
               <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2 text-center">Apuesta</p>
               <div className="flex gap-1.5 flex-wrap justify-center">
-                {JACKPOT_TIERS.map((t, i) => (
+                {JACKPOT_TIERS.slice(0, Math.max(unlockLevel, 1)).map((t, i) => (
                   <button key={i} onClick={() => setBetIndex(i)}
-                    disabled={balance < t}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${betIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}>
+                    disabled={balance < t || i >= unlockLevel}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}>
                     {fmtChips(t)}
                   </button>
                 ))}
               </div>
+              {!isMaxLevel && (
+                <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3 mt-3">
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest">Nivel {unlockLevel + 1}</p>
+                    <p className="text-sm font-bold text-gray-200">{fmtChips(JACKPOT_TIERS[unlockLevel])}</p>
+                  </div>
+                  <button onClick={handleUnlock} disabled={unlocking || balance < JACKPOT_UNLOCK_COSTS[unlockLevel]}
+                    className="px-4 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/50 rounded-lg text-xs font-bold active:scale-95 transition-all disabled:opacity-30">
+                    {unlocking ? '...' : fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">Minas: <span className="text-red-400 font-black">{numMines}</span></label>
