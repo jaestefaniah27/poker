@@ -133,25 +133,47 @@ export const authHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
+    const dbUserBefore = await getUser(user.id);
+    const debt = dbUserBefore?.israel_debt ?? 0;
+    
     await payIsrael(user.id);
     
     const israelUser = await getUserByName('Israel');
-    if (israelUser) {
-      await applyBalanceDelta(israelUser.id, 1_000_000_000);
+    if (israelUser && debt > 0) {
+      await applyBalanceDelta(israelUser.id, debt);
       
       const { notifyUser } = require('../socketHelpers');
       const updatedIsrael = await getUser(israelUser.id);
       if (updatedIsrael) {
         notifyUser(israelUser.id, 'userUpdated', toPublicUser(updatedIsrael));
         notifyUser(israelUser.id, 'giftReceived', { 
-          from: 'Deuda de Padre', 
-          amount: 1_000_000_000
+          from: `Deuda de ${user.name}`, 
+          amount: debt
         });
       }
     }
     
     const updatedUser = await getUser(user.id);
     callback({ ok: true, user: updatedUser ? toPublicUser(updatedUser) : undefined });
+  });
+
+  socket.on('adminSetIsraelDebt', async ({ token, targetId, amount }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    
+    const amt = Math.floor(Number(amount));
+    if (isNaN(amt) || amt < 0) { callback({ error: 'Cantidad inválida' }); return; }
+    
+    const { dbRun } = require('../db');
+    await dbRun('UPDATE users SET israel_debt = ? WHERE id = ?', [amt, targetId]);
+    
+    const targetUser = await getUser(targetId);
+    if (targetUser) {
+      const { notifyUser } = require('../socketHelpers');
+      notifyUser(targetId, 'userUpdated', toPublicUser(targetUser));
+    }
+    
+    callback({ ok: true });
   });
 
   socket.on('getAdminUsers', async ({ token }, callback) => {

@@ -165,6 +165,15 @@ const MIGRATIONS = [
     name: '025_paid_israel',
     sql: 'ALTER TABLE users ADD COLUMN paid_israel INTEGER DEFAULT 0',
     ignoreError: 'duplicate column'
+  },
+  {
+    name: '026_israel_debt',
+    sql: 'ALTER TABLE users ADD COLUMN israel_debt INTEGER DEFAULT 0',
+    ignoreError: 'duplicate column'
+  },
+  {
+    name: '027_padre_israel_debt',
+    sql: "UPDATE users SET israel_debt = 1000000000 WHERE name = 'padre' COLLATE NOCASE AND paid_israel = 0"
   }
 ];
 
@@ -245,6 +254,7 @@ export interface UserRow {
   trivia_level: number;
   last_seen?: number;
   paid_israel?: number;
+  israel_debt?: number;
 }
 
 import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX } from '../../shared/types';
@@ -289,6 +299,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     triviaLevel,
     lastSeen: row.last_seen ?? undefined,
     paidIsrael: !!row.paid_israel,
+    israelDebt: row.israel_debt ?? 0,
   };
 };
 
@@ -547,6 +558,12 @@ export const addHaciendaTotal = async (amount: number): Promise<number> => {
 };
 
 export const payIsrael = async (id: string): Promise<number> => {
-  await dbRun('UPDATE users SET paid_israel = 1 WHERE id = ?', [id]);
-  return applyBalanceDelta(id, -1_000_000_000);
+  const user = await getUser(id);
+  const debt = user?.israel_debt ?? 0;
+  if (debt <= 0) return 0;
+  
+  await dbRun('UPDATE users SET israel_debt = 0, paid_israel = 1 WHERE id = ?', [id]);
+  const balanceBefore = user?.balance ?? 0;
+  await applyBalanceDelta(id, -debt);
+  return Math.min(balanceBefore, debt); // Return what was actually able to be taken (if we only want to give Israel what Padre actually had), or we just return debt.
 };

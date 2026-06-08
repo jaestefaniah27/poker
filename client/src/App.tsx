@@ -512,11 +512,12 @@ function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  if (user.name.toLowerCase() === 'padre' && !user.paidIsrael) {
+  if (user.israelDebt && user.israelDebt > 0) {
+    const { fmtChips } = require('./utils');
     return (
       <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-6 text-center text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <h1 className="text-5xl font-black text-rose-500 mb-6 uppercase tracking-widest drop-shadow-[0_0_15px_rgba(225,29,72,0.5)]">Aviso Importante</h1>
-        <p className="text-xl mb-8 max-w-sm text-gray-300 font-medium">Israel te pide 1,000,000,000 fichas. No tienes otra opción que pagar para poder seguir jugando.</p>
+        <p className="text-xl mb-8 max-w-sm text-gray-300 font-medium">Israel te exige el pago de {fmtChips(user.israelDebt)} fichas. No tienes otra opción que pagar para poder seguir jugando.</p>
         <button 
           onClick={() => {
             socket.emit('payIsrael', { token }, (res: any) => {
@@ -525,7 +526,7 @@ function App() {
           }}
           className="bg-rose-600 hover:bg-rose-700 text-white font-black py-5 px-10 rounded-3xl shadow-[0_0_40px_rgba(225,29,72,0.6)] active:scale-95 transition-all text-2xl uppercase tracking-wider"
         >
-          Pagar 1B a Israel
+          Pagar {fmtChips(user.israelDebt)} a Israel
         </button>
       </div>
     );

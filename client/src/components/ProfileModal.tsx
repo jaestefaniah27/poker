@@ -59,6 +59,18 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
     });
   };
 
+  const forceIsrael = (targetId: string) => {
+    const amountStr = window.prompt('Cantidad de fichas a exigir para Israel:');
+    if (!amountStr) return;
+    const amount = Number(amountStr);
+    if (isNaN(amount) || amount <= 0) { alert('Cantidad inválida'); return; }
+    
+    socket.emit('adminSetIsraelDebt', { token, targetId, amount }, (res: any) => {
+      if (res?.error) alert(res.error);
+      else { alert('Deuda impuesta correctamente'); loadAdminUsers(); }
+    });
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -199,12 +211,20 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
                     <span className="text-[10px] text-gray-500 font-mono">${u.balance}</span>
                   </div>
                   {u.id !== user.id && (
-                    <button 
-                      onClick={() => deleteUser(u.id)}
-                      className="bg-red-500/20 hover:bg-red-500 text-red-300 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-colors"
-                    >
-                      Borrar
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => forceIsrael(u.id)}
+                        className="bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white px-3 py-1.5 rounded text-[10px] font-bold transition-colors"
+                      >
+                        Expropiar Israel
+                      </button>
+                      <button 
+                        onClick={() => deleteUser(u.id)}
+                        className="bg-red-500/20 hover:bg-red-500 text-red-300 hover:text-white px-3 py-1.5 rounded text-[10px] font-bold transition-colors"
+                      >
+                        Borrar
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
