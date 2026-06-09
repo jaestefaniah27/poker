@@ -204,6 +204,8 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
   }, [val]);
 
   const getStep = (v: number) => {
+    if (v >= 1_000_000_000_000_000) return 1_000_000_000_000_000;
+    if (v >= 1_000_000_000_000) return 1_000_000_000_000;
     if (v >= 1_000_000_000) return 1_000_000_000;
     if (v >= 1_000_000) return 1_000_000;
     if (v >= 1000) return 1000;
@@ -245,7 +247,9 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
       didLongPress.current = true;
       let scaleName = '';
       let multiplier = 1;
-      if (val >= 1_000_000_000) { scaleName = 'B (billones)'; multiplier = 1_000_000_000; }
+      if (val >= 1_000_000_000_000_000) { scaleName = 'Qa (cuatrillones)'; multiplier = 1_000_000_000_000_000; }
+      else if (val >= 1_000_000_000_000) { scaleName = 'T (trillones)'; multiplier = 1_000_000_000_000; }
+      else if (val >= 1_000_000_000) { scaleName = 'B (billones)'; multiplier = 1_000_000_000; }
       else if (val >= 1_000_000) { scaleName = 'M (millones)'; multiplier = 1_000_000; }
       else if (val >= 1000) { scaleName = 'k (miles)'; multiplier = 1000; }
       
