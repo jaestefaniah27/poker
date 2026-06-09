@@ -177,6 +177,102 @@ export const Chip = ({ d, size = 36 }: { d: ChipDenom; size?: number }) => {
   );
 };
 
+// --- Keypad Modal ---
+const KeypadModal = ({ initialValue, maxBet, onSave, onClose }: { initialValue: number, maxBet: number, onSave: (v: number) => void, onClose: () => void }) => {
+  const [numStr, setNumStr] = useState('');
+  const [scale, setScale] = useState<number>(1_000_000); // Default M
+
+  useEffect(() => {
+    if (initialValue >= 1_000_000_000_000_000) { setScale(1_000_000_000_000_000); setNumStr(Math.floor(initialValue / 1_000_000_000_000_000).toString()); }
+    else if (initialValue >= 1_000_000_000_000) { setScale(1_000_000_000_000); setNumStr(Math.floor(initialValue / 1_000_000_000_000).toString()); }
+    else if (initialValue >= 1_000_000_000) { setScale(1_000_000_000); setNumStr(Math.floor(initialValue / 1_000_000_000).toString()); }
+    else { setScale(1_000_000); setNumStr(Math.floor(initialValue / 1_000_000).toString()); }
+  }, [initialValue]);
+
+  const handleKey = (k: string) => {
+    if (k === 'DEL') {
+      setNumStr(s => s.slice(0, -1));
+    } else {
+      setNumStr(s => {
+        if (s.length > 8) return s; // limit length
+        if (s === '0' && k !== '.') return k;
+        return s + k;
+      });
+    }
+  };
+
+  const handleSave = () => {
+    let finalNum = parseFloat(numStr || '0') * scale;
+    if (isNaN(finalNum) || finalNum < 30_000_000) finalNum = 30_000_000;
+    if (finalNum > maxBet && maxBet >= 30_000_000) finalNum = maxBet;
+    onSave(finalNum);
+  };
+
+  const scaleLabel = scale === 1_000_000_000_000_000 ? 'Qa' : scale === 1_000_000_000_000 ? 'T' : scale === 1_000_000_000 ? 'B' : 'M';
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="bg-slate-900/90 border border-white/10 rounded-3xl p-5 shadow-2xl w-full max-w-[320px] flex flex-col gap-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center px-1">
+          <h3 className="text-white/80 font-bold text-lg">Ficha Pro</h3>
+          <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors w-8 h-8 flex items-center justify-center rounded-full bg-white/5 active:bg-white/10">✕</button>
+        </div>
+
+        <div className="bg-black/50 border border-white/5 rounded-2xl p-4 flex flex-col items-end justify-center min-h-[80px] shadow-inner relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 pointer-events-none" />
+          <div className="flex items-baseline gap-2 relative z-10">
+            <span className="text-4xl font-black text-white tracking-tight">{numStr || '0'}</span>
+            <span className="text-xl font-bold text-cyan-400">{scaleLabel}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-2">
+          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Qa', v:1_000_000_000_000_000}].map(s => (
+            <button 
+              key={s.l} 
+              onClick={() => setScale(s.v)}
+              className={`py-3 rounded-xl font-bold text-sm transition-all ${scale === s.v ? 'bg-cyan-500 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'bg-white/5 text-white/60 hover:bg-white/10 active:bg-white/20'}`}
+            >
+              {s.l}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {['1','2','3','4','5','6','7','8','9','0'].map(k => (
+            <button 
+              key={k} 
+              onClick={() => handleKey(k)}
+              className={`py-4 rounded-xl font-bold text-xl transition-all bg-white/5 text-white hover:bg-white/10 active:bg-white/20 ${k === '0' ? 'col-span-2' : ''}`}
+            >
+              {k}
+            </button>
+          ))}
+          <button 
+            onClick={() => handleKey('DEL')}
+            className="py-4 rounded-xl font-bold text-lg transition-all bg-red-500/20 text-red-400 hover:bg-red-500/30 active:bg-red-500/40 flex items-center justify-center"
+          >
+            ⌫
+          </button>
+        </div>
+
+        <button 
+          onClick={handleSave}
+          className="w-full py-4 rounded-xl font-black text-lg transition-all bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-[0_4px_15px_rgba(16,185,129,0.3)] hover:brightness-110 active:scale-[0.98] active:brightness-90 mt-1"
+        >
+          OK
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
 // Custom Chip Page Component
 export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onAdd: (d: ChipDenom) => void; maxBet: number; pendingTotal: number; canBet: boolean }) => {
   const getMostSignificantDigitValue = (num: number) => {
@@ -192,6 +288,8 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
     if (init > maxBet && maxBet >= MIN_PRO_CHIP) init = getMostSignificantDigitValue(maxBet);
     return Math.max(MIN_PRO_CHIP, init);
   });
+  
+  const [showKeypad, setShowKeypad] = useState(false);
 
   useEffect(() => {
     if (val > maxBet && maxBet >= 30_000_000) {
@@ -238,79 +336,47 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
   const d: ChipDenom = { v: val, label: fmtChips(val), color: '', ring: '', isCustom: true };
   const disabled = !canBet || val > maxBet || pendingTotal + val > maxBet;
 
-  const longPressTimer = useRef<any>(null);
-  const didLongPress = useRef(false);
-
-  const handlePointerDown = () => {
-    didLongPress.current = false;
-    longPressTimer.current = setTimeout(() => {
-      didLongPress.current = true;
-      let scaleName = '';
-      let multiplier = 1;
-      if (val >= 1_000_000_000_000_000) { scaleName = 'Qa (cuatrillones)'; multiplier = 1_000_000_000_000_000; }
-      else if (val >= 1_000_000_000_000) { scaleName = 'T (trillones)'; multiplier = 1_000_000_000_000; }
-      else if (val >= 1_000_000_000) { scaleName = 'B (billones)'; multiplier = 1_000_000_000; }
-      else if (val >= 1_000_000) { scaleName = 'M (millones)'; multiplier = 1_000_000; }
-      else if (val >= 1000) { scaleName = 'k (miles)'; multiplier = 1000; }
-      
-      const input = window.prompt(`Introduce el nuevo valor (ej. 5m, 10b, 2t, 1qa) o en ${scaleName || 'unidades'}:`);
-      if (input !== null) {
-        const clean = input.trim().toLowerCase();
-        let mult = multiplier;
-        let numStr = clean;
-        
-        if (clean.endsWith('qa')) { mult = 1_000_000_000_000_000; numStr = clean.slice(0, -2); }
-        else if (clean.endsWith('t')) { mult = 1_000_000_000_000; numStr = clean.slice(0, -1); }
-        else if (clean.endsWith('b')) { mult = 1_000_000_000; numStr = clean.slice(0, -1); }
-        else if (clean.endsWith('m')) { mult = 1_000_000; numStr = clean.slice(0, -1); }
-        else if (clean.endsWith('k')) { mult = 1000; numStr = clean.slice(0, -1); }
-        
-        // If the user types a raw very large number directly (e.g. 5000000000000) we assume they mean absolute units and we drop the current scale multiplier.
-        if (numStr.length >= 7 && mult === multiplier && clean === numStr) {
-           mult = 1; 
-        }
-
-        const num = parseFloat(numStr);
-        if (!isNaN(num) && num > 0) {
-          const upperLimit = Math.max(maxBet, MIN_PRO_CHIP);
-          setVal(Math.max(MIN_PRO_CHIP, Math.min(upperLimit, num * mult)));
-        }
-      }
-    }, 600);
-  };
-
-  const clearTimer = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  };
-
-  const handleClick = (e: React.MouseEvent) => {
-    if (didLongPress.current) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-    onAdd(d);
-  };
-
   return (
-    <div className="flex items-center justify-between w-full px-2 gap-4 h-full">
-      <button 
-        onPointerDown={handlePointerDown}
-        onPointerUp={clearTimer}
-        onPointerLeave={clearTimer}
-        onClick={handleClick}
-        disabled={disabled} 
-        className="active:scale-95 transition-transform disabled:opacity-30 shrink-0"
-      >
-        <Chip d={d} size={42} />
-      </button>
-      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 flex-1 h-full py-1">
-        <button onClick={() => applyChange('up')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center">▲</button>
-        <button onClick={() => applyChange('x10')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center">x10</button>
-        <button onClick={() => applyChange('down')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center">▼</button>
-        <button onClick={() => applyChange('/10')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center">/10</button>
+    <>
+      <div className="flex items-center justify-between w-full px-2 gap-2 h-full">
+        <button 
+          onClick={() => onAdd(d)}
+          disabled={disabled} 
+          className="active:scale-95 transition-transform disabled:opacity-30 shrink-0"
+        >
+          <Chip d={d} size={42} />
+        </button>
+        
+        <div className="flex gap-1.5 flex-1 h-full py-1">
+          <button 
+            onClick={() => setShowKeypad(true)} 
+            className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg shadow-sm flex flex-col items-center justify-center w-[42px] shrink-0 transition-colors"
+          >
+            <span className="text-xl">⌨</span>
+          </button>
+          <div className="grid grid-cols-2 grid-rows-2 gap-1.5 flex-1">
+            <button onClick={() => applyChange('up')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center transition-colors">▲</button>
+            <button onClick={() => applyChange('x10')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-[10px] font-bold text-white/80 shadow-sm flex items-center justify-center transition-colors">x10</button>
+            <button onClick={() => applyChange('down')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-xs font-bold text-white/80 shadow-sm flex items-center justify-center transition-colors">▼</button>
+            <button onClick={() => applyChange('/10')} className="bg-white/10 hover:bg-white/15 active:bg-white/20 rounded-lg text-[10px] font-bold text-white/80 shadow-sm flex items-center justify-center transition-colors">/10</button>
+          </div>
+        </div>
       </div>
-    </div>
+      
+      <AnimatePresence>
+        {showKeypad && (
+          <KeypadModal 
+            initialValue={val} 
+            maxBet={maxBet}
+            onSave={(newVal) => {
+              setVal(newVal);
+              setShowKeypad(false);
+            }} 
+            onClose={() => setShowKeypad(false)} 
+          />
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 
