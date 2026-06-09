@@ -253,12 +253,27 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
       else if (val >= 1_000_000) { scaleName = 'M (millones)'; multiplier = 1_000_000; }
       else if (val >= 1000) { scaleName = 'k (miles)'; multiplier = 1000; }
       
-      const input = window.prompt(`Introduce el nuevo valor en ${scaleName || 'unidades'}:`);
+      const input = window.prompt(`Introduce el nuevo valor (ej. 5m, 10b, 2t, 1qa) o en ${scaleName || 'unidades'}:`);
       if (input !== null) {
-        const num = parseFloat(input);
+        const clean = input.trim().toLowerCase();
+        let mult = multiplier;
+        let numStr = clean;
+        
+        if (clean.endsWith('qa')) { mult = 1_000_000_000_000_000; numStr = clean.slice(0, -2); }
+        else if (clean.endsWith('t')) { mult = 1_000_000_000_000; numStr = clean.slice(0, -1); }
+        else if (clean.endsWith('b')) { mult = 1_000_000_000; numStr = clean.slice(0, -1); }
+        else if (clean.endsWith('m')) { mult = 1_000_000; numStr = clean.slice(0, -1); }
+        else if (clean.endsWith('k')) { mult = 1000; numStr = clean.slice(0, -1); }
+        
+        // If the user types a raw very large number directly (e.g. 5000000000000) we assume they mean absolute units and we drop the current scale multiplier.
+        if (numStr.length >= 7 && mult === multiplier && clean === numStr) {
+           mult = 1; 
+        }
+
+        const num = parseFloat(numStr);
         if (!isNaN(num) && num > 0) {
           const upperLimit = Math.max(maxBet, MIN_PRO_CHIP);
-          setVal(Math.max(MIN_PRO_CHIP, Math.min(upperLimit, num * multiplier)));
+          setVal(Math.max(MIN_PRO_CHIP, Math.min(upperLimit, num * mult)));
         }
       }
     }, 600);
