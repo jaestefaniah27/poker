@@ -208,7 +208,7 @@ const KeypadModal = ({ initialValue, maxBet, onSave, onClose }: { initialValue: 
     onSave(finalNum);
   };
 
-  const scaleLabel = scale === 1_000_000_000_000_000 ? 'Qa' : scale === 1_000_000_000_000 ? 'T' : scale === 1_000_000_000 ? 'B' : 'M';
+  const scaleLabel = scale === 1_000_000_000_000_000 ? 'Q' : scale === 1_000_000_000_000 ? 'T' : scale === 1_000_000_000 ? 'B' : 'M';
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -233,7 +233,7 @@ const KeypadModal = ({ initialValue, maxBet, onSave, onClose }: { initialValue: 
         </div>
 
         <div className="grid grid-cols-4 gap-2">
-          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Qa', v:1_000_000_000_000_000}].map(s => (
+          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Q', v:1_000_000_000_000_000}].map(s => (
             <button 
               key={s.l} 
               onClick={() => setScale(s.v)}
