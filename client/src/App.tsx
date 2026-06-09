@@ -13,6 +13,7 @@ import HandHistoryModal from './components/HandHistoryModal';
 import TournamentResults from './components/TournamentResults';
 import Slider from './components/Slider';
 import BlackjackTable from './components/BlackjackTable';
+import { AvatarAdjuster } from './components/AvatarAdjuster';
 import type { Room, Player, PublicUser } from '../../shared/types';
 
 const AppSkeleton = ({ hasToken }: { hasToken: boolean }) => (
@@ -80,6 +81,14 @@ function App() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [onlineCount, setOnlineCount] = useState(0);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [showAdjuster, setShowAdjuster] = useState(window.location.hash === '#adjust');
+
+  useEffect(() => {
+    const handleHashChange = () => setShowAdjuster(window.location.hash === '#adjust');
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
   const [showBetMenu, setShowBetMenu] = useState(false);
   const [betAmount, setBetAmount] = useState(2);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
@@ -497,6 +506,10 @@ function App() {
 
   const hasToken = !!getStorage().getItem('pokerToken');
 
+  if (showAdjuster) {
+    return <AvatarAdjuster />;
+  }
+
   if (showSkeleton) {
     return (
       <div
@@ -687,7 +700,7 @@ function App() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="relative">
-                <Avatar seed={viewPlayer.avatar || viewPlayer.userId} />
+                <Avatar seed={viewPlayer.avatar || viewPlayer.userId} decorationId={viewPlayer.equippedAvatarDecoration} />
                 <span className="absolute -top-1 -left-1 z-10 min-w-[18px] h-5 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[10px] font-black text-black leading-none">
                   {(viewPlayer as any).level ?? 1}
                 </span>
@@ -779,7 +792,7 @@ function App() {
                       <TurnPie fraction={turnTimer.fraction} danger={turnTimer.danger} />
                     </div>
                   )}
-                  <Avatar seed={p.avatar || p.userId} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} />
+                  <Avatar seed={p.avatar || p.userId} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} decorationId={p.equippedAvatarDecoration} />
                   {isDealer(indexInRoom) && <DealerBadge />}
                   <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                     {p.level ?? 1}
@@ -1095,7 +1108,7 @@ function App() {
                      <TurnPie fraction={turnTimer.fraction} danger={turnTimer.danger} />
                    </div>
                  )}
-                 <Avatar seed={user.avatar} />
+                 <Avatar seed={user.avatar} decorationId={user.equippedAvatarDecoration} />
                  <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                    {myPlayer?.level ?? user.level ?? 1}
                  </span>

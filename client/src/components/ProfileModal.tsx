@@ -6,9 +6,10 @@ interface ProfileModalProps {
   token: string | null;
   onClose: () => void;
   onUpdate: (u: any) => void;
+  onLogout: () => void;
 }
 
-const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => {
+const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModalProps) => {
   const [name, setName] = useState(user.name);
   const [avatarSeed, setAvatarSeed] = useState(user.avatar);
   const [curPwd, setCurPwd] = useState('');
@@ -193,6 +194,18 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
         {msg && (
           <p className={`text-xs text-center mt-4 ${msg.ok ? 'text-emerald-400' : 'text-amber-400'}`}>{msg.text}</p>
         )}
+
+        <div className="mt-6 pt-4 border-t border-gray-800">
+          <button 
+            onClick={onLogout} 
+            className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold py-3 rounded-xl transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Cerrar sesión
+          </button>
+        </div>
 
         {/* Admin Panel */}
         {user.name === 'Jorge' && (

@@ -726,7 +726,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                 >
                   <div className="flex items-center gap-1 self-stretch">
                     <div className="relative shrink-0">
-                      <Avatar seed={p.avatar || p.userId} size={16} />
+                      <Avatar seed={p.avatar || p.userId} size={16} decorationId={p.equippedAvatarDecoration} />
                       <span className="absolute -top-1 -left-1 min-w-[12px] h-3 px-0.5 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[7px] font-black text-black leading-none">
                         {p.level ?? 1}
                       </span>

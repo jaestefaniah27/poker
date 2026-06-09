@@ -33,7 +33,7 @@ const TournamentResults = ({ room, currentUserId, isAdmin, onRestart, onExit }: 
         {winner && (
           <div className="flex flex-col items-center my-5">
             <div className="ring-4 ring-amber-400 rounded-full">
-              <Avatar seed={winner.avatar || winner.userId} />
+              <Avatar seed={winner.avatar || winner.userId} decorationId={winner.equippedAvatarDecoration} />
             </div>
             <p className="mt-2 text-lg font-bold text-amber-300">{winner.name}</p>
             <p className="text-xs text-gray-400">Se lleva todo • {fmtChips(winner.chips)} fichas</p>
@@ -50,7 +50,7 @@ const TournamentResults = ({ room, currentUserId, isAdmin, onRestart, onExit }: 
                 className={`flex items-center gap-3 p-2.5 rounded-xl ${isMe ? 'bg-amber-500/15 border border-amber-500/30' : 'bg-surface'}`}
               >
                 <span className="w-7 text-center text-sm font-bold text-gray-300">{medal(i + 1)}</span>
-                <Avatar seed={p.avatar || p.userId} />
+                <Avatar seed={p.avatar || p.userId} decorationId={p.equippedAvatarDecoration} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{p.name}{isMe ? ' (tú)' : ''}</p>
                 </div>

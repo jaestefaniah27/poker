@@ -264,15 +264,21 @@ export interface UserRow {
   last_seen?: number;
   paid_israel?: number;
   israel_debt?: number;
+  
+  // --- Shop y Cosméticos ---
   equipped_avatar_decoration?: string | null;
   unlocked_avatar_decorations?: string | null;
+  
   equipped_name_decoration?: string | null;
   unlocked_name_decorations?: string | null;
+  
   equipped_bj_felt?: string | null;
   unlocked_bj_felts?: string | null;
+  
+  // --- Beneficios Sociales ---
+  moved_to_andorra?: number;
   israel_donation?: number;
   israel_pool?: number;
-  moved_to_andorra?: number;
 }
 
 import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX } from '../../shared/types';

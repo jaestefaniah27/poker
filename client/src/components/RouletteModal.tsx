@@ -598,7 +598,7 @@ export default function RouletteModal({
           <div className="w-full max-w-xl mx-auto flex justify-center items-center gap-1.5 px-2 py-1 overflow-x-auto scrollbar-none shrink-0 h-[64px] sm:h-[76px]">
               {tablePlayers.filter(p => p.id !== userId).map(p => (
                 <div key={p.id} className="flex flex-col items-center shrink-0 bg-slate-800/60 rounded-lg px-1.5 py-1 border border-slate-700/40 min-w-[52px] sm:min-w-[64px]">
-                  <Avatar seed={p.avatar} size={24} />
+                  <Avatar seed={p.avatar} size={24} decorationId={p.equippedAvatarDecoration} />
                   <div className="text-[8px] sm:text-[9px] text-slate-300 font-semibold truncate max-w-[50px] sm:max-w-[60px] text-center leading-tight mt-0.5">{p.name}</div>
                   {p.totalBet > 0 && (
                     <div className="text-[7px] sm:text-[8px] font-bold text-amber-400 leading-tight">{fmtChips(p.totalBet)}</div>

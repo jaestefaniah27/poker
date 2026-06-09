@@ -320,10 +320,15 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       {showShop && (
         <ShopModal user={user as any} onClose={() => setShowShop(false)} onUpdateUser={onUpdateUser} onError={(msg) => alert(msg)} />
       )}
-      {showProfile && (
-        <ProfileModal user={user} token={token} onClose={() => setShowProfile(false)} onUpdate={onUpdateUser} />
-      )}
-      {showHistory && (
+        {showProfile && (
+          <ProfileModal
+            user={user}
+            token={token}
+            onClose={() => setShowProfile(false)}
+            onUpdate={(u) => onUpdateUser(u)}
+            onLogout={onLogout}
+          />
+        )}{showHistory && (
         <MatchHistoryModal token={token} onClose={() => setShowHistory(false)} />
       )}
       <AnimatePresence>
@@ -414,7 +419,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               user.equippedAvatarDecoration === 'avatar_emerald' ? 'ring-4 ring-emerald-400 shadow-[0_0_30px_#34d399] animate-bounce' :
               'ring-2 ring-transparent hover:ring-gray-500'
             }`}>
-              <Avatar seed={user.avatar} />
+              <Avatar seed={user.avatar} decorationId={user.equippedAvatarDecoration} />
               {user.hasPassword && (
                 <span className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 rounded-full w-3.5 h-3.5 flex items-center justify-center">
                   <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -433,11 +438,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
             </button>
-            <button onClick={onLogout} title="Cerrar sesión" className="text-gray-500 hover:text-white transition-colors">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
+
           </div>
         </header>
 
@@ -577,7 +578,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                     <div className="flex -space-x-1.5">
                       {jackpotViewers.slice(0, 3).map(v => (
                         <div key={v.id} className="relative z-10 w-4 h-4 rounded-full border border-black overflow-hidden bg-slate-800 shrink-0">
-                          <Avatar seed={v.avatar} size={16} />
+                          <Avatar seed={v.avatar} size={16} decorationId={v.equippedAvatarDecoration} />
                         </div>
                       ))}
                     </div>
@@ -608,7 +609,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                     <div className="flex -space-x-1.5">
                       {roulettePlayers.slice(0, 3).map(v => (
                         <div key={v.id} className="relative z-10 w-4 h-4 rounded-full border border-black overflow-hidden bg-slate-800 shrink-0">
-                          <Avatar seed={v.avatar} size={16} />
+                          <Avatar seed={v.avatar} size={16} decorationId={v.equippedAvatarDecoration} />
                         </div>
                       ))}
                     </div>
@@ -824,7 +825,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                         {i < 3 ? medals[i] : <span className="text-gray-600">{i + 1}</span>}
                       </span>
                       <div className="relative shrink-0">
-                        <Avatar seed={entry.avatar} size={28} />
+                        <Avatar seed={entry.avatar} size={28} decorationId={entry.equippedAvatarDecoration} />
                         <span className="absolute -top-1 -left-1 z-10 min-w-[14px] h-3.5 px-0.5 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[8px] font-black text-black leading-none">
                           {entry.level ?? 1}
                         </span>

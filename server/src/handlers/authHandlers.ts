@@ -145,8 +145,101 @@ export const authHandlers = (socket: Socket) => {
       avatar: u.avatar || u.id,
       level: levelFromXp(u.xp ?? 0),
       lastSeen: u.last_seen,
-      isOnline: onlineUserIds.has(u.id)
+      isOnline: onlineUserIds.has(u.id),
+      equippedAvatarDecoration: u.equipped_avatar_decoration || undefined,
+      equippedNameDecoration: u.equipped_name_decoration || undefined
     })));
+  });
+
+  socket.on('buyShopItem', async ({ token, itemId }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const item = SHOP_CATALOG.find(i => i.id === itemId);
+    if (!item) { callback({ error: 'Item no encontrado' }); return; }
+
+    const dbUser = await getUser(user.id);
+    if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+
+    if (item.type === 'social' && itemId === 'social_andorra') {
+      if (dbUser.moved_to_andorra) { callback({ error: 'Ya vives en Andorra' }); return; }
+    } else if (item.type !== 'social') {
+      let isUnlocked = false;
+      const getUnlocked = (col: string) => dbUser[col as keyof typeof dbUser] ? JSON.parse(dbUser[col as keyof typeof dbUser] as string) : [];
+      if (item.type === 'avatar') isUnlocked = getUnlocked('unlocked_avatar_decorations').includes(item.id);
+      if (item.type === 'name') isUnlocked = getUnlocked('unlocked_name_decorations').includes(item.id);
+      if (item.type === 'felt') isUnlocked = getUnlocked('unlocked_bj_felts').includes(item.id);
+      if (isUnlocked) { callback({ error: 'Ya tienes este item' }); return; }
+    }
+
+    if (dbUser.balance < item.price) {
+      callback({ error: 'Saldo insuficiente' }); return;
+    }
+
+    await applyBalanceDelta(user.id, -item.price);
+    
+    if (item.type === 'social' && itemId === 'social_andorra') {
+      const { setMovedToAndorra } = require('../db');
+      await setMovedToAndorra(user.id);
+    } else if (item.type !== 'social') {
+      await addUnlockedShopItem(user.id, item.type, item.id);
+      await equipShopItem(user.id, item.type, item.id);
+    }
+
+    const updated = await getUser(user.id);
+    if (updated) {
+      socket.data.user = toPublicUser(updated);
+      callback({ ok: true, user: socket.data.user });
+      
+      const { findActiveRoomForUser, broadcastRoom } = require('../roomManager');
+      const room = findActiveRoomForUser(user.id);
+      if (room) {
+        const p = room.players.find((pl: any) => pl.userId === user.id);
+        if (p) {
+          p.equippedAvatarDecoration = updated.equipped_avatar_decoration || undefined;
+          p.equippedNameDecoration = updated.equipped_name_decoration || undefined;
+          p.equippedBjFelt = updated.equipped_bj_felt || undefined;
+          broadcastRoom(room.id);
+        }
+      }
+    }
+  });
+
+  socket.on('equipShopItem', async ({ token, type, itemId }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    if (itemId) {
+      const dbUser = await getUser(user.id);
+      let isUnlocked = false;
+      const getUnlocked = (col: string) => dbUser?.[col as keyof typeof dbUser] ? JSON.parse(dbUser[col as keyof typeof dbUser] as string) : [];
+      if (type === 'avatar') isUnlocked = getUnlocked('unlocked_avatar_decorations').includes(itemId);
+      if (type === 'name') isUnlocked = getUnlocked('unlocked_name_decorations').includes(itemId);
+      if (type === 'felt') isUnlocked = getUnlocked('unlocked_bj_felts').includes(itemId);
+      if (!isUnlocked) { callback({ error: 'No tienes este item' }); return; }
+    }
+
+    await equipShopItem(user.id, type as any, itemId);
+    const updated = await getUser(user.id);
+    if (updated) {
+      socket.data.user = toPublicUser(updated);
+      callback({ ok: true, user: socket.data.user });
+      
+      const { findActiveRoomForUser, broadcastRoom } = require('../roomManager');
+      const room = findActiveRoomForUser(user.id);
+      if (room) {
+        const p = room.players.find((pl: any) => pl.userId === user.id);
+        if (p) {
+          p.equippedAvatarDecoration = updated.equipped_avatar_decoration || undefined;
+          p.equippedNameDecoration = updated.equipped_name_decoration || undefined;
+          p.equippedBjFelt = updated.equipped_bj_felt || undefined;
+          broadcastRoom(room.id);
+        }
+      }
+      
+      const { broadcastPresence } = require('../socketHelpers');
+      broadcastPresence();
+    }
   });
 
   socket.on('getHaciendaTotal', async (_data, callback) => {

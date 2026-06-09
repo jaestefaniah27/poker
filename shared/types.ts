@@ -39,6 +39,8 @@ export interface Player {
   sessionMaxChips?: number; // Pico de fichas durante la sesión
   sessionStartedAt?: number; // Timestamp del primer buy-in de la sesión
   offlineSince?: number; // Timestamp en que pasó a offline (para expulsión automática)
+  equippedAvatarDecoration?: string; // Marco de avatar equipado
+  equippedNameDecoration?: string; // Placa de nombre equipada
   equippedBjFelt?: string; // Tapete de blackjack equipado
   // --- BlackJack ---
   bet?: number; // Apuesta de la mano actual de blackjack (legacy para retrocompatibilidad rápida de monto total apostado/etc)
@@ -363,12 +365,30 @@ export interface ShopItem {
 
 export const SHOP_CATALOG: ShopItem[] = [
   // --- Avatar Decorations ---
-  { id: 'avatar_bronze', name: 'Marco de Bronce', price: 5_000_000, type: 'avatar' },
-  { id: 'avatar_silver', name: 'Marco de Plata', price: 50_000_000, type: 'avatar' },
+  // Bronce
+  { id: 'avatar_bronze', name: 'Marco de Bronce Básico', price: 5_000_000, type: 'avatar' },
+  { id: 'avatar_bronze_2', name: 'Marco de Bronce Forjado', price: 10_000_000, type: 'avatar' },
+  { id: 'avatar_bronze_3', name: 'Marco de Bronce Épico', price: 25_000_000, type: 'avatar' },
+  // Plata
+  { id: 'avatar_silver', name: 'Marco de Plata Simple', price: 50_000_000, type: 'avatar' },
+  { id: 'avatar_silver_2', name: 'Marco de Plata Brillante', price: 100_000_000, type: 'avatar' },
+  { id: 'avatar_silver_3', name: 'Marco de Plata Estelar', price: 250_000_000, type: 'avatar' },
+  // Oro
   { id: 'avatar_gold', name: 'Marco de Oro', price: 500_000_000, type: 'avatar' },
-  { id: 'avatar_diamond', name: 'Aura de Diamante', price: 5_000_000_000, type: 'avatar' },
+  { id: 'avatar_gold_2', name: 'Marco de Oro Radiante', price: 1_000_000_000, type: 'avatar' },
+  { id: 'avatar_gold_3', name: 'Marco de Oro Imperial', price: 2_500_000_000, type: 'avatar' },
+  // Amatista
+  { id: 'avatar_diamond', name: 'Aura de Amatista', price: 5_000_000_000, type: 'avatar' },
+  { id: 'avatar_diamond_2', name: 'Cristal de Amatista', price: 10_000_000_000, type: 'avatar' },
+  { id: 'avatar_diamond_3', name: 'Corona de Amatista', price: 25_000_000_000, type: 'avatar' },
+  // Rubí
   { id: 'avatar_ruby', name: 'Partículas de Rubí', price: 25_000_000_000, type: 'avatar' },
+  { id: 'avatar_ruby_2', name: 'Gema de Rubí', price: 50_000_000_000, type: 'avatar' },
+  { id: 'avatar_ruby_3', name: 'Aura de Sangre Rubí', price: 100_000_000_000, type: 'avatar' },
+  // Esmeralda
   { id: 'avatar_emerald', name: 'Aura Esmeralda Mística', price: 100_000_000_000, type: 'avatar' },
+  { id: 'avatar_emerald_2', name: 'Bosque de Esmeralda', price: 250_000_000_000, type: 'avatar' },
+  { id: 'avatar_emerald_3', name: 'Magia Élfica Esmeralda', price: 500_000_000_000, type: 'avatar' },
 
   // --- Name Decorations ---
   { id: 'name_silver', name: 'Placa de Plata', price: 200_000_000, type: 'name' },

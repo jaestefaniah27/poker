@@ -64,7 +64,9 @@ export const roomHandlers = (socket: Socket) => {
       totalContribution: 0,
       level: levelFromXp(dbUser.xp ?? 0),
       lastBuyIn: isBJ ? buyIn : undefined,
-      equippedBjFelt: dbUser.equipped_bj_felt || undefined
+      equippedBjFelt: dbUser.equipped_bj_felt || undefined,
+      equippedAvatarDecoration: dbUser.equipped_avatar_decoration || undefined,
+      equippedNameDecoration: dbUser.equipped_name_decoration || undefined
     });
 
     if (!result) return;

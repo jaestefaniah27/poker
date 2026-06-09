@@ -1,0 +1,56 @@
+export const FRAME_CONFIG: Record<string, FrameConfigType> = {
+  "avatar_silver": {
+    "src": "/avatars/plata_1.png",
+    "scale": 201.5,
+    "top": 0,
+    "left": 0
+  },
+  "avatar_silver_2": {
+    "src": "/avatars/plata_2.png",
+    "scale": 223.5,
+    "top": 2.5,
+    "left": -0.5
+  },
+  "avatar_silver_3": {
+    "src": "/avatars/plata_3.png",
+    "scale": 228,
+    "top": 1.5,
+    "left": -0.5
+  },
+  "avatar_gold": {
+    "src": "/avatars/gold_1.png",
+    "scale": 103.5,
+    "top": 1,
+    "left": 0
+  },
+  "avatar_gold_2": {
+    "src": "/avatars/gold_3.png",
+    "scale": 143,
+    "top": -0.5,
+    "left": 0
+  },
+  "avatar_gold_3": {
+    "src": "/avatars/gold_5.png",
+    "scale": 164,
+    "top": -1,
+    "left": -0.5
+  },
+  "avatar_diamond": {
+    "src": "/avatars/amatista_1.png",
+    "scale": 112.5,
+    "top": -0.5,
+    "left": 0
+  },
+  "avatar_diamond_2": {
+    "src": "/avatars/amatista_3.png",
+    "scale": 143,
+    "top": -0.5,
+    "left": 0
+  },
+  "avatar_diamond_3": {
+    "src": "/avatars/amatista_5.png",
+    "scale": 164,
+    "top": -1,
+    "left": -0.5
+  }
+};
