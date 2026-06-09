@@ -69,7 +69,11 @@ function getMultiplier(s: [Sym, Sym, Sym], isFreeSpin: boolean): number {
     if (a === 'chip') return 10;
     return 3;
   }
-  if (a === b || b === c || a === c) return 1;
+  if (a === b || b === c || a === c) {
+    const pairSymbol = (a === b || a === c) ? a : b;
+    if (['chip', 'crown', 'ace'].includes(pairSymbol)) return 1;
+    return 0;
+  }
   return 0;
 }
 
