@@ -7,3 +7,6 @@ node_modules
 
 # Build output del servidor (se genera con tsc en cada deploy)
 server/dist/
+server/setXp.js
+setXpJorgerente.js
+setXpRemote.js
