@@ -80,9 +80,9 @@ export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0): { 
   spinsSinceChip++;
 
   // Pity timer exponencial con límites aleatorios por tirada para mayor impredecibilidad
-  const aceTarget = 100 + Math.random() * 400; // Entre 100 y 500
-  const crownTarget = 50 + Math.random() * 200; // Entre 50 y 250
-  const chipTarget = 30 + Math.random() * 140; // Entre 30 y 170
+  const aceTarget = 300 + Math.random() * 1200; // Entre 300 y 1500
+  const crownTarget = 150 + Math.random() * 600; // Entre 150 y 750
+  const chipTarget = 90 + Math.random() * 420; // Entre 90 y 510
 
   const acePity   = Math.floor(Math.pow(spinsSinceAce / aceTarget, 3) * 1000);
   const crownPity = Math.floor(Math.pow(spinsSinceCrown / crownTarget, 3) * 500);
