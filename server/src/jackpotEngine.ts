@@ -79,10 +79,14 @@ export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0): { 
   spinsSinceCrown++;
   spinsSinceChip++;
 
-  // Pity timer exponencial: cuanto más se acerca al límite, más peso gana el símbolo
-  const acePity   = Math.floor(Math.pow(spinsSinceAce / 300, 3) * 1000);
-  const crownPity = Math.floor(Math.pow(spinsSinceCrown / 150, 3) * 500);
-  const chipPity  = Math.floor(Math.pow(spinsSinceChip / 100, 3) * 300);
+  // Pity timer exponencial con límites aleatorios por tirada para mayor impredecibilidad
+  const aceTarget = 100 + Math.random() * 400; // Entre 100 y 500
+  const crownTarget = 50 + Math.random() * 200; // Entre 50 y 250
+  const chipTarget = 30 + Math.random() * 140; // Entre 30 y 170
+
+  const acePity   = Math.floor(Math.pow(spinsSinceAce / aceTarget, 3) * 1000);
+  const crownPity = Math.floor(Math.pow(spinsSinceCrown / crownTarget, 3) * 500);
+  const chipPity  = Math.floor(Math.pow(spinsSinceChip / chipTarget, 3) * 300);
 
   const dynamicWeights = [...BASE_WEIGHTS];
   dynamicWeights[4] += chipPity;  // chip

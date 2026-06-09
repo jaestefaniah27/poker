@@ -314,7 +314,11 @@ export const authHandlers = (socket: Socket) => {
       if (io) io.emit('haciendaUpdated', { total: newTotal });
     }
     
-    const xpReward = 100 + Math.floor(amt / 1_000_000);
+    let extraXp = 0;
+    if (amt >= 1_000_000) {
+      extraXp = Math.floor(Math.log10(amt / 1_000_000 + 1) * 500);
+    }
+    const xpReward = Math.min(500, 100 + extraXp);
     await addXp(user.id, xpReward);
     
     const updated = await getUser(user.id);
