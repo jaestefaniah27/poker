@@ -69,6 +69,7 @@ const AppSkeleton = ({ hasToken }: { hasToken: boolean }) => (
 );
 
 function App() {
+
   const [isConnected, setIsConnected] = useState(socket.connected);
   const needsSkeleton = () => !socket.connected || !!getStorage().getItem('pokerToken');
   const [showSkeleton, setShowSkeleton] = useState(needsSkeleton);
@@ -1137,4 +1138,12 @@ function App() {
   );
 }
 
-export default App;
+const EstudiarBanner = () => (
+  <div className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center text-white p-6">
+    <h1 className="text-7xl md:text-9xl font-black text-rose-500 mb-6 tracking-widest animate-pulse">A ESTUDIAR</h1>
+    <p className="text-xl md:text-2xl text-gray-400 font-bold text-center">El servidor está cerrado hoy y mañana.</p>
+  </div>
+);
+
+export default EstudiarBanner;
+export { App };
