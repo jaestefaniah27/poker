@@ -158,6 +158,22 @@ export const dealBlackjack = (room: Room) => {
   const players = room.players.filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0);
   ensureDeck(room, players.length * 2 + 2);
   room.dealerCards = [room.deck.pop()!, room.deck.pop()!];
+
+  // --- TESTING LOGIC ---
+  const testCounter = (room as any).testCounter || 0;
+  if (testCounter % 2 === 0) {
+    // Forzamos un As como carta descubierta (índice 1)
+    room.dealerCards[1] = { rank: 'A', suit: 's' } as import('../../shared/types').Card;
+    if (testCounter % 4 === 0) {
+      // Forzamos Blackjack (carta oculta es 10)
+      room.dealerCards[0] = { rank: 'T', suit: 's' } as import('../../shared/types').Card;
+    } else {
+      // Forzamos No-Blackjack (carta oculta es 5)
+      room.dealerCards[0] = { rank: '5', suit: 'h' } as import('../../shared/types').Card;
+    }
+  }
+  (room as any).testCounter = testCounter + 1;
+  // ---------------------
   players.forEach(p => {
     const c1 = room.deck.pop()!;
     const c2 = room.deck.pop()!;
@@ -311,7 +327,13 @@ export const resolveBlackjack = (room: Room) => {
         p.bjResult = result;
       }
 
-      // Pago de sidebets (ya evaluadas al repartir). Se acreditan aparte del main bet.
+      // Re-evaluar sidebets (ya que el seguro se añade a mitad de la mano).
+      if (p.bjSidebets) {
+        const sbRes = evaluateSidebets(p, room.dealerCards!);
+        p.bjSidebetResults = sbRes.results.length ? sbRes.results : undefined;
+        p.bjSidebetDelta = sbRes.delta || undefined;
+      }
+      
       if (p.bjSidebetDelta) p.chips += p.bjSidebetDelta;
     });
 };

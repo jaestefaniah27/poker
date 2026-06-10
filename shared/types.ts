@@ -26,7 +26,7 @@ export interface BjSidebetResult {
   label: string;  // etiqueta del resultado, p.ej. "Pareja perfecta", "Color", "Sin As · devuelto"
 }
 
-export const SIDEBET_ORDER: SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies', 'insurance'];
+export const SIDEBET_ORDER: SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies'];
 
 export const SIDEBET_LABELS: Record<SidebetType, string> = {
   perfectPairs: 'Perfect Pairs',

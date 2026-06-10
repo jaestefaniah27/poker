@@ -185,7 +185,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   );
   const placedSidebetTotal = useMemo(() => {
     const sb = myPlayer?.bjSidebets;
-    return sb ? SIDEBET_ORDER.reduce((s, k) => s + (sb[k] || 0), 0) : 0;
+    const keys: import('../../shared/types').SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
+    return sb ? keys.reduce((s, k) => s + ((sb as any)[k] || 0), 0) : 0;
   }, [myPlayer?.bjSidebets]);
 
   const [hideLostChips, setHideLostChips] = useState(false);
@@ -329,7 +330,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       sidebets: Object.keys(sb).length ? sb : undefined,
     });
   };
-  const sendAction = (action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split') => {
+  const sendAction = (action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split' | 'Insurance') => {
     socket.emit('bjAction', { roomId: room.id, action });
     vibrate(15);
   };
@@ -381,8 +382,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   // tras repartir / en resolve: apuestas colocadas + su resultado.
   const sidebetView = useMemo(() => {
     const fromState = phase === 'betting' && myBet === 0;
-    return SIDEBET_ORDER.map(k => {
-      const amount = fromState ? sumChips(sidebetChips[k]) : (myPlayer?.bjSidebets?.[k] || 0);
+    const keys: import('../../shared/types').SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
+    return keys.map(k => {
+      const amount = fromState ? sumChips(sidebetChips[k as Sidebet] || []) : (myPlayer?.bjSidebets?.[k] || 0);
       if (amount <= 0) return null;
       // Siempre compactado a la mejor composición → la ficha mostrada es la de mayor denominación.
       const top = [...chipsFromAmount(amount)].sort((a, b) => b.v - a.v)[0];
@@ -465,6 +467,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   const isPair = myCards.length === 2 && cardPoints(myCards[0].rank as string) === cardPoints(myCards[1].rank as string);
   const canSplit = canAct && isPair && myHands.length < 4 && myChips >= totalBet + activeHandBet;
+  const currentSidebetsTotal = [...SIDEBET_ORDER, 'insurance' as import('../../shared/types').SidebetType].reduce((s, k) => s + (myPlayer?.bjSidebets?.[k] || 0), 0);
+  const insuranceBetAmount = Math.floor(activeHandBet / 2);
+  const canInsurance = canAct && myHands.length === 1 && myCards.length === 2 && dealerCards[1]?.rank === 'A' && !myPlayer?.bjSidebets?.insurance && myChips >= totalBet + currentSidebetsTotal + insuranceBetAmount;
 
   const canRebuy = !!myPlayer && myPlayer.isActive && myChips <= 0 && phase !== 'dealing';
 
@@ -984,26 +989,38 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           {/* Bet pill — centrada absolutamente en la fila */}
           <div className="absolute inset-x-0 flex justify-center pointer-events-none">
             <AnimatePresence>
-              {(circleAmount > 0 || (showResult && myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0)) && (
-                <motion.div
-                  key="bet-pill"
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-                  className={`px-2.5 py-1 rounded-full font-mono font-bold text-[11px] border ${
-                    showResult && myPlayer?.bjDelta != null
-                      ? myPlayer.bjDelta > 0
-                        ? 'bg-emerald-400/20 border-emerald-300/50 text-emerald-200'
-                        : 'bg-rose-500/20 border-rose-400/50 text-rose-200'
-                      : 'bg-yellow-400/20 border-yellow-300/40 text-yellow-100'
-                  }`}
-                >
-                  {showResult && myPlayer?.bjDelta != null
-                    ? `${myPlayer.bjDelta > 0 ? '+' : ''}${fmtChips(myPlayer.bjDelta)}`
-                    : fmtChips(circleAmount)}
-                </motion.div>
-              )}
+              {(() => {
+                const totalBetPill = phase === 'betting' && (pendingTotal > 0 || pendingSidebetTotal > 0) 
+                  ? pendingTotal + pendingSidebetTotal 
+                  : myBet + placedSidebetTotal;
+                const totalDeltaPill = (myPlayer?.bjDelta || 0) + (myPlayer?.bjSidebetDelta || 0);
+                const hasDelta = showResult && (myPlayer?.bjDelta != null || myPlayer?.bjSidebetDelta != null);
+                
+                if (totalBetPill <= 0 && !hasDelta) return null;
+                
+                return (
+                  <motion.div
+                    key="bet-pill"
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                    className={`px-2.5 py-1 rounded-full font-mono font-bold text-[11px] border ${
+                      hasDelta
+                        ? totalDeltaPill > 0
+                          ? 'bg-emerald-400/20 border-emerald-300/50 text-emerald-200'
+                          : totalDeltaPill < 0
+                            ? 'bg-rose-500/20 border-rose-400/50 text-rose-200'
+                            : 'bg-sky-500/20 border-sky-400/50 text-sky-200'
+                        : 'bg-yellow-400/20 border-yellow-300/40 text-yellow-100'
+                    }`}
+                  >
+                    {hasDelta
+                      ? (totalDeltaPill === 0 ? '±0' : `${totalDeltaPill > 0 ? '+' : ''}${fmtChips(totalDeltaPill)}`)
+                      : fmtChips(totalBetPill)}
+                  </motion.div>
+                );
+              })()}
             </AnimatePresence>
           </div>
         </div>
@@ -1093,18 +1110,23 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           )}
 
           {phase === 'playerAction' && canAct && (
-            <div className={`flex-1 grid gap-2 items-stretch ${canSplit ? 'grid-rows-2' : ''}`}>
-              <div className={`grid gap-2 items-stretch ${canSplit ? 'grid-cols-3' : 'grid-cols-4'}`}>
+            <div className={`flex-1 grid gap-2 items-stretch ${(canSplit || canInsurance) ? 'grid-rows-2' : ''}`}>
+              <div className={`grid gap-2 items-stretch ${(canSplit || canInsurance) ? 'grid-cols-3' : 'grid-cols-4'}`}>
                 <ActionBtn label="CARTA" onClick={() => sendAction('Hit')} disabled={!dealDone} from="#34d399" to="#059669" />
                 <ActionBtn label="PLANTAR" onClick={() => sendAction('Stand')} disabled={!dealDone} from="#f87171" to="#b91c1c" />
                 <ActionBtn label="DOBLAR" onClick={() => sendAction('Double')} disabled={!dealDone || !canDoubleHand} from="#fbbf24" to="#b45309" />
-                {!canSplit && (
+                {!(canSplit || canInsurance) && (
                   <ActionBtn label="RENDIR" onClick={() => sendAction('Surrender')} disabled={!dealDone || myCards.length !== 2} from="#9ca3af" to="#4b5563" />
                 )}
               </div>
-              {canSplit && (
-                <div className="grid grid-cols-2 gap-2 items-stretch">
-                  <ActionBtn label="DIVIDIR" onClick={() => sendAction('Split')} disabled={!dealDone || !canSplit} from="#818cf8" to="#4f46e5" />
+              {(canSplit || canInsurance) && (
+                <div className={`grid gap-2 items-stretch ${canSplit && canInsurance ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  {canSplit && (
+                    <ActionBtn label="DIVIDIR" onClick={() => sendAction('Split')} disabled={!dealDone || !canSplit} from="#818cf8" to="#4f46e5" />
+                  )}
+                  {canInsurance && (
+                    <ActionBtn label="SEGURO" onClick={() => sendAction('Insurance')} disabled={!dealDone || !canInsurance} from="#f472b6" to="#db2777" />
+                  )}
                   <ActionBtn label="RENDIR" onClick={() => sendAction('Surrender')} disabled={!dealDone || myCards.length !== 2} from="#9ca3af" to="#4b5563" />
                 </div>
               )}
