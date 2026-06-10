@@ -240,7 +240,25 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   // Remember last placed bet for one-tap REBET in the next round
   const [lastBet, setLastBet] = useState(0);
-  useEffect(() => { if (myBet > 0) setLastBet(myBet); }, [myBet]);
+  const [lastSidebets, setLastSidebets] = useState<Partial<Record<SidebetType, number>>>({});
+  useEffect(() => { 
+    if (myBet > 0) {
+      setLastBet(myBet);
+      if (myPlayer?.bjSidebets) {
+        const sb: Partial<Record<SidebetType, number>> = {};
+        for (const k of SIDEBET_ORDER) {
+          if (myPlayer.bjSidebets[k]) sb[k] = myPlayer.bjSidebets[k]!;
+        }
+        setLastSidebets(sb);
+      } else {
+        setLastSidebets({});
+      }
+    }
+  }, [myBet, myPlayer?.bjSidebets]);
+
+  const lastTotalRebet = useMemo(() => {
+    return lastBet + SIDEBET_ORDER.reduce((s, k) => s + (lastSidebets[k] || 0), 0);
+  }, [lastBet, lastSidebets]);
 
   // Paged chip rail: default page escalada al stack del jugador (sin deslizar manualmente)
   const [chipPage, setChipPage] = useState(() => pageForAmount(maxBet));
@@ -337,7 +355,11 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const startRound = () => socket.emit('bjStartRound', { roomId: room.id });
 
   useEffect(() => {
-    if (phase === 'betting') setPrizeArrived(false);
+    if (phase === 'betting') {
+      setPrizeArrived(false);
+      setSidebetsOn(false);
+      setBetTarget('main');
+    }
   }, [phase]);
 
   const myHands = (phase === 'betting' || phase === 'waiting') ? [] : (myPlayer?.bjHands || (myPlayer?.cards?.length ? [{ cards: myPlayer.cards, bet: myBet, status: myPlayer?.bjStatus || 'playing' }] : []));
@@ -1061,10 +1083,21 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                     className="flex-1 py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95 disabled:opacity-30">BORRAR</button>
                   <button onClick={allInBet}
                     className="flex-1 py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">MAX</button>
-                  {lastBet > 0 && lastBet <= maxBet ? (
-                    <button onClick={() => setPendingChips(chipsFromAmount(lastBet))}
+                  {lastBet > 0 && lastTotalRebet <= maxBet ? (
+                    <button onClick={() => {
+                      setPendingChips(chipsFromAmount(lastBet));
+                      const newSb = emptySidebetChips();
+                      let hasSb = false;
+                      SIDEBET_ORDER.forEach(k => {
+                        if (lastSidebets[k]) {
+                          newSb[k] = chipsFromAmount(lastSidebets[k]!);
+                          hasSb = true;
+                        }
+                      });
+                      if (hasSb) setSidebetChips(newSb);
+                    }}
                       className="flex-1 py-3 rounded-2xl bg-yellow-400/20 border border-yellow-300/40 text-[11px] font-bold text-yellow-100 active:scale-95 leading-tight">
-                      REBET<br/><span className="text-[9px] opacity-80">{fmtChips(lastBet)}</span></button>
+                      REBET<br/><span className="text-[9px] opacity-80">{fmtChips(lastTotalRebet)}</span></button>
                   ) : (
                     <button onClick={halfBet}
                       className="flex-1 py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">½</button>
@@ -1081,19 +1114,20 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                   <button onClick={() => { setSidebetsOn(false); setBetTarget('main'); }}
                     title="Cerrar apuestas laterales"
                     className="shrink-0 w-11 rounded-2xl bg-white/8 border border-white/15 text-white/70 font-bold text-[13px] active:scale-95">✕</button>
-                  <select value={selectedSidebet}
-                    onChange={e => { const k = e.target.value as Sidebet; setSelectedSidebet(k); setBetTarget(k); }}
-                    style={{ textAlignLast: 'center' }}
-                    className="flex-1 min-w-0 rounded-2xl bg-black/40 border border-white/15 text-[10px] font-bold text-white/90 text-center px-1.5">
-                    {SIDEBET_ORDER.map(k => (
-                      <option key={k} value={k}>{SIDEBET_LABELS[k]} · {SIDEBET_TOP_PAYOUT[k]}</option>
-                    ))}
-                  </select>
-                  <button onClick={() => setBetTarget(t => t === 'main' ? selectedSidebet : 'main')}
-                    title="¿A dónde van las fichas?"
-                    className={`shrink-0 px-3 rounded-2xl text-[10px] font-black active:scale-95 border ${betTarget === 'main' ? 'bg-amber-400/20 border-amber-300/40 text-amber-100' : 'bg-fuchsia-500/25 border-fuchsia-300/50 text-fuchsia-100'}`}>
-                    {betTarget === 'main' ? 'MAIN' : SIDEBET_SHORT[selectedSidebet]}
-                  </button>
+                  <div className="flex-1 flex gap-1 items-stretch">
+                    {SIDEBET_ORDER.map(k => {
+                      const isActive = betTarget === k;
+                      return (
+                        <button key={k} onClick={() => { setSelectedSidebet(k); setBetTarget(k); }}
+                          className={`flex-1 rounded-2xl text-[9px] sm:text-[10px] font-bold leading-tight flex flex-col items-center justify-center border active:scale-95 transition-colors ${
+                            isActive ? 'bg-fuchsia-500/30 border-fuchsia-400/50 text-white' : 'bg-black/40 border-white/10 text-white/60 hover:bg-white/5'
+                          }`}>
+                          <span>{SIDEBET_SHORT[k]}</span>
+                          <span className="text-[7px] opacity-70">{SIDEBET_TOP_PAYOUT[k]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                   <button onClick={placeBet} disabled={pendingTotal < minBet}
                     className="shrink-0 px-3 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 text-white font-extrabold text-[12px] tracking-wider shadow-lg active:scale-95 disabled:active:scale-100">LISTO</button>
                 </motion.div>
