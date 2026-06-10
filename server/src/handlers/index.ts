@@ -6,7 +6,7 @@ import { blackjackHandlers } from './blackjackHandlers';
 import { minigameHandlers } from './minigameHandlers';
 import { triviaHandlers } from './triviaHandlers';
 import { crashHandlers } from './crashHandler';
-import { updateLastSeen } from '../db';
+import { updateLastSeen, bumpStat } from '../db';
 import { broadcastPresence } from '../socketHelpers';
 
 const MAX_EVENTS_PER_SEC = 20;
@@ -56,8 +56,9 @@ const wrapCallback = (socket: Socket, eventName: string, handler: Function) => {
 };
 
 export const registerAllHandlers = (socket: Socket) => {
+  const connectedAt = Date.now();
   const originalOn = socket.on.bind(socket);
-  
+
   socket.on = (event: string, listener: (...args: any[]) => void) => {
     return originalOn(event, wrapCallback(socket, event, listener));
   };
@@ -66,6 +67,8 @@ export const registerAllHandlers = (socket: Socket) => {
   socket.on('disconnect', () => {
     rateLimits.delete(socket.id);
     if (socket.data?.user?.id) {
+      // Tiempo jugado: duración de la conexión del socket autenticado.
+      bumpStat(socket.data.user.id, 'time_played_ms', Date.now() - connectedAt);
       updateLastSeen(socket.data.user.id)
         .then(() => broadcastPresence())
         .catch(console.error);

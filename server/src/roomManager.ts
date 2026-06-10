@@ -1,7 +1,7 @@
 import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
-import { dealBlackjack, dealerPlay as bjDealerPlay, resolveBlackjack, resetBlackjackHand, handValue as bjHandValue } from './blackjackEngine';
-import { deleteRoomFromDB, recordMatchHistory, addXp, getUser } from './db';
+import { dealBlackjack, dealerPlay as bjDealerPlay, resolveBlackjack, resetBlackjackHand, handValue as bjHandValue, needsReshuffle, initShoe } from './blackjackEngine';
+import { deleteRoomFromDB, recordMatchHistory, addXp, getUser, recordHandStats, bumpStat, maxStat } from './db';
 
 // Calidad de mano de poker → rango 1..10 (pokersolver hand.name en inglés).
 const HAND_RANK: Record<string, number> = {
@@ -707,6 +707,19 @@ export const endRound = (room: Room) => {
 
   bumpMaxChips(room);
 
+  // Estadísticas persistentes por jugador: manos jugadas/ganadas, mayor bote, mejor mano.
+  // La mejor mano solo cuenta si llegó al showdown (no se cuentan cartas no enseñadas).
+  for (const p of room.players) {
+    if (!p.isActive || p.isSpectating || p.cards.length === 0) continue;
+    const winnerData = room.winners?.find(w => w.id === p.id);
+    const showedHand = !wonByFold && !p.hasFolded;
+    recordHandStats(p.userId, {
+      won: !!winnerData,
+      potWon: winnerData?.amount || 0,
+      handName: showedHand ? p.handName : undefined,
+    }).catch(err => console.error('Error stats poker:', err));
+  }
+
   // XP a todos los que jugaron esta mano: ganadores mucha, perdedores poca; escala con la mano.
   awardHandXp(
     room,
@@ -943,7 +956,7 @@ export const allBlackjackBetsIn = (room: Room): boolean => {
 
 // Reparte. Si NADIE apostó, vuelve a betting (skip ronda). Si todos tienen blackjack/bust, salta a resolve.
 // Devuelve siguiente bjPhase resultante.
-export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerAction' | 'betting' | null => {
+export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerAction' | 'betting' | 'reshuffling' | null => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack') return null;
   
@@ -964,9 +977,11 @@ export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerActi
   // Matar el deadline de apuestas: ya repartimos → el timer del cliente no debe quedarse pillado en 0
   room.bettingDeadline = undefined;
 
-  // Asegurar mazo fresco al inicio de cada ronda
-  room.deck = createDeck();
-  shuffleDeck(room.deck);
+  // Zapato compartido persistente: si quedan pocas cartas, pausar para rebarajar
+  if (needsReshuffle(room, bettors.length * 2 + 2)) {
+    room.bjPhase = 'reshuffling';
+    return 'reshuffling';
+  }
   room.bjPhase = 'dealing';
   dealBlackjack(room);
   // Si todos los que apostaron sacaron blackjack → directo a dealer
@@ -1005,7 +1020,7 @@ export const blackjackPlayerAction = (
     if (!hand || hand.status !== 'playing') return null;
 
     if (action === 'Hit') {
-      if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      if (room.deck.length === 0) initShoe(room);
       hand.cards.push(room.deck.pop()!);
       const v = bjHandValue(hand.cards);
       if (v.total > 21) hand.status = 'bust';
@@ -1018,7 +1033,7 @@ export const blackjackPlayerAction = (
       if (player.chips < totalBet + hand.bet) return null;
       hand.doubled = true;
       hand.bet *= 2;
-      if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      if (room.deck.length === 0) initShoe(room);
       hand.cards.push(room.deck.pop()!);
       const v = bjHandValue(hand.cards);
       hand.status = v.total > 21 ? 'bust' : 'stand';
@@ -1045,7 +1060,7 @@ export const blackjackPlayerAction = (
 
       player.bjHands.splice(activeIndex + 1, 0, newHand);
 
-      if (room.deck.length < 2) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      if (room.deck.length < 2) initShoe(room);
       newHand.cards.push(room.deck.pop()!);
       hand.cards.push(room.deck.pop()!);
 
@@ -1076,7 +1091,7 @@ export const blackjackPlayerAction = (
     // legacy mode
     if (player.bjStatus !== 'playing') return null;
     if (action === 'Hit') {
-      if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      if (room.deck.length === 0) initShoe(room);
       player.cards.push(room.deck.pop()!);
       const v = bjHandValue(player.cards);
       if (v.total > 21) player.bjStatus = 'bust';
@@ -1088,7 +1103,7 @@ export const blackjackPlayerAction = (
       if (player.chips < (player.bet || 0) * 2) return null;
       player.bjDoubled = true;
       player.bet = (player.bet || 0) * 2;
-      if (room.deck.length === 0) { room.deck = createDeck(); shuffleDeck(room.deck); }
+      if (room.deck.length === 0) initShoe(room);
       player.cards.push(room.deck.pop()!);
       const v = bjHandValue(player.cards);
       player.bjStatus = v.total > 21 ? 'bust' : 'stand';
@@ -1163,6 +1178,24 @@ export const finishBlackjackHand = (roomId: string) => {
   room.bjPhase = 'resolve';
   room.showdownAt = Date.now();
   bumpMaxChips(room);
+
+  // Estadísticas persistentes de blackjack (una entrada por mano jugada, splits incluidos).
+  for (const p of room.players) {
+    if (!p.isActive || (p.bet || 0) === 0) continue;
+    const hands = p.bjHands && p.bjHands.length > 0
+      ? p.bjHands.map(h => ({ result: h.result, delta: h.delta || 0 }))
+      : [{ result: p.bjResult, delta: p.bjDelta || 0 }];
+    for (const h of hands) {
+      bumpStat(p.userId, 'bj_hands');
+      if (h.result === 'win' || h.result === 'blackjack') bumpStat(p.userId, 'bj_wins');
+      if (h.result === 'blackjack') bumpStat(p.userId, 'bj_blackjacks');
+      if (h.delta > 0) {
+        bumpStat(p.userId, 'bj_total_won', h.delta);
+        maxStat(p.userId, 'bj_biggest_win', h.delta);
+      }
+    }
+    bumpStat(p.userId, 'bj_net', p.bjDelta || 0);
+  }
 
   // XP a los que apostaron: escala con el resultado (blackjack > win > push > derrota).
   awardHandXp(

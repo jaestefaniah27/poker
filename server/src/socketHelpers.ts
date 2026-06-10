@@ -81,7 +81,7 @@ export const buildRoomView = (room: Room, socketId: string) => {
     const dealerCards = hideDealerHole && room.dealerCards && room.dealerCards.length > 0
       ? [{ rank: '?' as any, suit: '?' as any }, ...room.dealerCards.slice(1)]
       : room.dealerCards;
-    return { ...room, deck: [], dealerCards };
+    return { ...room, deck: [], deckSize: room.deck?.length ?? 0, dealerCards };
   }
   const wonByFold = room.winners?.[0]?.handName === 'Won by fold';
   return {

@@ -1,5 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
-import { socket } from '../utils';
+import { socket, fmtChips, fmtDuration, HAND_NAMES_ES } from '../utils';
+
+const StatCell = ({ label, value, accent }: { label: string; value: string | number; accent?: string }) => (
+  <div className="bg-background rounded-xl p-2.5 flex flex-col items-center border border-gray-800">
+    <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold text-center leading-tight">{label}</span>
+    <span className={`font-mono text-sm font-bold mt-0.5 ${accent || 'text-white'}`}>{value}</span>
+  </div>
+);
+
+const StatSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="mt-3">
+    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1.5">{title}</p>
+    <div className="grid grid-cols-2 gap-2">{children}</div>
+  </div>
+);
+
+const fmtMult = (x100: number) => `x${(x100 / 100).toFixed(2)}`;
+const pct = (part: number, total: number) => `${Math.round((part / total) * 100)}%`;
 
 interface ProfileModalProps {
   user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean };
@@ -16,6 +33,13 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [stats, setStats] = useState<{ poker: any; general: Record<string, number> } | null>(null);
+
+  useEffect(() => {
+    socket.emit('getUserStats', { userId: user.id }, (res: any) => {
+      if (res?.ok) setStats({ poker: res.poker, general: res.general || {} });
+    });
+  }, [user.id]);
 
   const flash = (ok: boolean, text: string) => {
     setMsg({ ok, text });
@@ -144,6 +168,105 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
             <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
             <button onClick={saveAvatar} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-full transition-colors">Guardar avatar</button>
           </div>
+        </div>
+
+        {/* Estadísticas */}
+        <div className="mb-6">
+          <label className="text-[11px] text-gray-400 uppercase tracking-wider font-semibold">Estadísticas</label>
+          {stats ? (() => {
+            const g = stats.general;
+            const p = stats.poker;
+            const hasAny = p.hands_played > 0 || Object.values(g).some(v => v > 0);
+            if (!hasAny) return <p className="text-gray-500 text-xs mt-2 italic">Aún no has jugado nada. ¡A la mesa!</p>;
+            return (
+              <div>
+                {(g.max_balance > 0 || g.time_played_ms > 0 || g.bonus_claims > 0 || g.gifts_sent > 0 || g.gifts_received > 0) && (
+                  <StatSection title="General">
+                    {g.max_balance > 0 && <StatCell label="Récord saldo" value={`$${fmtChips(g.max_balance)}`} accent="text-emerald-400" />}
+                    {g.time_played_ms > 0 && <StatCell label="Tiempo jugado" value={fmtDuration(g.time_played_ms)} />}
+                    {g.bonus_claims > 0 && <StatCell label="Bonus reclamados" value={g.bonus_claims} />}
+                    {g.gifts_sent > 0 && <StatCell label="Regalado" value={fmtChips(g.gifts_sent)} accent="text-rose-300" />}
+                    {g.gifts_received > 0 && <StatCell label="Recibido en regalos" value={fmtChips(g.gifts_received)} accent="text-emerald-300" />}
+                  </StatSection>
+                )}
+                {p.hands_played > 0 && (
+                  <StatSection title="Poker">
+                    <StatCell label="Manos" value={p.hands_played} />
+                    <StatCell label="Win rate" value={`${pct(p.hands_won, p.hands_played)} (${p.hands_won})`} />
+                    <StatCell label="Mayor bote" value={fmtChips(p.biggest_pot)} accent="text-amber-300" />
+                    <StatCell label="Mejor mano" value={HAND_NAMES_ES[p.best_hand_name] || p.best_hand_name || '—'} accent="text-emerald-300" />
+                  </StatSection>
+                )}
+                {g.bj_hands > 0 && (
+                  <StatSection title="Blackjack">
+                    <StatCell label="Manos" value={g.bj_hands} />
+                    <StatCell label="Ganadas" value={`${pct(g.bj_wins || 0, g.bj_hands)} (${g.bj_wins || 0})`} />
+                    <StatCell label="Blackjacks" value={g.bj_blackjacks || 0} accent="text-amber-300" />
+                    <StatCell label="Mayor premio" value={fmtChips(g.bj_biggest_win || 0)} accent="text-amber-300" />
+                    <StatCell
+                      label="Neto"
+                      value={`${(g.bj_net || 0) >= 0 ? '+' : ''}${fmtChips(g.bj_net || 0)}`}
+                      accent={(g.bj_net || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}
+                    />
+                  </StatSection>
+                )}
+                {g.jackpot_spins > 0 && (
+                  <StatSection title="Jackpot">
+                    <StatCell label="Tiradas" value={g.jackpot_spins} />
+                    <StatCell label="Mayor premio" value={fmtChips(g.jackpot_biggest_win || 0)} accent="text-amber-300" />
+                    <StatCell label="Mejor tirada" value={fmtMult(g.jackpot_best_mult_x100 || 0)} accent="text-emerald-300" />
+                    {g.jackpot_tax_paid > 0 && <StatCell label="Pagado a Hacienda" value={fmtChips(g.jackpot_tax_paid)} accent="text-rose-300" />}
+                    {g.jackpot_frauds > 0 && <StatCell label="Fraudes fiscales" value={g.jackpot_frauds} accent="text-rose-400" />}
+                  </StatSection>
+                )}
+                {g.mines_games > 0 && (
+                  <StatSection title="Mines">
+                    <StatCell label="Partidas" value={g.mines_games} />
+                    <StatCell label="Retiradas" value={g.mines_cashouts || 0} />
+                    <StatCell label="Bombas pisadas" value={g.mines_bombs || 0} accent="text-rose-400" />
+                    <StatCell label="Mayor premio" value={fmtChips(g.mines_biggest_win || 0)} accent="text-amber-300" />
+                    {g.mines_best_mult_x100 > 0 && <StatCell label="Mejor multiplicador" value={fmtMult(g.mines_best_mult_x100)} accent="text-emerald-300" />}
+                  </StatSection>
+                )}
+                {g.crash_games > 0 && (
+                  <StatSection title="Crash">
+                    <StatCell label="Partidas" value={g.crash_games} />
+                    <StatCell label="Retiradas a tiempo" value={g.crash_cashouts || 0} />
+                    <StatCell label="Mayor premio" value={fmtChips(g.crash_biggest_win || 0)} accent="text-amber-300" />
+                    {g.crash_best_mult_x100 > 0 && <StatCell label="Mejor multiplicador" value={fmtMult(g.crash_best_mult_x100)} accent="text-emerald-300" />}
+                  </StatSection>
+                )}
+                {g.roulette_rounds > 0 && (
+                  <StatSection title="Ruleta">
+                    <StatCell label="Rondas" value={g.roulette_rounds} />
+                    <StatCell label="Apostado" value={fmtChips(g.roulette_total_bet || 0)} />
+                    <StatCell label="Ganado" value={fmtChips(g.roulette_total_won || 0)} accent="text-emerald-300" />
+                    <StatCell label="Mayor premio" value={fmtChips(g.roulette_biggest_win || 0)} accent="text-amber-300" />
+                  </StatSection>
+                )}
+                {g.wordle_games > 0 && (
+                  <StatSection title="Wordle">
+                    <StatCell label="Partidas" value={g.wordle_games} />
+                    <StatCell label="Victorias" value={`${pct(g.wordle_wins || 0, g.wordle_games)} (${g.wordle_wins || 0})`} />
+                    {g.wordle_total_won > 0 && <StatCell label="Ganado" value={fmtChips(g.wordle_total_won)} accent="text-emerald-300" />}
+                  </StatSection>
+                )}
+                {g.trivia_answered > 0 && (
+                  <StatSection title="Trivia">
+                    <StatCell label="Respondidas" value={g.trivia_answered} />
+                    <StatCell label="Aciertos" value={`${pct(g.trivia_correct || 0, g.trivia_answered)} (${g.trivia_correct || 0})`} accent="text-emerald-300" />
+                  </StatSection>
+                )}
+                {g.wheel_claims > 0 && (
+                  <StatSection title="Ruleta de premios">
+                    <StatCell label="Tiradas reclamadas" value={g.wheel_claims} />
+                  </StatSection>
+                )}
+              </div>
+            );
+          })() : (
+            <p className="text-gray-500 text-xs mt-2 italic">Cargando…</p>
+          )}
         </div>
 
         {/* Nombre */}

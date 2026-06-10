@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels, setJackpotUnlockLevel, updateLastSeen, addHaciendaTotal, getHaciendaTotal, payIsrael } from '../db';
+import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels, setJackpotUnlockLevel, updateLastSeen, addHaciendaTotal, getHaciendaTotal, payIsrael, bumpStat } from '../db';
 import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
 import { levelFromXp } from '../../../shared/types';
 import { sanitizeInput } from '../security';
@@ -303,10 +303,12 @@ export const authHandlers = (socket: Socket) => {
     }
     
     await applyBalanceDelta(user.id, -amt);
-    
+
     const tax = Math.floor(amt * 0.2);
     const finalAmount = amt - tax;
     await applyBalanceDelta(target.id, finalAmount);
+    bumpStat(user.id, 'gifts_sent', amt);
+    bumpStat(target.id, 'gifts_received', finalAmount);
     
     if (tax > 0) {
       const newTotal = await addHaciendaTotal(tax);

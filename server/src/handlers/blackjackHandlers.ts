@@ -6,9 +6,12 @@ import {
   BJ_BETTING_DURATION, BJ_DEALER_REVEAL_DELAY,
   touchRoom
 } from '../roomManager';
+import { initShoe } from '../blackjackEngine';
 import { broadcastRoom, io, hasOnlinePlayers } from '../socketHelpers';
 import { applyBalanceDelta, getUser } from '../db';
 import { Room } from '../../../shared/types';
+
+const RESHUFFLE_PAUSE_MS = 2_500;
 
 // ¿Queda alguien con mano viva en playerAction?
 const anyPlaying = (room: Room): boolean =>
@@ -140,6 +143,20 @@ const proceedDeal = async (roomId: string) => {
     // nadie apostó — reabrimos timer
     armBettingTimer(roomId);
     broadcastRoom(roomId);
+    return;
+  }
+  if (next === 'reshuffling') {
+    // Pausa visible: el cliente muestra animación de barajado antes de repartir
+    broadcastRoom(roomId);
+    setTimeout(() => {
+      const r = getRoom(roomId);
+      if (!r || r.bjPhase !== 'reshuffling') return;
+      initShoe(r);
+      const next2 = dealBlackjackHands(roomId);
+      broadcastRoom(roomId);
+      if (next2 === 'playerAction') armActionPhaseTimer(roomId);
+      else if (next2 === 'dealerAction') armDealerTimer(roomId);
+    }, RESHUFFLE_PAUSE_MS);
     return;
   }
   broadcastRoom(roomId);

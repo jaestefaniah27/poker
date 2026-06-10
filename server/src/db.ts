@@ -174,6 +174,26 @@ const MIGRATIONS = [
   {
     name: '027_padre_israel_debt',
     sql: "UPDATE users SET israel_debt = 1000000000 WHERE name = 'padre' COLLATE NOCASE AND paid_israel = 0"
+  },
+  {
+    name: '028_poker_stats',
+    sql: `CREATE TABLE IF NOT EXISTS poker_stats (
+      user_id TEXT PRIMARY KEY,
+      hands_played INTEGER NOT NULL DEFAULT 0,
+      hands_won INTEGER NOT NULL DEFAULT 0,
+      biggest_pot INTEGER NOT NULL DEFAULT 0,
+      best_hand_rank INTEGER NOT NULL DEFAULT 0,
+      best_hand_name TEXT NOT NULL DEFAULT ''
+    )`
+  },
+  {
+    name: '029_user_stats',
+    sql: `CREATE TABLE IF NOT EXISTS user_stats (
+      user_id TEXT NOT NULL,
+      stat TEXT NOT NULL,
+      value INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, stat)
+    )`
   }
 ];
 
@@ -369,7 +389,10 @@ export const applyBalanceDelta = async (id: string, delta: number): Promise<numb
   await dbRun('UPDATE users SET balance = MAX(0, balance + ?) WHERE id = ?', [delta, id]);
   const row = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   onBalanceChanged();
-  return row?.balance ?? 0;
+  const balance = row?.balance ?? 0;
+  // Récord histórico de saldo. Fire-and-forget: no frena el flujo de pagos.
+  void maxStat(id, 'max_balance', balance);
+  return balance;
 };
 
 const HOURLY_COOLDOWN_MS = 30 * 60 * 1000;
@@ -512,6 +535,91 @@ export const getMatchHistoryForUser = async (userId: string, limit = 30): Promis
     'SELECT * FROM match_history WHERE user_id = ? ORDER BY played_at DESC LIMIT ?',
     [userId, limit]
   );
+};
+
+// --- Estadísticas de poker ---
+export interface PokerStatsRow {
+  user_id: string;
+  hands_played: number;
+  hands_won: number;
+  biggest_pot: number;
+  best_hand_rank: number;
+  best_hand_name: string;
+}
+
+// Orden de fuerza de las manos según los nombres que devuelve pokersolver (hand.name).
+const HAND_RANK_ORDER: Record<string, number> = {
+  'High Card': 1,
+  'Pair': 2,
+  'Two Pair': 3,
+  'Three of a Kind': 4,
+  'Straight': 5,
+  'Flush': 6,
+  'Full House': 7,
+  'Four of a Kind': 8,
+  'Straight Flush': 9,
+  'Royal Flush': 10,
+};
+
+export const recordHandStats = async (
+  userId: string,
+  opts: { won: boolean; potWon: number; handName?: string }
+): Promise<void> => {
+  await dbRun('INSERT OR IGNORE INTO poker_stats (user_id) VALUES (?)', [userId]);
+  await dbRun(
+    `UPDATE poker_stats SET
+      hands_played = hands_played + 1,
+      hands_won = hands_won + ?,
+      biggest_pot = MAX(biggest_pot, ?)
+    WHERE user_id = ?`,
+    [opts.won ? 1 : 0, opts.won ? opts.potWon : 0, userId]
+  );
+  const rank = opts.handName ? HAND_RANK_ORDER[opts.handName] || 0 : 0;
+  if (rank > 0) {
+    await dbRun(
+      'UPDATE poker_stats SET best_hand_rank = ?, best_hand_name = ? WHERE user_id = ? AND best_hand_rank < ?',
+      [rank, opts.handName, userId, rank]
+    );
+  }
+};
+
+export const getPokerStats = async (userId: string): Promise<PokerStatsRow> => {
+  const row = await dbGet<PokerStatsRow>('SELECT * FROM poker_stats WHERE user_id = ?', [userId]);
+  return row || { user_id: userId, hands_played: 0, hands_won: 0, biggest_pot: 0, best_hand_rank: 0, best_hand_name: '' };
+};
+
+// --- Estadísticas genéricas (contadores y récords por usuario) ---
+// Tabla clave-valor: añadir un stat nuevo no requiere migración.
+// Telemetría no crítica: los errores se tragan con log para no romper el flujo del juego.
+export const bumpStat = async (userId: string, stat: string, delta: number = 1): Promise<void> => {
+  if (!delta) return;
+  try {
+    await dbRun(
+      `INSERT INTO user_stats (user_id, stat, value) VALUES (?, ?, ?)
+       ON CONFLICT(user_id, stat) DO UPDATE SET value = value + excluded.value`,
+      [userId, stat, delta]
+    );
+  } catch (err) { console.error(`[stats] bump ${stat}:`, err); }
+};
+
+export const maxStat = async (userId: string, stat: string, value: number): Promise<void> => {
+  try {
+    await dbRun(
+      `INSERT INTO user_stats (user_id, stat, value) VALUES (?, ?, ?)
+       ON CONFLICT(user_id, stat) DO UPDATE SET value = MAX(value, excluded.value)`,
+      [userId, stat, value]
+    );
+  } catch (err) { console.error(`[stats] max ${stat}:`, err); }
+};
+
+export const getAllStats = async (userId: string): Promise<Record<string, number>> => {
+  const rows = await dbAll<{ stat: string; value: number }>(
+    'SELECT stat, value FROM user_stats WHERE user_id = ?',
+    [userId]
+  );
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.stat] = r.value;
+  return out;
 };
 
 export const claimFreeSpins = async (id: string, value: number, amount: number = 10): Promise<void> => {

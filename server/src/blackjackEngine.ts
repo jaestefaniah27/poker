@@ -3,7 +3,15 @@ import { createDeck, shuffleDeck } from './pokerEngine';
 
 export { createDeck, shuffleDeck };
 
-const RESHUFFLE_THRESHOLD = 15;
+const NUM_DECKS = 6;
+const RESHUFFLE_THRESHOLD = Math.floor((NUM_DECKS * 52) * 0.25); // ~25% del zapato
+
+const createShoe = (): Card[] => {
+  const shoe: Card[] = [];
+  for (let i = 0; i < NUM_DECKS; i++) shoe.push(...createDeck());
+  shuffleDeck(shoe);
+  return shoe;
+};
 
 const cardValue = (rank: Card['rank']): number => {
   if (rank === 'A') return 11;
@@ -32,11 +40,15 @@ export const isBlackjack = (cards: Card[]): boolean => {
   return total === 21;
 };
 
+export const needsReshuffle = (room: Room, minCards: number): boolean =>
+  !room.deck || room.deck.length < Math.max(minCards, RESHUFFLE_THRESHOLD);
+
+export const initShoe = (room: Room): void => {
+  room.deck = createShoe();
+};
+
 const ensureDeck = (room: Room, minCards: number) => {
-  if (!room.deck || room.deck.length < Math.max(minCards, RESHUFFLE_THRESHOLD)) {
-    room.deck = createDeck();
-    shuffleDeck(room.deck);
-  }
+  if (needsReshuffle(room, minCards)) initShoe(room);
 };
 
 // Reparte 2 cartas a cada jugador con bet > 0 + 2 al dealer.

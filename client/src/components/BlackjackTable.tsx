@@ -781,7 +781,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
             return (
               <div key={idx} className={`relative flex items-center transition-all duration-300 ${classStr}`}>
-                <CardFan cards={hCards} big={myHands.length === 1} mini={myHands.length === 3} micro={myHands.length === 4} />
+                <CardFan cards={hCards} big={myHands.length === 1} mini={myHands.length === 3} micro={myHands.length === 4} dealFromRef={shoeRef} />
                 {hTotals && hCards.length >= 2 && (
                   <AnimatePresence>
                     <motion.div

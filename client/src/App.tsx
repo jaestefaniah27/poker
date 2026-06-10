@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { socket, fmtChips, playCheckSound, vibrate, getStorage } from './utils';
+import { socket, fmtChips, playCheckSound, vibrate, getStorage, HAND_NAMES_ES, fmtDuration } from './utils';
+import EmoteBubble, { EMOTES, type ActiveEmote } from './components/EmoteBubble';
 import LoginScreen from './components/LoginScreen';
 import Lobby from './components/Lobby';
 import PlayingCard from './components/PlayingCard';
@@ -90,6 +91,9 @@ function App() {
   const [animateBetIn, setAnimateBetIn] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [viewPlayer, setViewPlayer] = useState<Player | null>(null);
+  const [viewStats, setViewStats] = useState<any>(null);
+  const [emotes, setEmotes] = useState<Record<string, ActiveEmote>>({});
+  const [showEmotePicker, setShowEmotePicker] = useState(false);
   const [newCommunityIdx, setNewCommunityIdx] = useState<number[]>([]);
   const [displayCommCount, setDisplayCommCount] = useState(0);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -377,7 +381,18 @@ function App() {
       setRestartCountdown(null);
     });
 
-
+    socket.on('emote', ({ userId, emote }: { userId: string; emote: string }) => {
+      const key = Date.now() + Math.random();
+      setEmotes(prev => ({ ...prev, [userId]: { emote, key } }));
+      setTimeout(() => {
+        setEmotes(prev => {
+          if (prev[userId]?.key !== key) return prev;
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+      }, 3500);
+    });
 
     return () => {
       socket.off('roomsUpdated');
@@ -385,8 +400,19 @@ function App() {
       socket.off('playSound');
       socket.off('balanceUpdated');
       socket.off('userUpdated');
+      socket.off('emote');
     };
   }, []);
+
+  // Stats públicas del jugador al abrir su popup.
+  useEffect(() => {
+    if (!viewPlayer?.userId) { setViewStats(null); return; }
+    let alive = true;
+    socket.emit('getUserStats', { userId: viewPlayer.userId }, (res: any) => {
+      if (alive && res?.ok) setViewStats({ poker: res.poker, general: res.general });
+    });
+    return () => { alive = false; };
+  }, [viewPlayer?.userId]);
 
   useEffect(() => {
     const onConnect = () => {
@@ -706,6 +732,42 @@ function App() {
                 })()}
                 <span className="text-gray-500 text-xs">{fmtChips(viewPlayer.chips)} fichas en mesa</span>
               </div>
+              {viewStats?.poker?.hands_played > 0 && (
+                <div className="w-full grid grid-cols-2 gap-2 mt-1">
+                  <div className="bg-background rounded-xl p-2.5 flex flex-col items-center">
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Manos</span>
+                    <span className="text-white font-mono text-sm font-bold">{viewStats.poker.hands_played}</span>
+                  </div>
+                  <div className="bg-background rounded-xl p-2.5 flex flex-col items-center">
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Victorias</span>
+                    <span className="text-white font-mono text-sm font-bold">
+                      {viewStats.poker.hands_won} <span className="text-gray-500 text-[10px]">({Math.round((viewStats.poker.hands_won / viewStats.poker.hands_played) * 100)}%)</span>
+                    </span>
+                  </div>
+                  <div className="bg-background rounded-xl p-2.5 flex flex-col items-center">
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Mayor bote</span>
+                    <span className="text-amber-300 font-mono text-sm font-bold">{fmtChips(viewStats.poker.biggest_pot)}</span>
+                  </div>
+                  <div className="bg-background rounded-xl p-2.5 flex flex-col items-center">
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Mejor mano</span>
+                    <span className="text-emerald-300 text-xs font-bold text-center leading-tight">
+                      {HAND_NAMES_ES[viewStats.poker.best_hand_name] || viewStats.poker.best_hand_name || '—'}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {(viewStats?.general?.max_balance > 0 || viewStats?.general?.time_played_ms > 0) && (
+                <div className="w-full grid grid-cols-2 gap-2">
+                  <div className="bg-background rounded-xl p-2.5 flex flex-col items-center">
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Récord saldo</span>
+                    <span className="text-emerald-400 font-mono text-sm font-bold">${fmtChips(viewStats.general.max_balance || 0)}</span>
+                  </div>
+                  <div className="bg-background rounded-xl p-2.5 flex flex-col items-center">
+                    <span className="text-[9px] text-gray-500 uppercase tracking-wider font-semibold">Tiempo jugado</span>
+                    <span className="text-white font-mono text-sm font-bold">{fmtDuration(viewStats.general.time_played_ms || 0)}</span>
+                  </div>
+                </div>
+              )}
               <button
                 onClick={() => setViewPlayer(null)}
                 className="mt-2 w-full py-2.5 rounded-full bg-surfaceLight text-gray-300 font-semibold text-sm"
@@ -781,6 +843,7 @@ function App() {
                     </div>
                   )}
                   <Avatar seed={p.avatar || p.userId} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} />
+                  <EmoteBubble emote={emotes[p.userId]} />
                   {isDealer(indexInRoom) && <DealerBadge />}
                   <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                     {p.level ?? 1}
@@ -1083,6 +1146,55 @@ function App() {
               )}
             </div>
 
+            {myPlayer && (
+              <div className="self-end mb-2 flex-shrink-0">
+                <button
+                  onClick={() => setShowEmotePicker(v => !v)}
+                  className="w-9 h-9 rounded-full bg-surfaceLight flex items-center justify-center text-lg shadow-lg active:scale-90 transition-transform"
+                >
+                  😀
+                </button>
+              </div>
+            )}
+
+            {showEmotePicker && (
+              <div
+                className="fixed inset-0 z-50"
+                onClick={() => setShowEmotePicker(false)}
+              >
+                <div
+                  className="absolute bottom-36 left-1/2 -translate-x-1/2 bg-[#1c1c1e] border border-white/10 rounded-3xl p-3 grid grid-cols-4 gap-2 shadow-2xl"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {EMOTES.map(e => (
+                    <button
+                      key={e}
+                      onClick={() => {
+                        // Optimistic: show own emote immediately without waiting for server
+                        if (user) {
+                          const key = Date.now() + Math.random();
+                          setEmotes(prev => ({ ...prev, [user.id]: { emote: e, key } }));
+                          setTimeout(() => {
+                            setEmotes(prev => {
+                              if (prev[user.id]?.key !== key) return prev;
+                              const next = { ...prev };
+                              delete next[user.id];
+                              return next;
+                            });
+                          }, 3500);
+                        }
+                        socket.emit('sendEmote', { roomId: currentRoom.id, emote: e });
+                        setShowEmotePicker(false);
+                      }}
+                      className="text-3xl w-12 h-12 flex items-center justify-center rounded-2xl active:scale-125 active:bg-white/10 transition-transform"
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-surfaceLight rounded-2xl p-3 min-w-[120px] flex flex-col items-center shadow-2xl relative">
               <div className="text-[9px] text-gray-400 mb-1 font-semibold">
                 {currentRoom.phase === 'waiting' ? 'Waiting' : (myPlayer?.handName || 'High Card')}
@@ -1097,6 +1209,7 @@ function App() {
                    </div>
                  )}
                  <Avatar seed={user.avatar} />
+                 <EmoteBubble emote={emotes[user.id]} />
                  <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                    {myPlayer?.level ?? user.level ?? 1}
                  </span>
@@ -1138,12 +1251,4 @@ function App() {
   );
 }
 
-const EstudiarBanner = () => (
-  <div className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center text-white p-6">
-    <h1 className="text-7xl md:text-9xl font-black text-rose-500 mb-6 tracking-widest animate-pulse">A ESTUDIAR</h1>
-    <p className="text-xl md:text-2xl text-gray-400 font-bold text-center">El servidor está cerrado hoy y mañana.</p>
-  </div>
-);
-
-export default EstudiarBanner;
-export { App };
+export default App;

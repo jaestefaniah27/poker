@@ -53,7 +53,7 @@ export interface Player {
 
 export type GameType = 'poker' | 'blackjack';
 export type GamePhase = 'waiting' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
-export type BlackjackPhase = 'waiting' | 'betting' | 'dealing' | 'playerAction' | 'dealerAction' | 'resolve';
+export type BlackjackPhase = 'waiting' | 'betting' | 'dealing' | 'playerAction' | 'dealerAction' | 'resolve' | 'reshuffling';
 
 export interface Room {
   id: string;
@@ -68,6 +68,7 @@ export interface Room {
   currentTurnIndex: number;
   dealerIndex: number;
   deck: Card[];
+  deckSize?: number;               // nº cartas restantes en el zapato (solo blackjack, enviado al cliente)
   highestBet: number;
   winners?: { id: string; amount: number; handName: string; winningCards: string[] }[];
   persistent?: boolean;
