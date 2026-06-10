@@ -1,4 +1,4 @@
-import { Card, Player, Room, SidebetType, BjSidebetResult } from '../../shared/types';
+import { Card, Player, Room, SidebetType, BjSidebetResult, Suit } from '../../shared/types';
 import { createDeck, shuffleDeck } from './pokerEngine';
 
 export { createDeck, shuffleDeck };
@@ -82,14 +82,23 @@ const tp3Mult = (a: Card, b: Card, up: Card): Win => {
 };
 
 // Lucky Ladies: las 2 cartas iniciales suman 20 (A=11).
+const isRed = (s: Suit) => s === 'h' || s === 'd';
 const llMult = (a: Card, b: Card, dealerBJ: boolean): Win => {
   if (cardValue(a.rank) + cardValue(b.rank) !== 20) return null;
-  const twoQ = a.rank === 'Q' && b.rank === 'Q';
-  if (twoQ && dealerBJ) return { mult: 1000, label: 'Dos Damas + BJ dealer' };
-  if (twoQ) return { mult: 125, label: 'Dos Damas' };
-  if (a.rank === b.rank && a.suit === b.suit) return { mult: 19, label: '20 igualado' };
-  if (a.suit === b.suit) return { mult: 9, label: '20 del mismo palo' };
-  return { mult: 4, label: 'Veinte' };
+  const isLL = a.rank === 'Q' && a.suit === 'h' && b.rank === 'Q' && b.suit === 'h';
+  
+  if (isLL && dealerBJ) return { mult: 1000, label: 'Lucky Ladies + Dealer BJ' };
+  if (isLL) return { mult: 200, label: 'Lucky Ladies' };
+  
+  const sameRank = a.rank === b.rank;
+  const sameSuit = a.suit === b.suit;
+  const sameColor = isRed(a.suit) === isRed(b.suit);
+
+  // Jerarquía estándar de casino:
+  if (sameRank && sameSuit) return { mult: 25, label: '20 Idéntico' }; // Matched 20
+  if (sameRank && sameColor) return { mult: 15, label: '20 Color' };
+  if (sameSuit) return { mult: 10, label: '20 Mismo Palo' }; // Suited 20
+  return { mult: 4, label: 'Cualquier 20' }; // Any 20
 };
 
 // Evalúa todas las sidebets del jugador contra sus 2 cartas iniciales + cartas reales del dealer.
