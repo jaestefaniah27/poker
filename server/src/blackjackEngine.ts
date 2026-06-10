@@ -1,4 +1,4 @@
-import { Card, Player, Room, SidebetType, BjSidebetResult } from '../../shared/types';
+import { Card, Player, Room, SidebetType, BjSidebetResult, Suit } from '../../shared/types';
 import { createDeck, shuffleDeck } from './pokerEngine';
 
 export { createDeck, shuffleDeck };
@@ -82,14 +82,23 @@ const tp3Mult = (a: Card, b: Card, up: Card): Win => {
 };
 
 // Lucky Ladies: las 2 cartas iniciales suman 20 (A=11).
+const isRed = (s: Suit) => s === 'h' || s === 'd';
 const llMult = (a: Card, b: Card, dealerBJ: boolean): Win => {
   if (cardValue(a.rank) + cardValue(b.rank) !== 20) return null;
-  const twoQ = a.rank === 'Q' && b.rank === 'Q';
-  if (twoQ && dealerBJ) return { mult: 1000, label: 'Dos Damas + BJ dealer' };
-  if (twoQ) return { mult: 125, label: 'Dos Damas' };
-  if (a.rank === b.rank && a.suit === b.suit) return { mult: 19, label: '20 igualado' };
-  if (a.suit === b.suit) return { mult: 9, label: '20 del mismo palo' };
-  return { mult: 4, label: 'Veinte' };
+  const isLL = a.rank === 'Q' && a.suit === 'h' && b.rank === 'Q' && b.suit === 'h';
+  
+  if (isLL && dealerBJ) return { mult: 1000, label: 'Lucky Ladies + Dealer BJ' };
+  if (isLL) return { mult: 200, label: 'Lucky Ladies' };
+  
+  const sameRank = a.rank === b.rank;
+  const sameSuit = a.suit === b.suit;
+  const sameColor = isRed(a.suit) === isRed(b.suit);
+
+  // Jerarquía estándar de casino:
+  if (sameRank && sameSuit) return { mult: 25, label: '20 Idéntico' }; // Matched 20
+  if (sameRank && sameColor) return { mult: 15, label: '20 Color' };
+  if (sameSuit) return { mult: 10, label: '20 Mismo Palo' }; // Suited 20
+  return { mult: 4, label: 'Cualquier 20' }; // Any 20
 };
 
 // Evalúa todas las sidebets del jugador contra sus 2 cartas iniciales + cartas reales del dealer.
@@ -123,20 +132,6 @@ export const evaluateSidebets = (
   add('twentyOneThree', sb.twentyOneThree || 0, tp3Mult(a, b, up), 'Sin mano');
   add('luckyLadies', sb.luckyLadies || 0, llMult(a, b, dealerBJ), 'Sin 20');
 
-  // Insurance: solo cuenta si el up-card del dealer es As. Si no hay As → apuesta devuelta (delta 0).
-  const insBet = sb.insurance || 0;
-  if (insBet > 0) {
-    if (up.rank !== 'A') {
-      results.push({ type: 'insurance', bet: insBet, delta: 0, won: false, label: 'Sin As · devuelto' });
-    } else if (dealerBJ) {
-      const d = 2 * insBet; // 2:1
-      results.push({ type: 'insurance', bet: insBet, delta: d, won: true, label: 'Dealer BJ' });
-      delta += d;
-    } else {
-      results.push({ type: 'insurance', bet: insBet, delta: -insBet, won: false, label: 'Dealer sin BJ' });
-      delta -= insBet;
-    }
-  }
 
   return { results, delta };
 };
@@ -158,9 +153,14 @@ export const dealBlackjack = (room: Room) => {
   const players = room.players.filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0);
   ensureDeck(room, players.length * 2 + 2);
   room.dealerCards = [room.deck.pop()!, room.deck.pop()!];
+
+  // --- TESTING LOGIC ---
+  const testCounter = (room as any).testCounter || 0;
+  (room as any).testCounter = testCounter + 1;
+  // ---------------------
   players.forEach(p => {
     const c1 = room.deck.pop()!;
-    const c2 = room.deck.pop()!;
+    const c2 = testCounter % 2 === 0 ? { ...c1 } : room.deck.pop()!;
     p.cards = [c1, c2];
     p.bjDoubled = false;
     p.bjStatus = isBlackjack(p.cards) ? 'blackjack' : 'playing';
@@ -174,10 +174,13 @@ export const dealBlackjack = (room: Room) => {
     }];
     p.bjActiveHandIndex = 0;
 
-    // Sidebets: se evalúan ya con las 2 cartas iniciales + dealer real, pero se pagan en resolve.
+    // Sidebets: se evalúan ya con las 2 cartas iniciales + dealer real. Se acreditan inmediatamente.
     const sb = evaluateSidebets(p, room.dealerCards!);
     p.bjSidebetResults = sb.results.length ? sb.results : undefined;
     p.bjSidebetDelta = sb.delta || undefined;
+    
+    // Acreditación temprana de Parejas, 21+3, Lucky Ladies.
+    if (p.bjSidebetDelta) p.chips += p.bjSidebetDelta;
   });
   // Jugadores sin bet: mano vacía, idle
   room.players
@@ -311,8 +314,82 @@ export const resolveBlackjack = (room: Room) => {
         p.bjResult = result;
       }
 
-      // Pago de sidebets (ya evaluadas al repartir). Se acreditan aparte del main bet.
-      if (p.bjSidebetDelta) p.chips += p.bjSidebetDelta;
+      // Pago de sidebets (las principales ya evaluadas al repartir)
+      // Pago de sidebets resolubles al final de la mano (Seguro, Dealer Busted)
+      let lateSidebetDelta = 0;
+      const resList = p.bjSidebetResults || [];
+
+      // 1. Seguro
+      if (p.bjSidebets?.insurance) {
+        const insBet = p.bjSidebets.insurance;
+        const up = room.dealerCards![1];
+        
+        let delta = 0;
+        let won = false;
+        let label = '';
+        
+        if (up.rank !== 'A') {
+          delta = 0;
+          won = false;
+          label = 'Sin As · devuelto';
+        } else if (dealerBJ) {
+          delta = 2 * insBet;
+          won = true;
+          label = 'Dealer BJ';
+        } else {
+          delta = -insBet;
+          won = false;
+          label = 'Dealer sin BJ';
+        }
+        
+        resList.push({ type: 'insurance', bet: insBet, delta, won, label });
+        lateSidebetDelta += delta;
+      }
+
+      // 2. Dealer Busted
+      if (p.bjSidebets?.dealerBusted) {
+        const bBet = p.bjSidebets.dealerBusted;
+        let delta = 0;
+        let won = false;
+        let label = '';
+        
+        if (!dealerBust) {
+          delta = -bBet;
+          won = false;
+          label = 'No Busted';
+        } else {
+          const count = room.dealerCards!.length;
+          won = true;
+          if (count <= 4) {
+            delta = 2 * bBet;
+            label = `Bust ${count} cartas`;
+          } else if (count === 5) {
+            delta = 4 * bBet;
+            label = 'Bust 5 cartas';
+          } else if (count === 6) {
+            delta = 15 * bBet;
+            label = 'Bust 6 cartas';
+          } else if (count === 7) {
+            delta = 50 * bBet;
+            label = 'Bust 7 cartas';
+          } else {
+            delta = 250 * bBet;
+            label = 'Bust 8+ cartas';
+          }
+        }
+        resList.push({ type: 'dealerBusted', bet: bBet, delta, won, label });
+        lateSidebetDelta += delta;
+      }
+
+      if (resList.length > 0) {
+        p.bjSidebetResults = resList;
+      }
+
+      // Añadimos solo las ganancias/pérdidas de esta fase tardía al saldo
+      if (lateSidebetDelta) {
+        p.chips += lateSidebetDelta;
+        p.bjSidebetDelta = (p.bjSidebetDelta || 0) + lateSidebetDelta;
+      }
     });
 };
 

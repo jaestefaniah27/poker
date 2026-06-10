@@ -1023,7 +1023,7 @@ const anyStillPlaying = (room: Room): boolean =>
   });
 
 export const blackjackPlayerAction = (
-  roomId: string, userId: string, action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split'
+  roomId: string, userId: string, action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split' | 'Insurance'
 ): 'playerAction' | 'dealerAction' | null => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'playerAction') return null;
@@ -1085,6 +1085,23 @@ export const blackjackPlayerAction = (
       if (bjHandValue(hand.cards).total === 21) hand.status = 'stand';
 
       player.bjActiveHandIndex = activeIndex + 1; // Play the new hand first
+    } else if (action === 'Insurance') {
+      if (hand.cards.length !== 2) return null;
+      if (player.bjHands.length > 1) return null; // Solo antes de dividir
+      if (room.dealerCards?.[1]?.rank !== 'A') return null; // Solo si la descubierta del dealer es As
+      if (player.bjSidebets?.insurance) return null; // Ya pidió seguro
+
+      const halfBet = Math.floor(hand.bet / 2);
+      const SIDEBET_ORDER: import('../../shared/types').SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies'];
+      const currentSidebets = player.bjSidebets 
+        ? SIDEBET_ORDER.reduce((sum, k) => sum + ((player.bjSidebets as any)[k] || 0), 0) 
+        : 0;
+      
+      if (player.chips < (player.bet || 0) + currentSidebets + halfBet) return null;
+
+      if (!player.bjSidebets) player.bjSidebets = {};
+      player.bjSidebets.insurance = halfBet;
+      // No modificamos hand.status (sigue jugando)
     } else {
       return null;
     }
@@ -1127,6 +1144,21 @@ export const blackjackPlayerAction = (
     } else if (action === 'Surrender') {
       if (player.cards.length !== 2) return null;
       player.bjStatus = 'surrender';
+    } else if (action === 'Insurance') {
+      if (player.cards.length !== 2) return null;
+      if (room.dealerCards?.[1]?.rank !== 'A') return null;
+      if (player.bjSidebets?.insurance) return null;
+
+      const halfBet = Math.floor((player.bet || 0) / 2);
+      const SIDEBET_ORDER: import('../../shared/types').SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies'];
+      const currentSidebets = player.bjSidebets 
+        ? SIDEBET_ORDER.reduce((sum, k) => sum + ((player.bjSidebets as any)[k] || 0), 0) 
+        : 0;
+      
+      if (player.chips < (player.bet || 0) + currentSidebets + halfBet) return null;
+
+      if (!player.bjSidebets) player.bjSidebets = {};
+      player.bjSidebets.insurance = halfBet;
     } else {
       return null;
     }

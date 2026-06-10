@@ -270,7 +270,7 @@ export const blackjackHandlers = (socket: Socket) => {
     if (!room || room.gameType !== 'blackjack') return;
     const seat = room.players.find(p => p.id === socket.id);
     if (!seat) return;
-    if (!['Hit', 'Stand', 'Double', 'Surrender', 'Split'].includes(action)) return;
+    if (!['Hit', 'Stand', 'Double', 'Surrender', 'Split', 'Insurance'].includes(action)) return;
     // Concurrente: cada jugador actúa sobre su mano. No tocamos el timer de fase por acción individual.
     const next = blackjackPlayerAction(roomId, seat.userId, action);
     if (!next) return; // acción inválida (no es 'playing', etc.)
