@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate } from '../utils';
-import { ChipRail, ChipStack, chipsFromAmount, pageForAmount, type ChipDenom } from './Chips';
+import { ChipRail, ChipStack, chipsFromAmount, pageForAmount, chipMultiplierFor, type ChipDenom } from './Chips';
 import AnimatedNumber from './AnimatedNumber';
 import Avatar from './Avatar';
 
@@ -53,10 +53,12 @@ export default function RouletteModal({
 }: {
   onClose: () => void; balance: number; updateBalance: (newBalance: number) => void; token: string; userId: string;
 }) {
+  // Multiplicador automático de fichas, fijado por el saldo al entrar a la mesa.
+  const [chipMult] = useState(() => chipMultiplierFor(balance));
   const [bets, setBets] = useState<Record<string, number>>({});
   const [previousBets, setPreviousBets] = useState<Record<string, number>>({});
   const [payouts, setPayouts] = useState<Record<string, number>>({});
-  const [activeChipPage, setActiveChipPage] = useState(() => pageForAmount(balance));
+  const [activeChipPage, setActiveChipPage] = useState(() => pageForAmount(balance, chipMult));
   const [activeChip, setActiveChip] = useState<ChipDenom | null>(null);
 
   const updateBalanceRef = useRef(updateBalance);
@@ -240,7 +242,7 @@ export default function RouletteModal({
 
   // Auto-ajustar la página de fichas cuando termina un giro (basado en el nuevo saldo)
   useEffect(() => {
-    if (!spinning) setActiveChipPage(pageForAmount(balance));
+    if (!spinning) setActiveChipPage(pageForAmount(balance, chipMult));
   }, [spinning, balance]);
 
   const totalBet = Object.values(bets || {}).reduce((a, b) => a + b, 0);
@@ -322,9 +324,9 @@ export default function RouletteModal({
 
   const renderZone = (zone: string, label: React.ReactNode, colSpan = 1, rowSpan = 1, color = 'rgba(255,255,255,0.05)', textColor = 'white', border = 'border-white/10', customStyle?: React.CSSProperties) => {
     const betAmt = bets[zone] || 0;
-    const chips = betAmt > 0 ? chipsFromAmount(betAmt) : [];
+    const chips = betAmt > 0 ? chipsFromAmount(betAmt, chipMult) : [];
     const otherAmt = otherPlayersBets[zone] || 0;
-    const otherChips = otherAmt > 0 ? chipsFromAmount(otherAmt) : [];
+    const otherChips = otherAmt > 0 ? chipsFromAmount(otherAmt, chipMult) : [];
 
     return (
       <div 
@@ -380,7 +382,7 @@ export default function RouletteModal({
               className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none drop-shadow-xl"
             >
               <div className="scale-[0.4] sm:scale-75 origin-center">
-                <ChipStack chips={chipsFromAmount(payouts[zone])} size={28} />
+                <ChipStack chips={chipsFromAmount(payouts[zone], chipMult)} size={28} />
               </div>
               <div className="absolute bg-emerald-600/90 rounded px-1 text-[8px] sm:text-[9px] font-black text-emerald-50 bottom-1 -right-1 border border-emerald-400">
                 +{fmtChips(payouts[zone])}
@@ -644,9 +646,10 @@ export default function RouletteModal({
               page={activeChipPage} 
               setPage={setActiveChipPage} 
               onAdd={(d) => setActiveChip(d)} 
-              maxBet={Math.max(0, balance)} 
-              pendingTotal={0} 
-              canBet={!spinning} 
+              maxBet={Math.max(0, balance)}
+              pendingTotal={0}
+              canBet={!spinning}
+              mult={chipMult}
             />
             {activeChip && (
                <div className="absolute -top-3 -right-2 bg-emerald-500 text-emerald-950 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg border border-emerald-300 animate-pulse">

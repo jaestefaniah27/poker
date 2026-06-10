@@ -7,7 +7,7 @@ import Avatar from './Avatar';
 import AnimatedNumber from './AnimatedNumber';
 import type { Room, Player, Card, SidebetType, BjSidebetResult } from '../../../shared/types';
 import { SIDEBET_ORDER, SIDEBET_SHORT, SIDEBET_LABELS, SIDEBET_TOP_PAYOUT } from '../../../shared/types';
-import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip } from './Chips';
+import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip, chipMultiplierFor } from './Chips';
 
 type Sidebet = SidebetType;
 const sumChips = (cs: ChipDenom[]): number => cs.reduce((s, c) => s + c.v, 0);
@@ -165,6 +165,18 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const myChips = myPlayer?.chips || 0;
   // Sin tope de mesa: puedes apostar todas tus fichas. Las que no puedas pagar salen transparentes.
   const maxBet = myChips;
+  // Patrimonio en mesa = saldo fuera de mesa + fichas (las dos bolsas son disjuntas en BJ).
+  const myNetWorth = user.balance + myChips;
+  // Multiplicador automático de fichas, fijado por el patrimonio al entrar a la mesa.
+  // Usa patrimonio (no solo saldo) porque el buy-in mueve dinero a fichas y dejaría el saldo bajo el umbral.
+  const [chipMult, setChipMult] = useState(1);
+  const chipMultLockedRef = useRef(false);
+  useEffect(() => {
+    if (chipMultLockedRef.current || !myPlayer) return;
+    chipMultLockedRef.current = true;
+    setChipMult(chipMultiplierFor(user.balance + (myPlayer.chips || 0)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myPlayer]);
   const myBet = myPlayer?.bet || 0;
   const canBet = phase === 'betting' && myPlayer && !myPlayer.isSpectating && myChips > 0 && myBet === 0;
 
@@ -261,9 +273,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   }, [lastBet, lastSidebets]);
 
   // Paged chip rail: default page escalada al stack del jugador (sin deslizar manualmente)
-  const [chipPage, setChipPage] = useState(() => pageForAmount(maxBet));
+  const [chipPage, setChipPage] = useState(() => pageForAmount(maxBet, chipMult));
   useEffect(() => {
-    if (phase === 'betting') setChipPage(pageForAmount(maxBet));
+    if (phase === 'betting') setChipPage(pageForAmount(maxBet, chipMult));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, room.id]);
 
@@ -334,9 +346,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const clearBet = () => { setPendingChips([]); setSidebetChips(emptySidebetChips()); };
   const halfBet = () => {
     const target = Math.max(minBet, Math.floor(maxBet / 2));
-    setPendingChips(chipsFromAmount(target));
+    setPendingChips(chipsFromAmount(target, chipMult));
   };
-  const allInBet = () => setPendingChips(chipsFromAmount(maxBet));
+  const allInBet = () => setPendingChips(chipsFromAmount(maxBet, chipMult));
   const placeBet = () => {
     if (!canBet || pendingTotal < minBet) return;
     const sb: Partial<Record<Sidebet, number>> = {};
@@ -372,7 +384,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const basePlacedChips = placedComposition.length > 0
     ? placedComposition
     : originalBetAmount > 0
-      ? chipsFromAmount(originalBetAmount)
+      ? chipsFromAmount(originalBetAmount, chipMult)
       : [];
 
   let _circleChips = pendingChips.length > 0 ? pendingChips : [];
@@ -393,7 +405,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer?.bjDelta || 0) > 0) {
     // Cuando el dealer paga, compactamos la apuesta original + el premio en las fichas más grandes
     // para evitar que la suma de dos montones pequeños sature y desborde el área visual.
-    finalCircleChips = chipsFromAmount(myBet + (myPlayer?.bjDelta || 0));
+    finalCircleChips = chipsFromAmount(myBet + (myPlayer?.bjDelta || 0), chipMult);
   }
 
   const circleChips = hideLostChips ? [] : finalCircleChips;
@@ -407,7 +419,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       const amount = fromState ? sumChips(sidebetChips[k as Sidebet] || []) : (myPlayer?.bjSidebets?.[k] || 0);
       if (amount <= 0) return null;
       // Siempre compactado a la mejor composición → la ficha mostrada es la de mayor denominación.
-      const top = [...chipsFromAmount(amount)].sort((a, b) => b.v - a.v)[0];
+      const top = [...chipsFromAmount(amount, chipMult)].sort((a, b) => b.v - a.v)[0];
       // Para las sidebets tempranas (cartas del jugador), mostrar resultado en cuanto termina el reparto.
       // Para seguro y dealerBusted, esperar al final de la mano (showResult).
       const isEarly = k === 'perfectPairs' || k === 'twentyOneThree' || k === 'luckyLadies';
@@ -492,7 +504,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const canSplit = canAct && isPair && myHands.length < 4 && myChips >= totalBet + activeHandBet;
   const currentSidebetsTotal = [...SIDEBET_ORDER, 'insurance' as SidebetType].reduce((s, k) => s + (myPlayer?.bjSidebets?.[k] || 0), 0);
   const insuranceBetAmount = Math.floor(activeHandBet / 2);
-  const canInsurance = canAct && myHands.length === 1 && myCards.length === 2 && dealerCards[1]?.rank === 'A' && !myPlayer?.bjSidebets?.insurance && myChips >= totalBet + currentSidebetsTotal + insuranceBetAmount;
+  const canInsurance = canAct && myHands.length === 1 && myCards.length === 2 && dealerCards[0]?.rank === 'A' && !myPlayer?.bjSidebets?.insurance && myChips >= totalBet + currentSidebetsTotal + insuranceBetAmount;
 
   const canRebuy = !!myPlayer && myPlayer.isActive && myChips <= 0 && phase !== 'dealing';
 
@@ -565,7 +577,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
     if (result === 'lose') {
       // Fichas del jugador vuelan al dealer
-      const glyphs = circleChips.length > 0 ? circleChips : chipsFromAmount(myBet);
+      const glyphs = circleChips.length > 0 ? circleChips : chipsFromAmount(myBet, chipMult);
       const spawned = glyphs.map((d, i) => ({
         id: ++flyIdRef.current,
         x: circle.left + circle.width / 2, y: circle.top + circle.height / 2,
@@ -580,7 +592,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     } else if ((result === 'win' || result === 'blackjack') && (myPlayer.bjDelta || 0) > 0) {
       // Dealer empuja fichas de premio hacia el círculo
       const prizeAmount = Math.abs(myPlayer.bjDelta || 0);
-      const glyphs = chipsFromAmount(prizeAmount);
+      const glyphs = chipsFromAmount(prizeAmount, chipMult);
       const spawned = glyphs.map((d, i) => ({
         id: ++flyIdRef.current,
         x: dealerEl.left + dealerEl.width / 2, y: dealerEl.top + dealerEl.height / 2,
@@ -698,8 +710,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         </div>
         <div className="text-right">
           <div className="text-[10px] text-white/50 leading-none">{user.name}</div>
-          <div className={`font-mono text-xs font-bold ${user.balance < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
-            {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
+          <div className={`font-mono text-xs font-bold ${myNetWorth < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
+            {myNetWorth < 0 ? `-$${fmtChips(Math.abs(myNetWorth))}` : `$${fmtChips(myNetWorth)}`}
           </div>
         </div>
       </div>
@@ -1067,7 +1079,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
           {!canRebuy && phase === 'betting' && canBet && (
             <div className="flex-1 flex flex-col gap-2 justify-center">
-              <ChipRail page={chipPage} setPage={setChipPage} onAdd={addChip} maxBet={maxBet} pendingTotal={pendingTotal} canBet={!!canBet} />
+              <ChipRail page={chipPage} setPage={setChipPage} onAdd={addChip} maxBet={maxBet} pendingTotal={pendingTotal} canBet={!!canBet} mult={chipMult} />
               {/* Ambas filas montadas → crossfade fluido, misma altura, sin salto */}
               <div className="relative">
                 {/* Fila normal (en flujo: define la altura) */}
@@ -1085,12 +1097,12 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                     className="flex-1 py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">MAX</button>
                   {lastBet > 0 && lastTotalRebet <= maxBet ? (
                     <button onClick={() => {
-                      setPendingChips(chipsFromAmount(lastBet));
+                      setPendingChips(chipsFromAmount(lastBet, chipMult));
                       const newSb = emptySidebetChips();
                       let hasSb = false;
                       SIDEBET_ORDER.forEach(k => {
                         if (lastSidebets[k]) {
-                          newSb[k] = chipsFromAmount(lastSidebets[k]!);
+                          newSb[k] = chipsFromAmount(lastSidebets[k]!, chipMult);
                           hasSb = true;
                         }
                       });

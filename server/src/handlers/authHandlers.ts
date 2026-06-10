@@ -5,7 +5,7 @@ import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updat
 import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
 import { levelFromXp } from '../../../shared/types';
 import { sanitizeInput } from '../security';
-import { findActiveRoomForUser } from '../roomManager';
+import { findActiveRoomForUser, chipsInPlayFor } from '../roomManager';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -275,7 +275,11 @@ export const authHandlers = (socket: Socket) => {
     }
     const players = (await Promise.all(Array.from(userIds).map(id => getUser(id))))
       .filter(Boolean)
-      .map(u => toPublicUser(u!));
+      .map(u => {
+        const pub = toPublicUser(u!);
+        // Patrimonio real: saldo fuera de mesa + fichas en juego (si está sentado all-in, su saldo de BD es 0).
+        return { ...pub, balance: pub.balance + chipsInPlayFor(u!.id) };
+      });
     callback({ ok: true, players });
   });
 
