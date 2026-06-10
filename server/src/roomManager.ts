@@ -197,6 +197,18 @@ export const evictAll = (roomId: string): { userId: string; chips: number }[] =>
 
 export const getRoom = (id: string): Room | undefined => rooms.get(id);
 
+// Fichas que un usuario tiene en juego (sentado, no cashed-out) sumadas en todas las salas.
+// El saldo de BD es solo el dinero "fuera de mesa"; para mostrar patrimonio real se suma esto.
+export const chipsInPlayFor = (userId: string): number => {
+  let total = 0;
+  for (const room of rooms.values()) {
+    for (const p of room.players) {
+      if (p.userId === userId && p.isActive && !p.hasCashedOut) total += p.chips || 0;
+    }
+  }
+  return total;
+};
+
 // 'joined' = nuevo asiento (hay que cobrar buy-in) | 'reconnected' = vuelve sin cobrar | 'full' = mesa llena | false = error
 export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnected' | 'full' | false => {
   const room = rooms.get(roomId);
@@ -1068,27 +1080,20 @@ export const blackjackPlayerAction = (
       const totalBet = player.bjHands.reduce((sum, h) => sum + h.bet, 0);
       if (player.chips < totalBet + hand.bet) return null;
 
+      // Casino real: se separa UNA carta de la pareja → la mano actual queda con 1 carta.
+      // No se reparte aquí: settleActiveHand dará la 2ª carta a la mano que toca jugar.
       const splitCard = hand.cards.pop()!;
       const newHand: import('../../shared/types').BjHand = {
         cards: [splitCard],
         bet: hand.bet,
         status: 'playing'
       };
-
       player.bjHands.splice(activeIndex + 1, 0, newHand);
-
-      if (room.deck.length < 2) initShoe(room);
-      newHand.cards.push(room.deck.pop()!);
-      hand.cards.push(room.deck.pop()!);
-
-      if (bjHandValue(newHand.cards).total === 21) newHand.status = 'stand';
-      if (bjHandValue(hand.cards).total === 21) hand.status = 'stand';
-
-      player.bjActiveHandIndex = activeIndex + 1; // Play the new hand first
+      player.bjActiveHandIndex = activeIndex; // jugar primero la mano de la izquierda
     } else if (action === 'Insurance') {
       if (hand.cards.length !== 2) return null;
       if (player.bjHands.length > 1) return null; // Solo antes de dividir
-      if (room.dealerCards?.[1]?.rank !== 'A') return null; // Solo si la descubierta del dealer es As
+      if (room.dealerCards?.[0]?.rank !== 'A') return null; // Solo si la descubierta del dealer es As
       if (player.bjSidebets?.insurance) return null; // Ya pidió seguro
 
       const halfBet = Math.floor(hand.bet / 2);
@@ -1106,16 +1111,24 @@ export const blackjackPlayerAction = (
       return null;
     }
 
-    if (player.bjHands[player.bjActiveHandIndex!].status !== 'playing') {
-      let nextActive = -1;
-      for (let i = player.bjHands.length - 1; i >= 0; i--) {
-        if (player.bjHands[i].status === 'playing') {
-          nextActive = i;
-          break;
+    // Prepara la mano activa jugando de IZQUIERDA a DERECHA. Una mano recién spliteada
+    // tiene 1 carta: al activarse se le reparte su 2ª carta (orden real de casino).
+    // Si esa carta hace 21, planta automáticamente y pasa a la siguiente.
+    const settleActiveHand = () => {
+      while (true) {
+        const idx = player.bjHands!.findIndex(h => h.status === 'playing');
+        if (idx === -1) { player.bjActiveHandIndex = player.bjHands!.length - 1; return; }
+        player.bjActiveHandIndex = idx;
+        const h = player.bjHands![idx];
+        if (h.cards.length < 2) {
+          if (room.deck.length === 0) initShoe(room);
+          h.cards.push(room.deck.pop()!);
+          if (bjHandValue(h.cards).total === 21) { h.status = 'stand'; continue; }
         }
+        return;
       }
-      if (nextActive !== -1) player.bjActiveHandIndex = nextActive;
-    }
+    };
+    settleActiveHand();
 
     player.bjStatus = player.bjHands.some(h => h.status === 'playing') ? 'playing' : player.bjHands[0].status;
     player.cards = player.bjHands[0].cards;
@@ -1146,7 +1159,7 @@ export const blackjackPlayerAction = (
       player.bjStatus = 'surrender';
     } else if (action === 'Insurance') {
       if (player.cards.length !== 2) return null;
-      if (room.dealerCards?.[1]?.rank !== 'A') return null;
+      if (room.dealerCards?.[0]?.rank !== 'A') return null;
       if (player.bjSidebets?.insurance) return null;
 
       const halfBet = Math.floor((player.bet || 0) / 2);
@@ -1180,7 +1193,12 @@ export const forceStandRemaining = (roomId: string): boolean => {
       if (p.bjHands && p.bjHands.length > 0) {
         p.bjHands.forEach(h => {
           if (h.status === 'playing') {
-            h.status = 'stand';
+            // Mano spliteada aún sin su 2ª carta: repartirla antes de plantar.
+            if (h.cards.length < 2) {
+              if (room.deck.length === 0) initShoe(room);
+              h.cards.push(room.deck.pop()!);
+            }
+            h.status = bjHandValue(h.cards).total > 21 ? 'bust' : 'stand';
             changed = true;
           }
         });

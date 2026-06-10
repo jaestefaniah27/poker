@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { socket, fmtChips, fmtDuration, HAND_NAMES_ES } from '../utils';
+import { CHIP_MULT_THRESHOLD } from './Chips';
 
 const StatCell = ({ label, value, accent }: { label: string; value: string | number; accent?: string }) => (
   <div className="bg-background rounded-xl p-2.5 flex flex-col items-center border border-gray-800">
@@ -34,6 +35,15 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
   
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [stats, setStats] = useState<{ poker: any; general: Record<string, number> } | null>(null);
+
+  // Multiplicador automático de fichas (solo visible si el saldo lo permite).
+  const chipMultEligible = user.balance >= CHIP_MULT_THRESHOLD;
+  const [chipMultOn, setChipMultOn] = useState(() => localStorage.getItem('chipMultiplierEnabled') !== '0');
+  const toggleChipMult = () => setChipMultOn(prev => {
+    const next = !prev;
+    localStorage.setItem('chipMultiplierEnabled', next ? '1' : '0');
+    return next;
+  });
 
   useEffect(() => {
     socket.emit('getUserStats', { userId: user.id }, (res: any) => {
@@ -312,6 +322,27 @@ const ProfileModal = ({ user, token, onClose, onUpdate }: ProfileModalProps) => 
             </div>
           </div>
         </div>
+
+        {/* Ajustes — Multiplicador de fichas */}
+        {chipMultEligible && (
+          <div className="mt-6">
+            <label className="text-[11px] text-gray-400 uppercase tracking-wider font-semibold">Ajustes</label>
+            <button
+              onClick={toggleChipMult}
+              className="w-full mt-2 flex items-center justify-between bg-background border border-gray-700 rounded-xl px-4 py-3 text-left hover:border-gray-500 transition-colors"
+            >
+              <span className="flex flex-col pr-3">
+                <span className="text-sm text-white font-semibold">Multiplicador de fichas</span>
+                <span className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                  Tu saldo es enorme: usa fichas que valen x1000 (o más) en blackjack y ruleta.
+                </span>
+              </span>
+              <span className={`shrink-0 w-11 h-6 rounded-full relative transition-colors ${chipMultOn ? 'bg-emerald-500' : 'bg-gray-600'}`}>
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${chipMultOn ? 'left-[22px]' : 'left-0.5'}`} />
+              </span>
+            </button>
+          </div>
+        )}
 
         {msg && (
           <p className={`text-xs text-center mt-4 ${msg.ok ? 'text-emerald-400' : 'text-amber-400'}`}>{msg.text}</p>

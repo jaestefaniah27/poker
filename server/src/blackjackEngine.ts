@@ -102,7 +102,7 @@ const llMult = (a: Card, b: Card, dealerBJ: boolean): Win => {
 };
 
 // Evalúa todas las sidebets del jugador contra sus 2 cartas iniciales + cartas reales del dealer.
-// dealerCards[0]=hole, dealerCards[1]=up-card (sin enmascarar en servidor).
+// dealerCards[0]=up-card (descubierta), dealerCards[1]=hole (tapada).
 export const evaluateSidebets = (
   player: Player, dealerCards: Card[]
 ): { results: BjSidebetResult[]; delta: number } => {
@@ -112,7 +112,7 @@ export const evaluateSidebets = (
     return { results, delta: 0 };
   }
   const [a, b] = player.cards;
-  const up = dealerCards[1];
+  const up = dealerCards[0]; // [up, hole]: descubierta en índice 0
   const dealerBJ = isBlackjack(dealerCards);
   let delta = 0;
 
@@ -147,28 +147,33 @@ const ensureDeck = (room: Room, minCards: number) => {
   if (needsReshuffle(room, minCards)) initShoe(room);
 };
 
-// Reparte 2 cartas a cada jugador con bet > 0 + 2 al dealer.
+// Reparte siguiendo el orden real de casino:
+//  1) una carta a cada jugador (izq→der), 2) up-card del dealer (visible),
+//  3) segunda carta a cada jugador, 4) hole-card del dealer (oculta).
+// dealerCards = [up, hole]: índice 0 = descubierta (visible), índice 1 = tapada.
 // Si alguno tiene blackjack natural lo marca; el resto queda 'playing'.
 export const dealBlackjack = (room: Room) => {
   const players = room.players.filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0);
   ensureDeck(room, players.length * 2 + 2);
-  room.dealerCards = [room.deck.pop()!, room.deck.pop()!];
 
-  // --- TESTING LOGIC ---
-  const testCounter = (room as any).testCounter || 0;
-  (room as any).testCounter = testCounter + 1;
-  // ---------------------
+  // Ronda 1: primera carta a cada jugador.
+  players.forEach(p => { p.cards = [room.deck.pop()!]; });
+  // Up-card del dealer (visible).
+  const up = room.deck.pop()!;
+  // Ronda 2: segunda carta a cada jugador.
+  players.forEach(p => { p.cards.push(room.deck.pop()!); });
+  // Hole-card del dealer (oculta).
+  const hole = room.deck.pop()!;
+  room.dealerCards = [up, hole];
+
   players.forEach(p => {
-    const c1 = room.deck.pop()!;
-    const c2 = testCounter % 2 === 0 ? { ...c1 } : room.deck.pop()!;
-    p.cards = [c1, c2];
     p.bjDoubled = false;
     p.bjStatus = isBlackjack(p.cards) ? 'blackjack' : 'playing';
     p.bjResult = undefined;
     p.bjDelta = undefined;
-    
+
     p.bjHands = [{
-      cards: [c1, c2],
+      cards: [p.cards[0], p.cards[1]],
       bet: p.bet || 0,
       status: p.bjStatus
     }];
@@ -178,7 +183,7 @@ export const dealBlackjack = (room: Room) => {
     const sb = evaluateSidebets(p, room.dealerCards!);
     p.bjSidebetResults = sb.results.length ? sb.results : undefined;
     p.bjSidebetDelta = sb.delta || undefined;
-    
+
     // Acreditación temprana de Parejas, 21+3, Lucky Ladies.
     if (p.bjSidebetDelta) p.chips += p.bjSidebetDelta;
   });
@@ -270,7 +275,11 @@ export const resolveBlackjack = (room: Room) => {
 
         p.chips += totalDelta;
         p.bjDelta = totalDelta;
-        p.bjResult = p.bjHands[0].result;
+        // Resultado global = balance neto de TODAS las manos (no solo la primera).
+        // Con una sola mano se conserva su resultado exacto (blackjack/surrender).
+        p.bjResult = p.bjHands.length === 1
+          ? p.bjHands[0].result
+          : (totalDelta > 0 ? 'win' : totalDelta < 0 ? 'lose' : 'push');
       } else {
         // Fallback for legacy state without bjHands
         const bet = p.bet || 0;
@@ -322,7 +331,7 @@ export const resolveBlackjack = (room: Room) => {
       // 1. Seguro
       if (p.bjSidebets?.insurance) {
         const insBet = p.bjSidebets.insurance;
-        const up = room.dealerCards![1];
+        const up = room.dealerCards![0]; // [up, hole]
         
         let delta = 0;
         let won = false;
