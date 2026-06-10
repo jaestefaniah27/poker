@@ -62,30 +62,32 @@ export const sizeForValue = (v: number): number => {
   return 58; // Premium — todas del mismo tamaño
 };
 
-export const Chip = ({ d, size = 36 }: { d: ChipDenom; size?: number }) => {
+export const Chip = ({ d, size = 36, forceSize = false }: { d: ChipDenom; size?: number; forceSize?: boolean }) => {
   if (d.isCustom) {
-    const w = Math.max(64, size * 1.6);
+    // forceSize (miniaturas): sin ancho mínimo de 64 → cabe en la zona sidebets.
+    const w = forceSize ? size * 1.6 : Math.max(64, size * 1.6);
     const h = size * 1.1;
     return (
-      <div 
+      <div
         className="flex items-center justify-center font-black text-cyan-300 relative shrink-0 overflow-hidden"
-        style={{ 
-          width: w, height: h, 
-          borderRadius: 8, 
+        style={{
+          width: w, height: h,
+          borderRadius: 8,
           background: 'linear-gradient(135deg, #0f172a, #1e293b)',
           boxShadow: '0 4px 10px rgba(0,0,0,0.5), 0 0 12px rgba(6,182,212,0.4), inset 0 0 8px rgba(6,182,212,0.2)',
           border: '2px solid #06b6d4'
         }}
       >
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, #06b6d4 4px, #06b6d4 8px)' }} />
-        <span className="relative z-10 text-[14px]" style={{ textShadow: '0 0 6px rgba(6,182,212,1)' }}>{d.label}</span>
+        <span className="relative z-10" style={{ fontSize: forceSize ? Math.round(size * 0.5) : 14, textShadow: '0 0 6px rgba(6,182,212,1)' }}>{d.label}</span>
       </div>
     );
   }
 
   const naturalH = sizeForValue(d.v);
-  // Large chips (100k+) always at their natural size regardless of premium
-  const h = d.isCustom ? size * 1.1 : (d.premium || d.v >= 100000) ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
+  // Large chips (100k+) always at their natural size regardless of premium...
+  // ...salvo forceSize: respeta el size pedido (para miniaturas, p.ej. zona sidebets).
+  const h = d.isCustom ? size * 1.1 : forceSize ? size : (d.premium || d.v >= 100000) ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
   const plaque = isPlaque(d.v);
   const w = d.isCustom ? Math.max(64, (size || 36) * 1.6) : plaque ? Math.round(h * 1.28) : h;
   const radius = d.isCustom ? 8 : plaque ? Math.round(h * 0.13) : 9999;

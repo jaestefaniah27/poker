@@ -1,4 +1,4 @@
-import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp } from '../../shared/types';
+import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp, SidebetType, SIDEBET_ORDER } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 import { dealBlackjack, dealerPlay as bjDealerPlay, resolveBlackjack, resetBlackjackHand, handValue as bjHandValue, needsReshuffle, initShoe } from './blackjackEngine';
 import { deleteRoomFromDB, recordMatchHistory, addXp, getUser, recordHandStats, bumpStat, maxStat } from './db';
@@ -885,10 +885,10 @@ export const startBlackjackRound = (roomId: string): boolean => {
   if (!room || room.gameType !== 'blackjack') return false;
   
   // Guardar apuestas tempranas (jugadores que ya apostaron durante resolve)
-  const earlyBets = new Map<string, { bet: number; status: string }>();
+  const earlyBets = new Map<string, { bet: number; status: string; sidebets?: Partial<Record<SidebetType, number>> }>();
   room.players.forEach(p => {
     if (p.bjHasContinued && (p.bet || 0) > 0) {
-      earlyBets.set(p.userId, { bet: p.bet!, status: p.bjStatus || 'playing' });
+      earlyBets.set(p.userId, { bet: p.bet!, status: p.bjStatus || 'playing', sidebets: p.bjSidebets });
     }
   });
   
@@ -912,6 +912,7 @@ export const startBlackjackRound = (roomId: string): boolean => {
     if (p && p.isActive && !p.isSpectating && p.chips > 0) {
       p.bet = saved.bet;
       p.bjStatus = 'playing';
+      p.bjSidebets = saved.sidebets;
     }
   }
   
@@ -927,22 +928,38 @@ export const startBlackjackRound = (roomId: string): boolean => {
 };
 
 // Coloca apuesta del jugador. Devuelve true si la apuesta queda registrada.
-export const placeBlackjackBet = (roomId: string, userId: string, amount: number): boolean => {
+export const placeBlackjackBet = (
+  roomId: string, userId: string, amount: number,
+  sidebets?: Partial<Record<SidebetType, number>>
+): boolean => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack') return false;
   const player = room.players.find(p => p.userId === userId);
   if (!player || !player.isActive || player.isSpectating || player.chips <= 0) return false;
-  
+
   if (room.bjPhase !== 'betting') {
     if (!(room.bjPhase === 'resolve' && player.bjHasContinued)) return false;
   }
-  
+
   const min = room.minBet || 1;
   const max = Math.min(room.maxBet || player.chips, player.chips);
   const safe = Math.floor(Math.max(min, Math.min(max, amount)));
   if (!Number.isFinite(safe) || safe <= 0) return false;
   player.bet = safe;
   player.bjStatus = 'playing'; // se mantendrá hasta deal; deal sobrescribe a blackjack si procede
+
+  // Sidebets: sin límite de apuesta. Solo se guardan junto a una apuesta principal válida.
+  if (sidebets) {
+    const clean: Partial<Record<SidebetType, number>> = {};
+    for (const k of SIDEBET_ORDER) {
+      const v = Math.floor(Number(sidebets[k]) || 0);
+      if (Number.isFinite(v) && v > 0) clean[k] = v;
+    }
+    player.bjSidebets = Object.keys(clean).length ? clean : undefined;
+  } else {
+    player.bjSidebets = undefined;
+  }
+
   room.lastActivityAt = Date.now();
   return true;
 };
@@ -1195,6 +1212,19 @@ export const finishBlackjackHand = (roomId: string) => {
       }
     }
     bumpStat(p.userId, 'bj_net', p.bjDelta || 0);
+
+    // Sidebets: una entrada por cada sidebet jugada en la mano.
+    if (p.bjSidebetResults && p.bjSidebetResults.length > 0) {
+      for (const r of p.bjSidebetResults) {
+        bumpStat(p.userId, 'bj_sidebet_hands');
+        if (r.won) bumpStat(p.userId, 'bj_sidebet_wins');
+        if (r.delta > 0) {
+          bumpStat(p.userId, 'bj_sidebet_won', r.delta);
+          maxStat(p.userId, 'bj_sidebet_biggest', r.delta);
+        }
+      }
+      bumpStat(p.userId, 'bj_sidebet_net', p.bjSidebetDelta || 0);
+    }
   }
 
   // XP a los que apostaron: escala con el resultado (blackjack > win > push > derrota).

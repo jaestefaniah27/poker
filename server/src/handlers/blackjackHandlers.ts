@@ -98,6 +98,8 @@ const onResolveTimeout = (roomId: string) => {
       p.bet = 0;
       p.bjResult = undefined;
       p.bjDelta = undefined;
+      p.bjSidebetResults = undefined;
+      p.bjSidebetDelta = undefined;
       changed = true;
     }
   });
@@ -235,19 +237,19 @@ export const handleBlackjackLeave = (roomId: string) => {
 };
 
 export const blackjackHandlers = (socket: Socket) => {
-  socket.on('bjPlaceBet', ({ roomId, amount }) => {
+  socket.on('bjPlaceBet', ({ roomId, amount, sidebets }) => {
     const room = getRoom(roomId);
     if (!room || room.gameType !== 'blackjack') return;
     const seat = room.players.find(p => p.id === socket.id);
     if (!seat) return;
-    
+
     if (room.bjPhase !== 'waiting' && room.bjPhase !== 'betting') {
       if (!(room.bjPhase === 'resolve' && seat.bjHasContinued)) {
         return;
       }
     }
-    
-    const ok = placeBlackjackBet(roomId, seat.userId, Number(amount) || 0);
+
+    const ok = placeBlackjackBet(roomId, seat.userId, Number(amount) || 0, sidebets);
     if (!ok) return;
     
     if (!room.bettingDeadline) {
@@ -302,6 +304,8 @@ export const blackjackHandlers = (socket: Socket) => {
     p.bet = 0; // limpiar apuesta de la ronda anterior
     p.bjResult = undefined;
     p.bjDelta = undefined;
+    p.bjSidebetResults = undefined;
+    p.bjSidebetDelta = undefined;
 
     // Los jugadores offline no pueden pulsar Continuar: no deben bloquear la ronda.
     room.players.forEach(pl => {
@@ -310,6 +314,8 @@ export const blackjackHandlers = (socket: Socket) => {
         pl.bet = 0;
         pl.bjResult = undefined;
         pl.bjDelta = undefined;
+        pl.bjSidebetResults = undefined;
+        pl.bjSidebetDelta = undefined;
       }
     });
 

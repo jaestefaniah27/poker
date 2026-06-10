@@ -1,4 +1,4 @@
-import { Card, Player, Room } from '../../shared/types';
+import { Card, Player, Room, SidebetType, BjSidebetResult } from '../../shared/types';
 import { createDeck, shuffleDeck } from './pokerEngine';
 
 export { createDeck, shuffleDeck };
@@ -40,6 +40,107 @@ export const isBlackjack = (cards: Card[]): boolean => {
   return total === 21;
 };
 
+// ============================================================
+// Sidebets (apuestas laterales)
+// ============================================================
+const RANK_VAL: Record<string, number> = {
+  '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+  'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+};
+const isRedSuit = (s: Card['suit']) => s === 'h' || s === 'd';
+type Win = { mult: number; label: string } | null;
+
+// Perfect Pairs: las 2 cartas iniciales forman pareja.
+const ppMult = (a: Card, b: Card): Win => {
+  if (a.rank !== b.rank) return null;
+  if (a.suit === b.suit) return { mult: 30, label: 'Pareja perfecta' };       // mismo rango + palo
+  if (isRedSuit(a.suit) === isRedSuit(b.suit)) return { mult: 10, label: 'Pareja de color' }; // mismo color
+  return { mult: 5, label: 'Pareja mixta' };                                  // distinto color
+};
+
+// Escalera de 3 cartas (incluye rueda A-2-3 con A=14).
+const isStraight3 = (rs: number[]): boolean => {
+  const s = [...rs].sort((x, y) => x - y);
+  if (s[0] + 1 === s[1] && s[1] + 1 === s[2]) return true;
+  if (s[0] === 2 && s[1] === 3 && s[2] === 14) return true;
+  return false;
+};
+
+// 21+3: 2 cartas jugador + up-card dealer = mano de poker.
+const tp3Mult = (a: Card, b: Card, up: Card): Win => {
+  const cards = [a, b, up];
+  const ranks = cards.map(c => RANK_VAL[c.rank]);
+  const flush = cards.every(c => c.suit === a.suit);
+  const trips = ranks[0] === ranks[1] && ranks[1] === ranks[2];
+  const straight = isStraight3(ranks);
+  if (trips && flush) return { mult: 100, label: 'Trío del mismo palo' };
+  if (straight && flush) return { mult: 40, label: 'Escalera de color' };
+  if (trips) return { mult: 30, label: 'Trío' };
+  if (straight) return { mult: 10, label: 'Escalera' };
+  if (flush) return { mult: 5, label: 'Color' };
+  return null;
+};
+
+// Lucky Ladies: las 2 cartas iniciales suman 20 (A=11).
+const llMult = (a: Card, b: Card, dealerBJ: boolean): Win => {
+  if (cardValue(a.rank) + cardValue(b.rank) !== 20) return null;
+  const twoQ = a.rank === 'Q' && b.rank === 'Q';
+  if (twoQ && dealerBJ) return { mult: 1000, label: 'Dos Damas + BJ dealer' };
+  if (twoQ) return { mult: 125, label: 'Dos Damas' };
+  if (a.rank === b.rank && a.suit === b.suit) return { mult: 19, label: '20 igualado' };
+  if (a.suit === b.suit) return { mult: 9, label: '20 del mismo palo' };
+  return { mult: 4, label: 'Veinte' };
+};
+
+// Evalúa todas las sidebets del jugador contra sus 2 cartas iniciales + cartas reales del dealer.
+// dealerCards[0]=hole, dealerCards[1]=up-card (sin enmascarar en servidor).
+export const evaluateSidebets = (
+  player: Player, dealerCards: Card[]
+): { results: BjSidebetResult[]; delta: number } => {
+  const sb = player.bjSidebets;
+  const results: BjSidebetResult[] = [];
+  if (!sb || !player.cards || player.cards.length < 2 || !dealerCards || dealerCards.length < 2) {
+    return { results, delta: 0 };
+  }
+  const [a, b] = player.cards;
+  const up = dealerCards[1];
+  const dealerBJ = isBlackjack(dealerCards);
+  let delta = 0;
+
+  const add = (type: SidebetType, bet: number, win: Win, loseLabel: string) => {
+    if (!bet || bet <= 0) return;
+    if (win) {
+      const d = win.mult * bet;
+      results.push({ type, bet, delta: d, won: true, label: win.label });
+      delta += d;
+    } else {
+      results.push({ type, bet, delta: -bet, won: false, label: loseLabel });
+      delta -= bet;
+    }
+  };
+
+  add('perfectPairs', sb.perfectPairs || 0, ppMult(a, b), 'Sin pareja');
+  add('twentyOneThree', sb.twentyOneThree || 0, tp3Mult(a, b, up), 'Sin mano');
+  add('luckyLadies', sb.luckyLadies || 0, llMult(a, b, dealerBJ), 'Sin 20');
+
+  // Insurance: solo cuenta si el up-card del dealer es As. Si no hay As → apuesta devuelta (delta 0).
+  const insBet = sb.insurance || 0;
+  if (insBet > 0) {
+    if (up.rank !== 'A') {
+      results.push({ type: 'insurance', bet: insBet, delta: 0, won: false, label: 'Sin As · devuelto' });
+    } else if (dealerBJ) {
+      const d = 2 * insBet; // 2:1
+      results.push({ type: 'insurance', bet: insBet, delta: d, won: true, label: 'Dealer BJ' });
+      delta += d;
+    } else {
+      results.push({ type: 'insurance', bet: insBet, delta: -insBet, won: false, label: 'Dealer sin BJ' });
+      delta -= insBet;
+    }
+  }
+
+  return { results, delta };
+};
+
 export const needsReshuffle = (room: Room, minCards: number): boolean =>
   !room.deck || room.deck.length < Math.max(minCards, RESHUFFLE_THRESHOLD);
 
@@ -72,6 +173,11 @@ export const dealBlackjack = (room: Room) => {
       status: p.bjStatus
     }];
     p.bjActiveHandIndex = 0;
+
+    // Sidebets: se evalúan ya con las 2 cartas iniciales + dealer real, pero se pagan en resolve.
+    const sb = evaluateSidebets(p, room.dealerCards!);
+    p.bjSidebetResults = sb.results.length ? sb.results : undefined;
+    p.bjSidebetDelta = sb.delta || undefined;
   });
   // Jugadores sin bet: mano vacía, idle
   room.players
@@ -84,6 +190,9 @@ export const dealBlackjack = (room: Room) => {
       p.bjDelta = undefined;
       p.bjHands = undefined;
       p.bjActiveHandIndex = undefined;
+      p.bjSidebets = undefined;
+      p.bjSidebetResults = undefined;
+      p.bjSidebetDelta = undefined;
     });
 };
 
@@ -201,6 +310,9 @@ export const resolveBlackjack = (room: Room) => {
         p.bjDelta = delta;
         p.bjResult = result;
       }
+
+      // Pago de sidebets (ya evaluadas al repartir). Se acreditan aparte del main bet.
+      if (p.bjSidebetDelta) p.chips += p.bjSidebetDelta;
     });
 };
 
@@ -214,7 +326,8 @@ export const resetBlackjackHand = (room: Room) => {
     p.bjDoubled = false;
     p.bjHands = undefined;
     p.bjActiveHandIndex = undefined;
-    // mantener bjResult/bjDelta para que cliente los muestre durante 'resolve' antes de limpiar
+    p.bjSidebets = undefined;
+    // mantener bjResult/bjDelta/bjSidebetResults para que cliente los muestre durante 'resolve' antes de limpiar
   });
 };
 

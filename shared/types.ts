@@ -15,6 +15,42 @@ export interface BjHand {
   delta?: number;
 }
 
+// --- BlackJack sidebets (apuestas laterales) ---
+export type SidebetType = 'perfectPairs' | 'twentyOneThree' | 'luckyLadies' | 'insurance';
+
+export interface BjSidebetResult {
+  type: SidebetType;
+  bet: number;
+  delta: number;  // neto en fichas: +ganancia, -apuesta perdida, 0 si devuelta (insurance sin As)
+  won: boolean;
+  label: string;  // etiqueta del resultado, p.ej. "Pareja perfecta", "Color", "Sin As · devuelto"
+}
+
+export const SIDEBET_ORDER: SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies', 'insurance'];
+
+export const SIDEBET_LABELS: Record<SidebetType, string> = {
+  perfectPairs: 'Perfect Pairs',
+  twentyOneThree: '21+3',
+  luckyLadies: 'Lucky Ladies',
+  insurance: 'Seguro',
+};
+
+// Etiqueta corta para chips/dropdown.
+export const SIDEBET_SHORT: Record<SidebetType, string> = {
+  perfectPairs: 'PP',
+  twentyOneThree: '21+3',
+  luckyLadies: 'LL',
+  insurance: 'SEG',
+};
+
+// Pago máximo (para mostrar en el selector). El detalle por combinación vive en el servidor.
+export const SIDEBET_TOP_PAYOUT: Record<SidebetType, string> = {
+  perfectPairs: '30:1',
+  twentyOneThree: '100:1',
+  luckyLadies: '1000:1',
+  insurance: '2:1',
+};
+
 export interface Player {
   id: string; // Socket ID
   userId: string; // DB ID
@@ -49,6 +85,10 @@ export interface Player {
   bjHasContinued?: boolean;
   bjHands?: BjHand[]; // <-- NUEVO: array de manos para soportar split
   bjActiveHandIndex?: number; // <-- NUEVO: índice de la mano activa
+  // --- Sidebets ---
+  bjSidebets?: Partial<Record<SidebetType, number>>; // apuestas laterales de la ronda
+  bjSidebetResults?: BjSidebetResult[];              // resueltas al repartir, pagadas en resolve
+  bjSidebetDelta?: number;                           // neto total de sidebets (fichas)
 }
 
 export type GameType = 'poker' | 'blackjack';
