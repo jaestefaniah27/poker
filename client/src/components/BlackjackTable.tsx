@@ -781,7 +781,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
             return (
               <div key={idx} className={`relative flex items-center transition-all duration-300 ${classStr}`}>
-                <CardFan cards={hCards} big={myHands.length === 1} mini={myHands.length === 3} micro={myHands.length === 4} dealFromRef={shoeRef} />
+                <CardFan cards={hCards} big={myHands.length === 1} mini={myHands.length === 3} micro={myHands.length === 4} />
                 {hTotals && hCards.length >= 2 && (
                   <AnimatePresence>
                     <motion.div
@@ -855,6 +855,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             </div>
           )}
           {phase === 'dealerAction' && <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">Dealer juega</div>}
+          {phase === 'reshuffling' && <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">Barajando…</div>}
           {phase === 'resolve' && <div className="text-[10px] text-emerald-200/70 uppercase tracking-widest font-bold">Resultado</div>}
         </div>
       </div>
