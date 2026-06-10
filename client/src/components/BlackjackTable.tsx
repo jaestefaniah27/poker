@@ -12,7 +12,7 @@ import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Ch
 type Sidebet = SidebetType;
 const sumChips = (cs: ChipDenom[]): number => cs.reduce((s, c) => s + c.v, 0);
 const emptySidebetChips = (): Record<Sidebet, ChipDenom[]> =>
-  ({ perfectPairs: [], twentyOneThree: [], luckyLadies: [], insurance: [] });
+  ({ perfectPairs: [], twentyOneThree: [], luckyLadies: [], insurance: [], dealerBusted: [] });
 
 
 interface Props {
@@ -185,7 +185,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   );
   const placedSidebetTotal = useMemo(() => {
     const sb = myPlayer?.bjSidebets;
-    const keys: import('../../shared/types').SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
+    const keys: SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
     return sb ? keys.reduce((s, k) => s + ((sb as any)[k] || 0), 0) : 0;
   }, [myPlayer?.bjSidebets]);
 
@@ -376,20 +376,21 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   const circleChips = hideLostChips ? [] : finalCircleChips;
 
-  const circleAmount = pendingChips.length > 0 ? pendingTotal : myBet;
-
   // Sidebets a mostrar en el rectángulo (zona pequeña). Durante betting: montones pendientes;
   // tras repartir / en resolve: apuestas colocadas + su resultado.
   const sidebetView = useMemo(() => {
     const fromState = phase === 'betting' && myBet === 0;
-    const keys: import('../../shared/types').SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
+    const keys: SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
     return keys.map(k => {
       const amount = fromState ? sumChips(sidebetChips[k as Sidebet] || []) : (myPlayer?.bjSidebets?.[k] || 0);
       if (amount <= 0) return null;
       // Siempre compactado a la mejor composición → la ficha mostrada es la de mayor denominación.
       const top = [...chipsFromAmount(amount)].sort((a, b) => b.v - a.v)[0];
-      // El resultado solo se muestra tras el reveal del dealer (showResult), igual que el main bet.
-      const res: BjSidebetResult | undefined = showResult ? myPlayer?.bjSidebetResults?.find(r => r.type === k) : undefined;
+      // Para las sidebets tempranas (cartas del jugador), mostrar resultado en cuanto termina el reparto.
+      // Para seguro y dealerBusted, esperar al final de la mano (showResult).
+      const isEarly = k === 'perfectPairs' || k === 'twentyOneThree' || k === 'luckyLadies';
+      const shouldShowResult = isEarly ? (phase !== 'waiting' && phase !== 'betting' && phase !== 'dealing') : showResult;
+      const res: BjSidebetResult | undefined = shouldShowResult ? myPlayer?.bjSidebetResults?.find(r => r.type === k) : undefined;
       return { type: k as Sidebet, amount, top, res };
     }).filter(Boolean) as { type: Sidebet; amount: number; top: ChipDenom; res?: BjSidebetResult }[];
   }, [phase, myBet, sidebetChips, myPlayer?.bjSidebets, myPlayer?.bjSidebetResults, showResult]);
@@ -467,7 +468,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   const isPair = myCards.length === 2 && cardPoints(myCards[0].rank as string) === cardPoints(myCards[1].rank as string);
   const canSplit = canAct && isPair && myHands.length < 4 && myChips >= totalBet + activeHandBet;
-  const currentSidebetsTotal = [...SIDEBET_ORDER, 'insurance' as import('../../shared/types').SidebetType].reduce((s, k) => s + (myPlayer?.bjSidebets?.[k] || 0), 0);
+  const currentSidebetsTotal = [...SIDEBET_ORDER, 'insurance' as SidebetType].reduce((s, k) => s + (myPlayer?.bjSidebets?.[k] || 0), 0);
   const insuranceBetAmount = Math.floor(activeHandBet / 2);
   const canInsurance = canAct && myHands.length === 1 && myCards.length === 2 && dealerCards[1]?.rank === 'A' && !myPlayer?.bjSidebets?.insurance && myChips >= totalBet + currentSidebetsTotal + insuranceBetAmount;
 

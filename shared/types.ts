@@ -16,7 +16,7 @@ export interface BjHand {
 }
 
 // --- BlackJack sidebets (apuestas laterales) ---
-export type SidebetType = 'perfectPairs' | 'twentyOneThree' | 'luckyLadies' | 'insurance';
+export type SidebetType = 'perfectPairs' | 'twentyOneThree' | 'luckyLadies' | 'insurance' | 'dealerBusted';
 
 export interface BjSidebetResult {
   type: SidebetType;
@@ -26,21 +26,23 @@ export interface BjSidebetResult {
   label: string;  // etiqueta del resultado, p.ej. "Pareja perfecta", "Color", "Sin As · devuelto"
 }
 
-export const SIDEBET_ORDER: SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies'];
+export const SIDEBET_ORDER: SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies', 'dealerBusted'];
 
 export const SIDEBET_LABELS: Record<SidebetType, string> = {
-  perfectPairs: 'Perfect Pairs',
+  perfectPairs: 'Parejas',
   twentyOneThree: '21+3',
   luckyLadies: 'Lucky Ladies',
   insurance: 'Seguro',
+  dealerBusted: 'Dealer Busted',
 };
 
 // Etiqueta corta para chips/dropdown.
 export const SIDEBET_SHORT: Record<SidebetType, string> = {
-  perfectPairs: 'PP',
+  perfectPairs: 'PAR',
   twentyOneThree: '21+3',
   luckyLadies: 'LL',
   insurance: 'SEG',
+  dealerBusted: 'BUST',
 };
 
 // Pago máximo (para mostrar en el selector). El detalle por combinación vive en el servidor.
@@ -49,6 +51,7 @@ export const SIDEBET_TOP_PAYOUT: Record<SidebetType, string> = {
   twentyOneThree: '100:1',
   luckyLadies: '1000:1',
   insurance: '2:1',
+  dealerBusted: '250:1',
 };
 
 export interface Player {

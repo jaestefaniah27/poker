@@ -77,7 +77,10 @@ const bootServer = async () => {
   for (const room of savedRooms) {
     // Reset volatile state on reboot
     const now = Date.now();
-    room.players.forEach(p => { p.isOnline = false; p.offlineSince = now; });
+    room.players.forEach(p => { 
+      p.isOnline = false; 
+      if (p.offlineSince == null) p.offlineSince = now; 
+    });
     room.paused = true;
     room.turnStartedAt = undefined;
     room.inGrace = false;
