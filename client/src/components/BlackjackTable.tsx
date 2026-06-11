@@ -6,7 +6,7 @@ import Slider from './Slider';
 import Avatar from './Avatar';
 import AnimatedNumber from './AnimatedNumber';
 import type { Room, Player, Card, SidebetType, BjSidebetResult } from '../../../shared/types';
-import { SIDEBET_ORDER, SIDEBET_SHORT, SIDEBET_LABELS, SIDEBET_TOP_PAYOUT } from '../../../shared/types';
+import { SIDEBET_ORDER, SIDEBET_SHORT, SIDEBET_TOP_PAYOUT } from '../../../shared/types';
 import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip, chipMultiplierFor } from './Chips';
 
 type Sidebet = SidebetType;
