@@ -23,7 +23,7 @@ Write-Host "   DESPLEGANDO EN EL SERVIDOR...         " -ForegroundColor Green
 Write-Host "=========================================" -ForegroundColor Green
 
 # Ejecutar script de actualización en el servidor
-ssh -o StrictHostKeyChecking=no -i C:\Users\jaest\.ssh\minecraft_server\minecraft-server-private-key-ssh ubuntu@143.47.37.92 "~/poker_repo/update_poker.sh"
+ssh -o StrictHostKeyChecking=no -i C:\Users\jaest\.ssh\minecraft_server\minecraft-server-private-key-ssh ubuntu@143.47.37.92 "bash ~/poker_repo/update_poker.sh"
 
 Write-Host " "
 Write-Host "=========================================" -ForegroundColor Cyan

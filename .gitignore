@@ -5,6 +5,8 @@ node_modules
 
 *.sqlite
 
+
+
 # Build output del servidor (se genera con tsc en cada deploy)
 server/dist/
 server/setXp.js
