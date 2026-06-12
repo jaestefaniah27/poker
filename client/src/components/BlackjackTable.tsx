@@ -5,8 +5,14 @@ import PlayingCard from './PlayingCard';
 import Slider from './Slider';
 import Avatar from './Avatar';
 import AnimatedNumber from './AnimatedNumber';
-import type { Room, Player, Card } from '../../../shared/types';
-import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip } from './Chips';
+import type { Room, Player, Card, SidebetType, BjSidebetResult } from '../../../shared/types';
+import { SIDEBET_ORDER, SIDEBET_SHORT, SIDEBET_TOP_PAYOUT } from '../../../shared/types';
+import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip, chipMultiplierFor } from './Chips';
+
+type Sidebet = SidebetType;
+const sumChips = (cs: ChipDenom[]): number => cs.reduce((s, c) => s + c.v, 0);
+const emptySidebetChips = (): Record<Sidebet, ChipDenom[]> =>
+  ({ perfectPairs: [], twentyOneThree: [], luckyLadies: [], insurance: [], dealerBusted: [] });
 
 
 interface Props {
@@ -189,6 +195,18 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const myChips = myPlayer?.chips || 0;
   // Sin tope de mesa: puedes apostar todas tus fichas. Las que no puedas pagar salen transparentes.
   const maxBet = myChips;
+  // Patrimonio en mesa = saldo fuera de mesa + fichas (las dos bolsas son disjuntas en BJ).
+  const myNetWorth = user.balance + myChips;
+  // Multiplicador automático de fichas, fijado por el patrimonio al entrar a la mesa.
+  // Usa patrimonio (no solo saldo) porque el buy-in mueve dinero a fichas y dejaría el saldo bajo el umbral.
+  const [chipMult, setChipMult] = useState(1);
+  const chipMultLockedRef = useRef(false);
+  useEffect(() => {
+    if (chipMultLockedRef.current || !myPlayer) return;
+    chipMultLockedRef.current = true;
+    setChipMult(chipMultiplierFor(user.balance + (myPlayer.chips || 0)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myPlayer]);
   const myBet = myPlayer?.bet || 0;
   const canBet = phase === 'betting' && myPlayer && !myPlayer.isSpectating && myChips > 0 && myBet === 0;
 
@@ -197,31 +215,53 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const pendingTotal = useMemo(() => pendingChips.reduce((s, c) => s + c.v, 0), [pendingChips]);
   // Composición EXACTA apostada (no se reordena al repartir): se muestra tal cual durante la mano.
   const [placedComposition, setPlacedComposition] = useState<ChipDenom[]>([]);
-  
+
+  // --- Sidebets ---
+  const [sidebetsOn, setSidebetsOn] = useState(false);
+  const [betTarget, setBetTarget] = useState<'main' | Sidebet>('main'); // a dónde van las fichas colocadas
+  const [selectedSidebet, setSelectedSidebet] = useState<Sidebet>('perfectPairs');
+  const [sidebetChips, setSidebetChips] = useState<Record<Sidebet, ChipDenom[]>>(emptySidebetChips);
+  const pendingSidebetTotal = useMemo(
+    () => SIDEBET_ORDER.reduce((s, k) => s + sumChips(sidebetChips[k]), 0),
+    [sidebetChips]
+  );
+  const placedSidebetTotal = useMemo(() => {
+    const sb = myPlayer?.bjSidebets;
+    const keys: SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
+    return sb ? keys.reduce((s, k) => s + ((sb as any)[k] || 0), 0) : 0;
+  }, [myPlayer?.bjSidebets]);
+
   const [hideLostChips, setHideLostChips] = useState(false);
   const [showRebuyModal, setShowRebuyModal] = useState(false);
   const [rebuyTierIndex, setRebuyTierIndex] = useState(1);
+
+  // --- Resolve: dealer roba carta a carta; el resultado solo se muestra tras la última ---
+  const [resolveReady, setResolveReady] = useState(false);
+  const [dealerResolveCount, setDealerResolveCount] = useState(99);
+  const showResult = phase === 'resolve' && resolveReady;
+  const [prizeArrived, setPrizeArrived] = useState(false);
 
   const initialNetWorthRef = useRef<number | null>(null);
   const lastValidDiffRef = useRef<number>(0);
 
   if (myPlayer) {
     if (initialNetWorthRef.current === null) {
-      initialNetWorthRef.current = user.balance + myPlayer.chips + (myPlayer.bet || 0);
+      initialNetWorthRef.current = user.balance + myPlayer.chips;
     }
-    // Solo actualizamos el diff cuando la fase real del servidor es betting o waiting.
-    // Si la fase local es betting (porque le dimos a Continuar) pero el servidor sigue en resolve,
-    // myPlayer.bet aún tiene la apuesta vieja y causaría un pico temporal erróneo.
-    if ((phase === 'betting' && rawPhase === 'betting') || phase === 'waiting') {
-      const currentNetWorth = user.balance + myPlayer.chips + (myPlayer.bet || 0);
+    
+    // Actualizamos el diff en cualquier fase, EXCEPTO cuando el servidor ya resolvió (rawPhase === 'resolve')
+    // pero aún estamos animando las cartas del dealer (!showResult). Esto evita hacer "spoiler" del premio.
+    // Además, myPlayer.chips NO se deduce al apostar en Blackjack, por lo que el net worth es siempre balance + chips.
+    if (rawPhase !== 'resolve' || showResult) {
+      const currentNetWorth = user.balance + myPlayer.chips;
       lastValidDiffRef.current = currentNetWorth - (initialNetWorthRef.current || currentNetWorth);
     }
   }
 
   useEffect(() => {
-    if (phase === 'betting' && myBet === 0) { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
-    else if (phase === 'waiting') { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); }
-    else if (phase !== 'betting') { 
+    if (phase === 'betting' && myBet === 0) { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); setSidebetChips(emptySidebetChips()); setBetTarget('main'); }
+    else if (phase === 'waiting') { setPendingChips([]); setPlacedComposition([]); setHideLostChips(false); setSidebetChips(emptySidebetChips()); setBetTarget('main'); }
+    else if (phase !== 'betting') {
       setPendingChips([]); 
       // Si la fase avanza pero el servidor dice que no apostamos, limpiamos la mesa para no quedar atascados en estado zombie
       if (myBet === 0) setPlacedComposition([]); 
@@ -242,12 +282,30 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   // Remember last placed bet for one-tap REBET in the next round
   const [lastBet, setLastBet] = useState(0);
-  useEffect(() => { if (myBet > 0) setLastBet(myBet); }, [myBet]);
+  const [lastSidebets, setLastSidebets] = useState<Partial<Record<SidebetType, number>>>({});
+  useEffect(() => { 
+    if (myBet > 0) {
+      setLastBet(myBet);
+      if (myPlayer?.bjSidebets) {
+        const sb: Partial<Record<SidebetType, number>> = {};
+        for (const k of SIDEBET_ORDER) {
+          if (myPlayer.bjSidebets[k]) sb[k] = myPlayer.bjSidebets[k]!;
+        }
+        setLastSidebets(sb);
+      } else {
+        setLastSidebets({});
+      }
+    }
+  }, [myBet, myPlayer?.bjSidebets]);
+
+  const lastTotalRebet = useMemo(() => {
+    return lastBet + SIDEBET_ORDER.reduce((s, k) => s + (lastSidebets[k] || 0), 0);
+  }, [lastBet, lastSidebets]);
 
   // Paged chip rail: default page escalada al stack del jugador (sin deslizar manualmente)
-  const [chipPage, setChipPage] = useState(() => pageForAmount(maxBet));
+  const [chipPage, setChipPage] = useState(() => pageForAmount(maxBet, chipMult));
   useEffect(() => {
-    if (phase === 'betting') setChipPage(pageForAmount(maxBet));
+    if (phase === 'betting') setChipPage(pageForAmount(maxBet, chipMult));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, room.id]);
 
@@ -283,6 +341,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   const addChip = (d: ChipDenom) => {
     if (!canBet) return;
+    // Si el objetivo es una sidebet, las fichas van a su montón (sin límite de apuesta).
+    if (betTarget !== 'main') {
+      if (sidebetChips[betTarget].length >= 12) return; // límite visual
+      setSidebetChips(s => ({ ...s, [betTarget]: [...s[betTarget], d] }));
+      vibrate(20);
+      return;
+    }
     if (pendingTotal + d.v > maxBet) return;
     if (pendingChips.length >= 16) return; // Strict limit: max 16 chips per bet to prevent overflow
     
@@ -308,31 +373,35 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     setPendingChips(s => [...s, d]);
     vibrate(20);
   };
-  const clearBet = () => setPendingChips([]);
+  const clearBet = () => { setPendingChips([]); setSidebetChips(emptySidebetChips()); };
   const halfBet = () => {
     const target = Math.max(minBet, Math.floor(maxBet / 2));
-    setPendingChips(chipsFromAmount(target));
+    setPendingChips(chipsFromAmount(target, chipMult));
   };
-  const allInBet = () => setPendingChips(chipsFromAmount(maxBet));
+  const allInBet = () => setPendingChips(chipsFromAmount(maxBet, chipMult));
   const placeBet = () => {
     if (!canBet || pendingTotal < minBet) return;
+    const sb: Partial<Record<Sidebet, number>> = {};
+    SIDEBET_ORDER.forEach(k => { const t = sumChips(sidebetChips[k]); if (t > 0) sb[k] = t; });
     setPlacedComposition([...pendingChips]); // snapshot exacto: no se reordena al repartir
-    socket.emit('bjPlaceBet', { roomId: room.id, amount: pendingTotal });
+    socket.emit('bjPlaceBet', {
+      roomId: room.id,
+      amount: pendingTotal,
+      sidebets: Object.keys(sb).length ? sb : undefined,
+    });
   };
-  const sendAction = (action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split') => {
+  const sendAction = (action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split' | 'Insurance') => {
     socket.emit('bjAction', { roomId: room.id, action });
     vibrate(15);
   };
   const startRound = () => socket.emit('bjStartRound', { roomId: room.id });
 
-  // --- Resolve: dealer roba carta a carta; el resultado solo se muestra tras la última ---
-  const [resolveReady, setResolveReady] = useState(false);
-  const [dealerResolveCount, setDealerResolveCount] = useState(99);
-  const showResult = phase === 'resolve' && resolveReady;
-  const [prizeArrived, setPrizeArrived] = useState(false);
-
   useEffect(() => {
-    if (phase === 'betting') setPrizeArrived(false);
+    if (phase === 'betting') {
+      setPrizeArrived(false);
+      setSidebetsOn(false);
+      setBetTarget('main');
+    }
   }, [phase]);
 
   const myHands = (phase === 'betting' || phase === 'waiting') ? [] : (myPlayer?.bjHands || (myPlayer?.cards?.length ? [{ cards: myPlayer.cards, bet: myBet, status: myPlayer?.bjStatus || 'playing' }] : []));
@@ -345,7 +414,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const basePlacedChips = placedComposition.length > 0
     ? placedComposition
     : originalBetAmount > 0
-      ? chipsFromAmount(originalBetAmount)
+      ? chipsFromAmount(originalBetAmount, chipMult)
       : [];
 
   let _circleChips = pendingChips.length > 0 ? pendingChips : [];
@@ -366,12 +435,29 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer?.bjDelta || 0) > 0) {
     // Cuando el dealer paga, compactamos la apuesta original + el premio en las fichas más grandes
     // para evitar que la suma de dos montones pequeños sature y desborde el área visual.
-    finalCircleChips = chipsFromAmount(myBet + (myPlayer?.bjDelta || 0));
+    finalCircleChips = chipsFromAmount(myBet + (myPlayer?.bjDelta || 0), chipMult);
   }
 
   const circleChips = hideLostChips ? [] : finalCircleChips;
 
-  const circleAmount = pendingChips.length > 0 ? pendingTotal : myBet;
+  // Sidebets a mostrar en el rectángulo (zona pequeña). Durante betting: montones pendientes;
+  // tras repartir / en resolve: apuestas colocadas + su resultado.
+  const sidebetView = useMemo(() => {
+    const fromState = phase === 'betting' && myBet === 0;
+    const keys: SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
+    return keys.map(k => {
+      const amount = fromState ? sumChips(sidebetChips[k as Sidebet] || []) : (myPlayer?.bjSidebets?.[k] || 0);
+      if (amount <= 0) return null;
+      // Siempre compactado a la mejor composición → la ficha mostrada es la de mayor denominación.
+      const top = [...chipsFromAmount(amount, chipMult)].sort((a, b) => b.v - a.v)[0];
+      // Para las sidebets tempranas (cartas del jugador), mostrar resultado en cuanto termina el reparto.
+      // Para seguro y dealerBusted, esperar al final de la mano (showResult).
+      const isEarly = k === 'perfectPairs' || k === 'twentyOneThree' || k === 'luckyLadies';
+      const shouldShowResult = isEarly ? (phase !== 'waiting' && phase !== 'betting' && phase !== 'dealing') : showResult;
+      const res: BjSidebetResult | undefined = shouldShowResult ? myPlayer?.bjSidebetResults?.find(r => r.type === k) : undefined;
+      return { type: k as Sidebet, amount, top, res };
+    }).filter(Boolean) as { type: Sidebet; amount: number; top: ChipDenom; res?: BjSidebetResult }[];
+  }, [phase, myBet, sidebetChips, myPlayer?.bjSidebets, myPlayer?.bjSidebetResults, showResult]);
 
   const continueRound = () => {
     const result = myPlayer?.bjResult;
@@ -446,13 +532,17 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
   const isPair = myCards.length === 2 && cardPoints(myCards[0].rank as string) === cardPoints(myCards[1].rank as string);
   const canSplit = canAct && isPair && myHands.length < 4 && myChips >= totalBet + activeHandBet;
+  const currentSidebetsTotal = [...SIDEBET_ORDER, 'insurance' as SidebetType].reduce((s, k) => s + (myPlayer?.bjSidebets?.[k] || 0), 0);
+  const insuranceBetAmount = Math.floor(activeHandBet / 2);
+  const canInsurance = canAct && myHands.length === 1 && myCards.length === 2 && dealerCards[0]?.rank === 'A' && !myPlayer?.bjSidebets?.insurance && myChips >= totalBet + currentSidebetsTotal + insuranceBetAmount;
 
   const canRebuy = !!myPlayer && myPlayer.isActive && myChips <= 0 && phase !== 'dealing';
 
   // Fichas disponibles mostradas: restan la apuesta en mesa (ves cuánto te queda en todo momento).
   // En 'resolve' el servidor ya liquidó, así que mostramos el stack real.
-  const wager = phase === 'betting' ? (myBet > 0 ? myBet : pendingTotal)
-    : phase === 'resolve' ? 0 : myBet;
+  const wager = phase === 'betting'
+    ? (myBet > 0 ? myBet + placedSidebetTotal : pendingTotal + pendingSidebetTotal)
+    : phase === 'resolve' ? 0 : myBet + placedSidebetTotal;
   const displayedChips = phase === 'resolve' ? myChips : Math.max(0, myChips - wager);
 
   // --- Anclas para animar fichas (círculo, contador de fichas, zona dealer) ---
@@ -517,7 +607,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
     if (result === 'lose') {
       // Fichas del jugador vuelan al dealer
-      const glyphs = circleChips.length > 0 ? circleChips : chipsFromAmount(myBet);
+      const glyphs = circleChips.length > 0 ? circleChips : chipsFromAmount(myBet, chipMult);
       const spawned = glyphs.map((d, i) => ({
         id: ++flyIdRef.current,
         x: circle.left + circle.width / 2, y: circle.top + circle.height / 2,
@@ -532,7 +622,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     } else if ((result === 'win' || result === 'blackjack') && (myPlayer.bjDelta || 0) > 0) {
       // Dealer empuja fichas de premio hacia el círculo
       const prizeAmount = Math.abs(myPlayer.bjDelta || 0);
-      const glyphs = chipsFromAmount(prizeAmount);
+      const glyphs = chipsFromAmount(prizeAmount, chipMult);
       const spawned = glyphs.map((d, i) => ({
         id: ++flyIdRef.current,
         x: dealerEl.left + dealerEl.width / 2, y: dealerEl.top + dealerEl.height / 2,
@@ -634,8 +724,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       {/* Contenido a 100dvh (altura visible real): deja la barra de URL del navegador fuera,
           y en standalone el fondo de arriba cubre toda la pantalla. */}
       <div
-        className="relative w-full flex flex-col"
-        style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        className="absolute inset-0 w-full flex flex-col"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
 
       {/* Header */}
@@ -661,8 +751,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         </div>
         <div className="text-right">
           <div className="text-[10px] text-white/50 leading-none">{user.name}</div>
-          <div className={`font-mono text-xs font-bold ${user.balance < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
-            {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
+          <div className={`font-mono text-xs font-bold ${myNetWorth < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
+            {myNetWorth < 0 ? `-$${fmtChips(Math.abs(myNetWorth))}` : `$${fmtChips(myNetWorth)}`}
           </div>
         </div>
       </div>
@@ -863,22 +953,61 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           animate={canBet && pendingTotal > 0 ? { scale: [1, 1.04, 1] } : { scale: 1 }}
           transition={{ duration: 1.4, repeat: canBet && pendingTotal > 0 ? Infinity : 0 }}
         >
-          <AnimatePresence mode="wait">
-            {circleChips.length > 0 ? (
-              <motion.div
-                key="bet-chips"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.5 }}
-                transition={{ duration: 0.2 }}
-                className="flex items-end justify-center gap-1.5"
-              >
-                <div className="flex items-end justify-center gap-1.5 transition-transform duration-300">
-                  <ChipStack chips={circleChips} size={34} />
-                </div>
-              </motion.div>
-            ) : <span key="empty" />}
-          </AnimatePresence>
+          <div className="flex items-stretch justify-center w-full h-full gap-1">
+            {/* Zona principal (más grande) */}
+            <div className="flex-1 relative flex items-center justify-center min-w-0">
+              {sidebetView.length > 0 && (
+                <span className="absolute top-0.5 left-1.5 text-[7px] uppercase tracking-widest text-amber-200/40 font-bold pointer-events-none">Main</span>
+              )}
+              <AnimatePresence mode="wait">
+                {circleChips.length > 0 ? (
+                  <motion.div
+                    key="bet-chips"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-end justify-center gap-1.5"
+                  >
+                    <div className="flex items-end justify-center gap-1.5 transition-transform duration-300">
+                      <ChipStack chips={circleChips} size={34} />
+                    </div>
+                  </motion.div>
+                ) : <span key="empty" />}
+              </AnimatePresence>
+            </div>
+
+            {/* Zona sidebets (más pequeña): UN chip representativo + etiqueta (sin desbordar) */}
+            {sidebetView.length > 0 && (
+              <div className="shrink-0 flex flex-col justify-center gap-0.5 border-l border-white/10 pl-2 pr-0.5 overflow-hidden" style={{ width: 90 }}>
+                {sidebetView.map(sv => (
+                    <motion.div
+                      key={sv.type}
+                      layout
+                      initial={{ opacity: 0, x: 8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 8 }}
+                      className="flex items-center gap-1.5"
+                    >
+                      <div className="shrink-0 flex items-center justify-center">
+                        {sv.top && <Chip d={sv.top} size={12} forceSize />}
+                      </div>
+                      <div className="flex flex-col leading-none min-w-0">
+                        <span className={`text-[8px] font-black ${sv.res ? (sv.res.won ? 'text-emerald-300' : sv.res.delta < 0 ? 'text-rose-300' : 'text-white/50') : 'text-amber-200/80'}`}>
+                          {SIDEBET_SHORT[sv.type]}
+                        </span>
+                        <span className="text-[7px] text-white/40 font-mono truncate">{fmtChips(sv.amount)}</span>
+                        {sv.res && (
+                          <span className={`text-[7px] font-mono font-bold ${sv.res.delta > 0 ? 'text-emerald-300' : sv.res.delta < 0 ? 'text-rose-300' : 'text-white/40'}`}>
+                            {sv.res.delta > 0 ? `+${fmtChips(sv.res.delta)}` : sv.res.delta < 0 ? fmtChips(sv.res.delta) : '↩'}
+                          </span>
+                        )}
+                      </div>
+                    </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
         </motion.div>
 
         {/* Estado movido justo debajo del rectángulo de apuestas, integrado en su misma altura (no suma altura total) */}
@@ -896,6 +1025,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             </div>
           )}
           {phase === 'dealerAction' && <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">Dealer juega</div>}
+          {phase === 'reshuffling' && <div className="text-[10px] text-amber-200 uppercase tracking-widest font-bold">Barajando…</div>}
           {phase === 'resolve' && <div className="text-[10px] text-emerald-200/70 uppercase tracking-widest font-bold">Resultado</div>}
         </div>
       </div>
@@ -935,26 +1065,38 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           {/* Bet pill — centrada absolutamente en la fila */}
           <div className="absolute inset-x-0 flex justify-center pointer-events-none">
             <AnimatePresence>
-              {(circleAmount > 0 || (showResult && myPlayer?.bjDelta != null && myPlayer.bjDelta !== 0)) && (
-                <motion.div
-                  key="bet-pill"
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-                  className={`px-2.5 py-1 rounded-full font-mono font-bold text-[11px] border ${
-                    showResult && myPlayer?.bjDelta != null
-                      ? myPlayer.bjDelta > 0
-                        ? 'bg-emerald-400/20 border-emerald-300/50 text-emerald-200'
-                        : 'bg-rose-500/20 border-rose-400/50 text-rose-200'
-                      : 'bg-yellow-400/20 border-yellow-300/40 text-yellow-100'
-                  }`}
-                >
-                  {showResult && myPlayer?.bjDelta != null
-                    ? `${myPlayer.bjDelta > 0 ? '+' : ''}${fmtChips(myPlayer.bjDelta)}`
-                    : fmtChips(circleAmount)}
-                </motion.div>
-              )}
+              {(() => {
+                const totalBetPill = phase === 'betting' && (pendingTotal > 0 || pendingSidebetTotal > 0) 
+                  ? pendingTotal + pendingSidebetTotal 
+                  : myBet + placedSidebetTotal;
+                const totalDeltaPill = (myPlayer?.bjDelta || 0) + (myPlayer?.bjSidebetDelta || 0);
+                const hasDelta = showResult && (myPlayer?.bjDelta != null || myPlayer?.bjSidebetDelta != null);
+                
+                if (totalBetPill <= 0 && !hasDelta) return null;
+                
+                return (
+                  <motion.div
+                    key="bet-pill"
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                    className={`px-2.5 py-1 rounded-full font-mono font-bold text-[11px] border ${
+                      hasDelta
+                        ? totalDeltaPill > 0
+                          ? 'bg-emerald-400/20 border-emerald-300/50 text-emerald-200'
+                          : totalDeltaPill < 0
+                            ? 'bg-rose-500/20 border-rose-400/50 text-rose-200'
+                            : 'bg-sky-500/20 border-sky-400/50 text-sky-200'
+                        : 'bg-yellow-400/20 border-yellow-300/40 text-yellow-100'
+                    }`}
+                  >
+                    {hasDelta
+                      ? (totalDeltaPill === 0 ? '±0' : `${totalDeltaPill > 0 ? '+' : ''}${fmtChips(totalDeltaPill)}`)
+                      : fmtChips(totalBetPill)}
+                  </motion.div>
+                );
+              })()}
             </AnimatePresence>
           </div>
         </div>
@@ -978,22 +1120,70 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
           {!canRebuy && phase === 'betting' && canBet && (
             <div className="flex-1 flex flex-col gap-2 justify-center">
-              <ChipRail page={chipPage} setPage={setChipPage} onAdd={addChip} maxBet={maxBet} pendingTotal={pendingTotal} canBet={!!canBet} />
-              <div className="grid grid-cols-4 gap-1.5">
-                <button onClick={clearBet} disabled={pendingTotal === 0}
-                  className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95 disabled:opacity-30">BORRAR</button>
-                <button onClick={allInBet}
-                  className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">MAX</button>
-                {lastBet > 0 && lastBet <= maxBet ? (
-                  <button onClick={() => setPendingChips(chipsFromAmount(lastBet))}
-                    className="py-3 rounded-2xl bg-yellow-400/20 border border-yellow-300/40 text-[11px] font-bold text-yellow-100 active:scale-95 leading-tight">
-                    REBET<br/><span className="text-[9px] opacity-80">{fmtChips(lastBet)}</span></button>
-                ) : (
-                  <button onClick={halfBet}
-                    className="py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">½</button>
-                )}
-                <button onClick={placeBet} disabled={pendingTotal < minBet}
-                  className="py-3 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 text-white font-extrabold text-[12px] tracking-wider shadow-lg active:scale-95 disabled:active:scale-100">LISTO</button>
+              <ChipRail page={chipPage} setPage={setChipPage} onAdd={addChip} maxBet={maxBet} pendingTotal={pendingTotal} canBet={!!canBet} mult={chipMult} />
+              {/* Ambas filas montadas → crossfade fluido, misma altura, sin salto */}
+              <div className="relative">
+                {/* Fila normal (en flujo: define la altura) */}
+                <motion.div
+                  animate={{ opacity: sidebetsOn ? 0 : 1 }}
+                  transition={{ duration: 0.16 }}
+                  className={`flex gap-1.5 items-stretch ${sidebetsOn ? 'pointer-events-none' : ''}`}
+                >
+                  <button onClick={() => { setSidebetsOn(true); setBetTarget(selectedSidebet); }}
+                    title="Apuestas laterales"
+                    className="shrink-0 w-11 rounded-2xl bg-fuchsia-500/20 border border-fuchsia-400/40 text-fuchsia-200 font-black text-[15px] leading-none active:scale-95">+</button>
+                  <button onClick={clearBet} disabled={pendingTotal === 0 && pendingSidebetTotal === 0}
+                    className="flex-1 py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95 disabled:opacity-30">BORRAR</button>
+                  <button onClick={allInBet}
+                    className="flex-1 py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">MAX</button>
+                  {lastBet > 0 && lastTotalRebet <= maxBet ? (
+                    <button onClick={() => {
+                      setPendingChips(chipsFromAmount(lastBet, chipMult));
+                      const newSb = emptySidebetChips();
+                      let hasSb = false;
+                      SIDEBET_ORDER.forEach(k => {
+                        if (lastSidebets[k]) {
+                          newSb[k] = chipsFromAmount(lastSidebets[k]!, chipMult);
+                          hasSb = true;
+                        }
+                      });
+                      if (hasSb) setSidebetChips(newSb);
+                    }}
+                      className="flex-1 py-3 rounded-2xl bg-yellow-400/20 border border-yellow-300/40 text-[11px] font-bold text-yellow-100 active:scale-95 leading-tight">
+                      REBET<br/><span className="text-[9px] opacity-80">{fmtChips(lastTotalRebet)}</span></button>
+                  ) : (
+                    <button onClick={halfBet}
+                      className="flex-1 py-3 rounded-2xl bg-white/8 border border-white/15 text-[11px] font-bold text-white/80 active:scale-95">½</button>
+                  )}
+                  <button onClick={placeBet} disabled={pendingTotal < minBet}
+                    className="flex-1 py-3 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 text-white font-extrabold text-[12px] tracking-wider shadow-lg active:scale-95 disabled:active:scale-100">LISTO</button>
+                </motion.div>
+                {/* Fila sidebets (superpuesta) */}
+                <motion.div
+                  animate={{ opacity: sidebetsOn ? 1 : 0 }}
+                  transition={{ duration: 0.16 }}
+                  className={`absolute inset-0 flex gap-1.5 items-stretch ${sidebetsOn ? '' : 'pointer-events-none'}`}
+                >
+                  <button onClick={() => { setSidebetsOn(false); setBetTarget('main'); }}
+                    title="Cerrar apuestas laterales"
+                    className="shrink-0 w-11 rounded-2xl bg-white/8 border border-white/15 text-white/70 font-bold text-[13px] active:scale-95">✕</button>
+                  <div className="flex-1 flex gap-1 items-stretch">
+                    {SIDEBET_ORDER.map(k => {
+                      const isActive = betTarget === k;
+                      return (
+                        <button key={k} onClick={() => { setSelectedSidebet(k); setBetTarget(k); }}
+                          className={`flex-1 rounded-2xl text-[9px] sm:text-[10px] font-bold leading-tight flex flex-col items-center justify-center border active:scale-95 transition-colors ${
+                            isActive ? 'bg-fuchsia-500/30 border-fuchsia-400/50 text-white' : 'bg-black/40 border-white/10 text-white/60 hover:bg-white/5'
+                          }`}>
+                          <span>{SIDEBET_SHORT[k]}</span>
+                          <span className="text-[7px] opacity-70">{SIDEBET_TOP_PAYOUT[k]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button onClick={placeBet} disabled={pendingTotal < minBet}
+                    className="shrink-0 px-3 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 text-white font-extrabold text-[12px] tracking-wider shadow-lg active:scale-95 disabled:active:scale-100">LISTO</button>
+                </motion.div>
               </div>
             </div>
           )}
@@ -1002,23 +1192,29 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               Apostado · esperando al resto{bettingLeft != null ? ` · ${bettingLeft}s` : ''}
             </div>
           )}
+
           {!canRebuy && phase === 'betting' && myPlayer?.isSpectating && (
             <div className="flex-1 flex items-center justify-center text-[11px] text-white/50">Te unes en la próxima ronda</div>
           )}
 
           {phase === 'playerAction' && canAct && (
-            <div className={`flex-1 grid gap-2 items-stretch ${canSplit ? 'grid-rows-2' : ''}`}>
-              <div className={`grid gap-2 items-stretch ${canSplit ? 'grid-cols-3' : 'grid-cols-4'}`}>
+            <div className={`flex-1 grid gap-2 items-stretch ${(canSplit || canInsurance) ? 'grid-rows-2' : ''}`}>
+              <div className={`grid gap-2 items-stretch ${(canSplit || canInsurance) ? 'grid-cols-3' : 'grid-cols-4'}`}>
                 <ActionBtn label="CARTA" onClick={() => sendAction('Hit')} disabled={!dealDone} from="#34d399" to="#059669" />
                 <ActionBtn label="PLANTAR" onClick={() => sendAction('Stand')} disabled={!dealDone} from="#f87171" to="#b91c1c" />
                 <ActionBtn label="DOBLAR" onClick={() => sendAction('Double')} disabled={!dealDone || !canDoubleHand} from="#fbbf24" to="#b45309" />
-                {!canSplit && (
+                {!(canSplit || canInsurance) && (
                   <ActionBtn label="RENDIR" onClick={() => sendAction('Surrender')} disabled={!dealDone || myCards.length !== 2} from="#9ca3af" to="#4b5563" />
                 )}
               </div>
-              {canSplit && (
-                <div className="grid grid-cols-2 gap-2 items-stretch">
-                  <ActionBtn label="DIVIDIR" onClick={() => sendAction('Split')} disabled={!dealDone || !canSplit} from="#818cf8" to="#4f46e5" />
+              {(canSplit || canInsurance) && (
+                <div className={`grid gap-2 items-stretch ${canSplit && canInsurance ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  {canSplit && (
+                    <ActionBtn label="DIVIDIR" onClick={() => sendAction('Split')} disabled={!dealDone || !canSplit} from="#818cf8" to="#4f46e5" />
+                  )}
+                  {canInsurance && (
+                    <ActionBtn label="SEGURO" onClick={() => sendAction('Insurance')} disabled={!dealDone || !canInsurance} from="#f472b6" to="#db2777" />
+                  )}
                   <ActionBtn label="RENDIR" onClick={() => sendAction('Surrender')} disabled={!dealDone || myCards.length !== 2} from="#9ca3af" to="#4b5563" />
                 </div>
               )}

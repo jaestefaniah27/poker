@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, addHaciendaTotal, deductIsraelPool } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat } from '../db';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
@@ -41,6 +41,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     const result = await claimDailyBonus(user.id);
     if (!result.ok) { callback({ error: result.error }); return; }
+    bumpStat(user.id, 'bonus_claims');
     const updated = await getUser(user.id);
     callback({ ok: true, newBalance: result.newBalance, user: updated ? toPublicUser(updated) : undefined });
   });
@@ -78,6 +79,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     const result = await claimHourlyBonus(user.id);
     if (!result.ok) { callback({ error: result.error, nextClaimAt: result.nextClaimAt }); return; }
+    bumpStat(user.id, 'bonus_claims');
     const updated = await getUser(user.id);
     callback({ ok: true, newBalance: result.newBalance, nextClaimAt: result.nextClaimAt, user: updated ? toPublicUser(updated) : undefined });
   });
@@ -109,6 +111,7 @@ export const minigameHandlers = (socket: Socket) => {
     const spinValue = options[chosenIndex];
     const earnedSpins = ruletaSpinsFor(dbUser.ruleta_level ?? 0);
     await claimFreeSpins(dbUser.id, spinValue, earnedSpins);
+    bumpStat(dbUser.id, 'wheel_claims');
     const updated = await getUser(dbUser.id);
     callback({ ok: true, chosenValue: spinValue, freeSpins: earnedSpins, nextClaimAt: now + COOLDOWN_MS, user: updated ? toPublicUser(updated) : undefined });
   });
@@ -187,6 +190,16 @@ export const minigameHandlers = (socket: Socket) => {
 
     const newBalance = await applyBalanceDelta(dbUser.id, delta);
     await recordJackpotSpin(dbUser.id, amount, symbols, multiplier, winAmount);
+
+    bumpStat(dbUser.id, 'jackpot_spins');
+    if (!doFreeSpin) bumpStat(dbUser.id, 'jackpot_total_bet', amount);
+    if (finalWinAmount > 0) {
+      bumpStat(dbUser.id, 'jackpot_total_won', finalWinAmount);
+      maxStat(dbUser.id, 'jackpot_biggest_win', finalWinAmount);
+    }
+    maxStat(dbUser.id, 'jackpot_best_mult_x100', Math.round(multiplier * 100));
+    if (taxAmount > 0) bumpStat(dbUser.id, 'jackpot_tax_paid', taxAmount);
+    if (eventType === 'fraud') bumpStat(dbUser.id, 'jackpot_frauds');
 
     let extraXp = 0;
     if (multiplier >= 50) extraXp = 500;
@@ -276,6 +289,8 @@ export const minigameHandlers = (socket: Socket) => {
 
     await applyBalanceDelta(user.id, -betAmt);
     await addXp(user.id, XP_PER_MINES_PLAY);
+    bumpStat(user.id, 'mines_games');
+    bumpStat(user.id, 'mines_total_bet', betAmt);
 
     activeMinesGames.set(socket.id, {
       userId: user.id,
@@ -305,6 +320,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (game.minePositions.has(cellIdx)) {
       game.active = false;
       activeMinesGames.delete(socket.id);
+      bumpStat(user.id, 'mines_bombs');
       callback({ ok: true, safe: false, minePositions: Array.from(game.minePositions), hitCell: cellIdx });
       return;
     }
@@ -330,6 +346,10 @@ export const minigameHandlers = (socket: Socket) => {
       const newBalance = await applyBalanceDelta(user.id, finalWinnable);
       const xpWin = XP_PER_MINES_WIN + (multiplier >= 10 ? 20 : multiplier >= 5 ? 10 : 0);
       await addXp(user.id, xpWin);
+      bumpStat(user.id, 'mines_cashouts');
+      bumpStat(user.id, 'mines_total_won', finalWinnable);
+      maxStat(user.id, 'mines_biggest_win', finalWinnable);
+      maxStat(user.id, 'mines_best_mult_x100', Math.round(multiplier * 100));
       const updatedUser = await getUser(user.id);
       callback({ ok: true, safe: true, multiplier, winnable: finalWinnable, autoWin: true, newBalance, minePositions: Array.from(game.minePositions), user: updatedUser ? toPublicUser(updatedUser) : undefined, addedXp: xpWin });
       return;
@@ -363,6 +383,10 @@ export const minigameHandlers = (socket: Socket) => {
     const newBalance = await applyBalanceDelta(user.id, finalWinAmount);
     const xpWin = XP_PER_MINES_WIN + (multiplier >= 10 ? 20 : multiplier >= 5 ? 10 : 0);
     await addXp(user.id, xpWin);
+    bumpStat(user.id, 'mines_cashouts');
+    bumpStat(user.id, 'mines_total_won', finalWinAmount);
+    maxStat(user.id, 'mines_biggest_win', finalWinAmount);
+    maxStat(user.id, 'mines_best_mult_x100', Math.round(multiplier * 100));
     const updatedUser = await getUser(user.id);
     callback({ ok: true, winAmount: finalWinAmount, multiplier, newBalance, minePositions: Array.from(game.minePositions), user: updatedUser ? toPublicUser(updatedUser) : undefined, addedXp: xpWin });
   });
@@ -448,12 +472,15 @@ export const minigameHandlers = (socket: Socket) => {
       callback({ error: 'Ya reclamaste el premio de esta hora' }); return;
     }
     wordleClaimedSlots.set(user.id, slot);
+    bumpStat(user.id, 'wordle_games');
 
     if (!won) { callback({ ok: true, reward: 0 }); return; }
 
     const prizes = [5_000_000, 1_000_000, 500_000, 100_000, 50_000, 10_000];
     const reward = prizes[Math.min(Math.max(Number(attempts) - 1, 0), prizes.length - 1)];
 
+    bumpStat(user.id, 'wordle_wins');
+    bumpStat(user.id, 'wordle_total_won', reward);
     const newBalance = await applyBalanceDelta(user.id, reward);
     await addXp(user.id, 25);
     const dbUser = await getUser(user.id);

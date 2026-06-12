@@ -15,6 +15,45 @@ export interface BjHand {
   delta?: number;
 }
 
+// --- BlackJack sidebets (apuestas laterales) ---
+export type SidebetType = 'perfectPairs' | 'twentyOneThree' | 'luckyLadies' | 'insurance' | 'dealerBusted';
+
+export interface BjSidebetResult {
+  type: SidebetType;
+  bet: number;
+  delta: number;  // neto en fichas: +ganancia, -apuesta perdida, 0 si devuelta (insurance sin As)
+  won: boolean;
+  label: string;  // etiqueta del resultado, p.ej. "Pareja perfecta", "Color", "Sin As · devuelto"
+}
+
+export const SIDEBET_ORDER: SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies', 'dealerBusted'];
+
+export const SIDEBET_LABELS: Record<SidebetType, string> = {
+  perfectPairs: 'Parejas',
+  twentyOneThree: '21+3',
+  luckyLadies: 'Lucky Ladies',
+  insurance: 'Seguro',
+  dealerBusted: 'Dealer Busted',
+};
+
+// Etiqueta corta para chips/dropdown.
+export const SIDEBET_SHORT: Record<SidebetType, string> = {
+  perfectPairs: 'PAR',
+  twentyOneThree: '21+3',
+  luckyLadies: 'LL',
+  insurance: 'SEG',
+  dealerBusted: 'BUST',
+};
+
+// Pago máximo (para mostrar en el selector). El detalle por combinación vive en el servidor.
+export const SIDEBET_TOP_PAYOUT: Record<SidebetType, string> = {
+  perfectPairs: '30:1',
+  twentyOneThree: '100:1',
+  luckyLadies: '1000:1',
+  insurance: '2:1',
+  dealerBusted: '250:1',
+};
+
 export interface Player {
   id: string; // Socket ID
   userId: string; // DB ID
@@ -52,11 +91,15 @@ export interface Player {
   bjHasContinued?: boolean;
   bjHands?: BjHand[]; // <-- NUEVO: array de manos para soportar split
   bjActiveHandIndex?: number; // <-- NUEVO: índice de la mano activa
+  // --- Sidebets ---
+  bjSidebets?: Partial<Record<SidebetType, number>>; // apuestas laterales de la ronda
+  bjSidebetResults?: BjSidebetResult[];              // resueltas al repartir, pagadas en resolve
+  bjSidebetDelta?: number;                           // neto total de sidebets (fichas)
 }
 
 export type GameType = 'poker' | 'blackjack';
 export type GamePhase = 'waiting' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
-export type BlackjackPhase = 'waiting' | 'betting' | 'dealing' | 'playerAction' | 'dealerAction' | 'resolve';
+export type BlackjackPhase = 'waiting' | 'betting' | 'dealing' | 'playerAction' | 'dealerAction' | 'resolve' | 'reshuffling';
 
 export interface Room {
   id: string;
@@ -71,6 +114,7 @@ export interface Room {
   currentTurnIndex: number;
   dealerIndex: number;
   deck: Card[];
+  deckSize?: number;               // nº cartas restantes en el zapato (solo blackjack, enviado al cliente)
   highestBet: number;
   winners?: { id: string; amount: number; handName: string; winningCards: string[] }[];
   persistent?: boolean;

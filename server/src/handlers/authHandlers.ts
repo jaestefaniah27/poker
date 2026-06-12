@@ -1,27 +1,28 @@
 import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { 
-  createUser, 
-  getUser, 
-  getUserByName, 
-  isNameTaken, 
-  setPasswordHash, 
-  updateUserName, 
-  updateUserAvatar, 
-  toPublicUser, 
-  getAllUsersRanked, 
-  getAllUsersAdmin, 
-  deleteUser, 
-  getMatchHistoryForUser, 
-  applyBalanceDelta, 
-  addXp, 
-  resetUserLevels, 
-  setJackpotUnlockLevel, 
-  updateLastSeen, 
-  addHaciendaTotal, 
-  getHaciendaTotal, 
+import {
+  createUser,
+  getUser,
+  getUserByName,
+  isNameTaken,
+  setPasswordHash,
+  updateUserName,
+  updateUserAvatar,
+  toPublicUser,
+  getAllUsersRanked,
+  getAllUsersAdmin,
+  deleteUser,
+  getMatchHistoryForUser,
+  applyBalanceDelta,
+  addXp,
+  resetUserLevels,
+  setJackpotUnlockLevel,
+  updateLastSeen,
+  addHaciendaTotal,
+  getHaciendaTotal,
   payIsrael,
+  bumpStat,
   addUnlockedShopItem,
   equipShopItem,
   setMovedToAndorra,
@@ -30,7 +31,7 @@ import {
 import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
 import { levelFromXp, SHOP_CATALOG } from '../../../shared/types';
 import { sanitizeInput } from '../security';
-import { findActiveRoomForUser } from '../roomManager';
+import { findActiveRoomForUser, chipsInPlayFor } from '../roomManager';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -393,7 +394,11 @@ export const authHandlers = (socket: Socket) => {
     }
     const players = (await Promise.all(Array.from(userIds).map(id => getUser(id))))
       .filter(Boolean)
-      .map(u => toPublicUser(u!));
+      .map(u => {
+        const pub = toPublicUser(u!);
+        // Patrimonio real: saldo fuera de mesa + fichas en juego (si está sentado all-in, su saldo de BD es 0).
+        return { ...pub, balance: pub.balance + chipsInPlayFor(u!.id) };
+      });
     callback({ ok: true, players });
   });
 
@@ -421,10 +426,12 @@ export const authHandlers = (socket: Socket) => {
     }
     
     await applyBalanceDelta(user.id, -amt);
-    
+
     const tax = Math.floor(amt * 0.2);
     const finalAmount = amt - tax;
     await applyBalanceDelta(target.id, finalAmount);
+    bumpStat(user.id, 'gifts_sent', amt);
+    bumpStat(target.id, 'gifts_received', finalAmount);
     
     if (tax > 0) {
       const newTotal = await addHaciendaTotal(tax);

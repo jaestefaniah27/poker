@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { authUser } from '../socketHelpers';
-import { applyBalanceDelta, getUser, addOneFreeSpin, toPublicUser, addXp } from '../db';
+import { applyBalanceDelta, getUser, addOneFreeSpin, toPublicUser, addXp, bumpStat } from '../db';
 import { TRIVIA_QUESTIONS } from '../triviaQuestions';
 import { triviaRewardsFor, TriviaReward, XP_PER_TRIVIA_CORRECT, XP_PER_TRIVIA_PARTICIPATION, triviaCooldownMs, triviaSpinCount } from '../../../shared/types';
 
@@ -64,6 +64,8 @@ export const triviaHandlers = (socket: Socket) => {
     triviaState.set(user.id, { lastAnswered: Date.now(), pendingId: null, seenIds: state.seenIds });
 
     const isCorrect = answerIndex === q.correct;
+    bumpStat(user.id, 'trivia_answered');
+    if (isCorrect) bumpStat(user.id, 'trivia_correct');
     if (isCorrect) {
       await addXp(user.id, XP_PER_TRIVIA_CORRECT);
       const dbUser = await getUser(user.id);

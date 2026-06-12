@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { authUser } from '../socketHelpers';
-import { getUser, toPublicUser, applyBalanceDelta } from '../db';
+import { getUser, toPublicUser, applyBalanceDelta, bumpStat, maxStat } from '../db';
 import { JACKPOT_TIERS } from '../../../shared/types';
 
 interface CrashGame {
@@ -54,6 +54,8 @@ export const crashHandlers = (socket: Socket) => {
     if (betAmt <= 0 || !JACKPOT_TIERS.includes(betAmt)) { callback({ error: 'Apuesta inválida' }); return; }
 
     await applyBalanceDelta(user.id, -betAmt);
+    bumpStat(user.id, 'crash_games');
+    bumpStat(user.id, 'crash_total_bet', betAmt);
     const dbUser = await getUser(user.id);
 
     activeCrashGames.set(socket.id, {
@@ -83,6 +85,10 @@ export const crashHandlers = (socket: Socket) => {
     activeCrashGames.delete(socket.id);
 
     const newBalance = await applyBalanceDelta(user.id, winAmount);
+    bumpStat(user.id, 'crash_cashouts');
+    bumpStat(user.id, 'crash_total_won', winAmount);
+    maxStat(user.id, 'crash_biggest_win', winAmount);
+    maxStat(user.id, 'crash_best_mult_x100', Math.round(m * 100));
     const dbUser = await getUser(user.id);
     callback({ ok: true, multiplier: m, winAmount, newBalance, user: dbUser ? toPublicUser(dbUser) : undefined });
   });

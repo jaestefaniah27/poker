@@ -6,9 +6,12 @@ import {
   BJ_BETTING_DURATION, BJ_DEALER_REVEAL_DELAY,
   touchRoom
 } from '../roomManager';
+import { initShoe } from '../blackjackEngine';
 import { broadcastRoom, io, hasOnlinePlayers } from '../socketHelpers';
 import { applyBalanceDelta, getUser } from '../db';
 import { Room } from '../../../shared/types';
+
+const RESHUFFLE_PAUSE_MS = 2_500;
 
 // ¿Queda alguien con mano viva en playerAction?
 const anyPlaying = (room: Room): boolean =>
@@ -95,6 +98,8 @@ const onResolveTimeout = (roomId: string) => {
       p.bet = 0;
       p.bjResult = undefined;
       p.bjDelta = undefined;
+      p.bjSidebetResults = undefined;
+      p.bjSidebetDelta = undefined;
       changed = true;
     }
   });
@@ -140,6 +145,20 @@ const proceedDeal = async (roomId: string) => {
     // nadie apostó — reabrimos timer
     armBettingTimer(roomId);
     broadcastRoom(roomId);
+    return;
+  }
+  if (next === 'reshuffling') {
+    // Pausa visible: el cliente muestra animación de barajado antes de repartir
+    broadcastRoom(roomId);
+    setTimeout(() => {
+      const r = getRoom(roomId);
+      if (!r || r.bjPhase !== 'reshuffling') return;
+      initShoe(r);
+      const next2 = dealBlackjackHands(roomId);
+      broadcastRoom(roomId);
+      if (next2 === 'playerAction') armActionPhaseTimer(roomId);
+      else if (next2 === 'dealerAction') armDealerTimer(roomId);
+    }, RESHUFFLE_PAUSE_MS);
     return;
   }
   broadcastRoom(roomId);
@@ -218,19 +237,19 @@ export const handleBlackjackLeave = (roomId: string) => {
 };
 
 export const blackjackHandlers = (socket: Socket) => {
-  socket.on('bjPlaceBet', ({ roomId, amount }) => {
+  socket.on('bjPlaceBet', ({ roomId, amount, sidebets }) => {
     const room = getRoom(roomId);
     if (!room || room.gameType !== 'blackjack') return;
     const seat = room.players.find(p => p.id === socket.id);
     if (!seat) return;
-    
+
     if (room.bjPhase !== 'waiting' && room.bjPhase !== 'betting') {
       if (!(room.bjPhase === 'resolve' && seat.bjHasContinued)) {
         return;
       }
     }
-    
-    const ok = placeBlackjackBet(roomId, seat.userId, Number(amount) || 0);
+
+    const ok = placeBlackjackBet(roomId, seat.userId, Number(amount) || 0, sidebets);
     if (!ok) return;
     
     if (!room.bettingDeadline) {
@@ -251,7 +270,7 @@ export const blackjackHandlers = (socket: Socket) => {
     if (!room || room.gameType !== 'blackjack') return;
     const seat = room.players.find(p => p.id === socket.id);
     if (!seat) return;
-    if (!['Hit', 'Stand', 'Double', 'Surrender', 'Split'].includes(action)) return;
+    if (!['Hit', 'Stand', 'Double', 'Surrender', 'Split', 'Insurance'].includes(action)) return;
     // Concurrente: cada jugador actúa sobre su mano. No tocamos el timer de fase por acción individual.
     const next = blackjackPlayerAction(roomId, seat.userId, action);
     if (!next) return; // acción inválida (no es 'playing', etc.)
@@ -285,6 +304,8 @@ export const blackjackHandlers = (socket: Socket) => {
     p.bet = 0; // limpiar apuesta de la ronda anterior
     p.bjResult = undefined;
     p.bjDelta = undefined;
+    p.bjSidebetResults = undefined;
+    p.bjSidebetDelta = undefined;
 
     // Los jugadores offline no pueden pulsar Continuar: no deben bloquear la ronda.
     room.players.forEach(pl => {
@@ -293,6 +314,8 @@ export const blackjackHandlers = (socket: Socket) => {
         pl.bet = 0;
         pl.bjResult = undefined;
         pl.bjDelta = undefined;
+        pl.bjSidebetResults = undefined;
+        pl.bjSidebetDelta = undefined;
       }
     });
 

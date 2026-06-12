@@ -5,7 +5,48 @@ import { fmtChips } from '../utils';
 // Chip catalogue. Rounds (<1000) are circles; plaques (>=1000) are rectangles.
 // Border: striped/dashed ("rallado") < 100k, smooth/solid >= 100k.
 // Physical size scales with denomination (small value -> smaller chip).
-export type ChipDenom = { v: number; color: string; ring: string; label: string; premium?: 'carbon' | 'silver' | 'gold' | 'diamond'; isCustom?: boolean };
+export type ChipDenom = { v: number; color: string; ring: string; label: string; premium?: 'carbon' | 'silver' | 'gold' | 'diamond'; isCustom?: boolean; baseV?: number };
+
+// --- Multiplicador automático de fichas ---
+// Si el saldo del jugador es >= 1000x el valor de la ficha mayor (5M => 5B),
+// todas las fichas valen 1000x más y se reetiquetan (k->M, M->B, ...). Apilable:
+// >=5B => x1000, >=5T => x1.000.000, >=5Q => x1.000.000.000.
+const LARGEST_CHIP = 5_000_000;
+export const CHIP_MULT_THRESHOLD = LARGEST_CHIP * 1000; // 5B — saldo mínimo para tener multiplicador
+
+export const chipMultEnabled = (): boolean => localStorage.getItem('chipMultiplierEnabled') !== '0';
+
+export const chipMultiplierFor = (balance: number): number => {
+  if (!chipMultEnabled()) return 1;
+  let mult = 1;
+  while (balance >= LARGEST_CHIP * mult * 1000) mult *= 1000;
+  return mult;
+};
+
+// nº de escalones de 1000 que representa el multiplicador (1->0, 1000->1, 1e6->2...).
+const multSteps = (mult: number): number => Math.round(Math.log(mult) / Math.log(1000));
+
+const SUFFIXES = ['', 'k', 'M', 'B', 'T', 'Q'];
+const shiftSuffix = (label: string, steps: number): string => {
+  const m = label.match(/^([\d.]+)([a-zA-Z]?)$/);
+  if (!m) return label;
+  const [, num, suf] = m;
+  const idx = SUFFIXES.indexOf(suf);
+  if (idx < 0) return label;
+  return num + SUFFIXES[Math.min(idx + steps, SUFFIXES.length - 1)];
+};
+
+// Escala una ficha base a su valor real con etiqueta desplazada, preservando `baseV`
+// para que la apariencia (tamaño/forma/borde/premium) siga atada a la ficha base.
+export const scaleDef = (d: ChipDenom, mult: number): ChipDenom => {
+  if (mult <= 1 || d.isCustom) return d;
+  const steps = multSteps(mult);
+  const isRound = d.v < 1000; // las redondas se ven idénticas (sin sufijo)
+  return { ...d, v: d.v * mult, baseV: d.v, label: isRound ? d.label : shiftSuffix(d.label, steps) };
+};
+
+// Valor "visual" — el de la ficha base, usado para decidir forma/tamaño/borde.
+const vis = (d: ChipDenom): number => d.baseV ?? d.v;
 
 export const CHIP_DEFS: ChipDenom[] = [
   { v: 25,     color: '#10b981', ring: '#064e3b', label: '25'   },
@@ -42,7 +83,8 @@ export const CHIP_PAGES = CHIP_PAGE_VALUES.length + 1;
 
 // Default page scaled to a stack (umbrales fijos por buy-in):
 //  <=1k → p0 | <=25k → p1 (5k,10k,25k) | <=100k → p2 (50k,100k) | resto → p3 (250k,500k)
-export const pageForAmount = (amount: number): number => {
+export const pageForAmount = (amount: number, mult = 1): number => {
+  amount = amount / mult; // umbrales en valor base de ficha
   if (amount < 5000) return 0;
   if (amount < 50000) return 1;
   if (amount < 250000) return 2;
@@ -62,31 +104,33 @@ export const sizeForValue = (v: number): number => {
   return 58; // Premium — todas del mismo tamaño
 };
 
-export const Chip = ({ d, size = 36 }: { d: ChipDenom; size?: number }) => {
+export const Chip = ({ d, size = 36, forceSize = false }: { d: ChipDenom; size?: number; forceSize?: boolean }) => {
   if (d.isCustom) {
-    const w = Math.max(64, size * 1.6);
+    // forceSize (miniaturas): sin ancho mínimo de 64 → cabe en la zona sidebets.
+    const w = forceSize ? size * 1.6 : Math.max(64, size * 1.6);
     const h = size * 1.1;
     return (
-      <div 
+      <div
         className="flex items-center justify-center font-black text-cyan-300 relative shrink-0 overflow-hidden"
-        style={{ 
-          width: w, height: h, 
-          borderRadius: 8, 
+        style={{
+          width: w, height: h,
+          borderRadius: 8,
           background: 'linear-gradient(135deg, #0f172a, #1e293b)',
           boxShadow: '0 4px 10px rgba(0,0,0,0.5), 0 0 12px rgba(6,182,212,0.4), inset 0 0 8px rgba(6,182,212,0.2)',
           border: '2px solid #06b6d4'
         }}
       >
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, #06b6d4 4px, #06b6d4 8px)' }} />
-        <span className="relative z-10 text-[14px]" style={{ textShadow: '0 0 6px rgba(6,182,212,1)' }}>{d.label}</span>
+        <span className="relative z-10" style={{ fontSize: forceSize ? Math.round(size * 0.5) : 14, textShadow: '0 0 6px rgba(6,182,212,1)' }}>{d.label}</span>
       </div>
     );
   }
 
-  const naturalH = sizeForValue(d.v);
-  // Large chips (100k+) always at their natural size regardless of premium
-  const h = d.isCustom ? size * 1.1 : (d.premium || d.v >= 100000) ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
-  const plaque = isPlaque(d.v);
+  const naturalH = sizeForValue(vis(d));
+  // Large chips (100k+) always at their natural size regardless of premium...
+  // ...salvo forceSize: respeta el size pedido (para miniaturas, p.ej. zona sidebets).
+  const h = d.isCustom ? size * 1.1 : forceSize ? size : (d.premium || vis(d) >= 100000) ? Math.max(size ?? naturalH, naturalH) : (size ?? naturalH);
+  const plaque = isPlaque(vis(d));
   const w = d.isCustom ? Math.max(64, (size || 36) * 1.6) : plaque ? Math.round(h * 1.28) : h;
   const radius = d.isCustom ? 8 : plaque ? Math.round(h * 0.13) : 9999;
   const innerRadius = d.isCustom ? 8 : plaque ? Math.round(h * 0.07) : 9999;
@@ -154,7 +198,7 @@ export const Chip = ({ d, size = 36 }: { d: ChipDenom; size?: number }) => {
     );
   }
 
-  const smooth = isSmooth(d.v);
+  const smooth = isSmooth(vis(d));
   return (
     <div
       className="flex items-center justify-center font-extrabold text-white relative shrink-0"
@@ -178,9 +222,11 @@ export const Chip = ({ d, size = 36 }: { d: ChipDenom; size?: number }) => {
 };
 
 // --- Keypad Modal ---
-const KeypadModal = ({ initialValue, maxBet, onSave, onClose }: { initialValue: number, maxBet: number, onSave: (v: number) => void, onClose: () => void }) => {
+const KeypadModal = ({ initialValue, maxBet, mult = 1, onSave, onClose }: { initialValue: number, maxBet: number, mult?: number, onSave: (v: number) => void, onClose: () => void }) => {
+  const minScale = 1_000_000 * mult; // con multiplicador, la escala mínima sube (M->B->T...)
+  const minProChip = 30_000_000 * mult;
   const [numStr, setNumStr] = useState('');
-  const [scale, setScale] = useState<number>(1_000_000); // Default M
+  const [scale, setScale] = useState<number>(minScale); // Default M (o B/T... con multiplicador)
 
   useEffect(() => {
     if (initialValue >= 1_000_000_000_000_000) { setScale(1_000_000_000_000_000); setNumStr(Math.floor(initialValue / 1_000_000_000_000_000).toString()); }
@@ -203,8 +249,8 @@ const KeypadModal = ({ initialValue, maxBet, onSave, onClose }: { initialValue: 
 
   const handleSave = () => {
     let finalNum = parseFloat(numStr || '0') * scale;
-    if (isNaN(finalNum) || finalNum < 30_000_000) finalNum = 30_000_000;
-    if (finalNum > maxBet && maxBet >= 30_000_000) finalNum = maxBet;
+    if (isNaN(finalNum) || finalNum < minProChip) finalNum = minProChip;
+    if (finalNum > maxBet && maxBet >= minProChip) finalNum = maxBet;
     onSave(finalNum);
   };
 
@@ -233,7 +279,7 @@ const KeypadModal = ({ initialValue, maxBet, onSave, onClose }: { initialValue: 
         </div>
 
         <div className="grid grid-cols-4 gap-2">
-          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Q', v:1_000_000_000_000_000}].map(s => (
+          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Q', v:1_000_000_000_000_000}].filter(s => s.v >= minScale).map(s => (
             <button 
               key={s.l} 
               onClick={() => setScale(s.v)}
@@ -274,14 +320,14 @@ const KeypadModal = ({ initialValue, maxBet, onSave, onClose }: { initialValue: 
 };
 
 // Custom Chip Page Component
-export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onAdd: (d: ChipDenom) => void; maxBet: number; pendingTotal: number; canBet: boolean }) => {
+export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet, mult = 1 }: { onAdd: (d: ChipDenom) => void; maxBet: number; pendingTotal: number; canBet: boolean; mult?: number }) => {
   const getMostSignificantDigitValue = (num: number) => {
     if (num <= 0) return 1;
     const magnitude = Math.pow(10, Math.floor(Math.log10(num)));
     return Math.floor(num / magnitude) * magnitude;
   };
 
-  const MIN_PRO_CHIP = 30_000_000;
+  const MIN_PRO_CHIP = 30_000_000 * mult;
   const [val, setVal] = useState(() => {
     const stored = localStorage.getItem('customChipValue');
     let init = stored ? parseInt(stored, 10) : MIN_PRO_CHIP;
@@ -292,10 +338,10 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
   const [showKeypad, setShowKeypad] = useState(false);
 
   useEffect(() => {
-    if (val > maxBet && maxBet >= 30_000_000) {
-      setVal(Math.max(30_000_000, getMostSignificantDigitValue(maxBet)));
+    if (val > maxBet && maxBet >= MIN_PRO_CHIP) {
+      setVal(Math.max(MIN_PRO_CHIP, getMostSignificantDigitValue(maxBet)));
     }
-  }, [maxBet, val]);
+  }, [maxBet, val, MIN_PRO_CHIP]);
 
   useEffect(() => {
     localStorage.setItem('customChipValue', val.toString());
@@ -328,8 +374,8 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
         }
       }
       
-      const upperLimit = Math.max(maxBet, 30_000_000);
-      return Math.max(30_000_000, Math.min(upperLimit, nv));
+      const upperLimit = Math.max(maxBet, MIN_PRO_CHIP);
+      return Math.max(MIN_PRO_CHIP, Math.min(upperLimit, nv));
     });
   };
 
@@ -365,9 +411,10 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
       
       <AnimatePresence>
         {showKeypad && (
-          <KeypadModal 
-            initialValue={val} 
+          <KeypadModal
+            initialValue={val}
             maxBet={maxBet}
+            mult={mult}
             onSave={(newVal) => {
               setVal(newVal);
               setShowKeypad(false);
@@ -381,13 +428,13 @@ export const CustomChipControl = ({ onAdd, maxBet, pendingTotal, canBet }: { onA
 };
 
 // Paged chip rail: 5 chips visible, swipe or arrows to reveal next page (overlapping scales).
-export const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet }: {
+export const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet, mult = 1 }: {
   page: number; setPage: (p: number) => void;
-  onAdd: (d: ChipDenom) => void; maxBet: number; pendingTotal: number; canBet: boolean;
+  onAdd: (d: ChipDenom) => void; maxBet: number; pendingTotal: number; canBet: boolean; mult?: number;
 }) => {
   const dragX = useRef(0);
   const dirRef = useRef(0);
-  const slice = page < CHIP_PAGE_VALUES.length ? CHIP_PAGE_VALUES[page].map(defByValue) : [];
+  const slice = page < CHIP_PAGE_VALUES.length ? CHIP_PAGE_VALUES[page].map(defByValue).map(d => scaleDef(d, mult)) : [];
   const go = (delta: number) => {
     const np = Math.max(0, Math.min(CHIP_PAGES - 1, page + delta));
     if (np !== page) { dirRef.current = delta; setPage(np); }
@@ -423,7 +470,7 @@ export const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet }:
                   );
                 })
               ) : (
-                <CustomChipControl onAdd={onAdd} maxBet={maxBet} pendingTotal={pendingTotal} canBet={canBet} />
+                <CustomChipControl onAdd={onAdd} maxBet={maxBet} pendingTotal={pendingTotal} canBet={canBet} mult={mult} />
               )}
             </motion.div>
           </AnimatePresence>
@@ -443,14 +490,14 @@ export const ChipRail = ({ page, setPage, onAdd, maxBet, pendingTotal, canBet }:
 };
 
 // Build a stack of chip glyphs from an amount (greedy biggest denoms first, cap at 6 visual chips)
-export const chipsFromAmount = (amount: number): ChipDenom[] => {
-  if (amount >= 30_000_000) {
+export const chipsFromAmount = (amount: number, mult = 1): ChipDenom[] => {
+  if (amount >= 30_000_000 * mult) {
     return [{ v: amount, label: fmtChips(amount), color: '', ring: '', isCustom: true }];
   }
 
   const stack: ChipDenom[] = [];
   let remaining = amount;
-  const desc = [...CHIP_DEFS].sort((a, b) => b.v - a.v);
+  const desc = CHIP_DEFS.map(d => scaleDef(d, mult)).sort((a, b) => b.v - a.v);
   for (const d of desc) {
     while (remaining >= d.v && stack.length < 24) {
       stack.push(d);
@@ -458,7 +505,7 @@ export const chipsFromAmount = (amount: number): ChipDenom[] => {
     }
   }
   // If nothing fits but amount > 0, show one smallest chip
-  if (stack.length === 0 && amount > 0) stack.push(CHIP_DEFS[0]);
+  if (stack.length === 0 && amount > 0) stack.push(scaleDef(CHIP_DEFS[0], mult));
   return stack;
 };
 
@@ -466,11 +513,11 @@ export const chipsFromAmount = (amount: number): ChipDenom[] => {
 export const ChipPile = ({ items, size = 36 }: { items: ChipDenom[]; size?: number }) => {
   const actualH = (d: ChipDenom) => {
     if (d.isCustom) return 42 * 1.1;
-    return (d.premium || d.v >= 100000) ? sizeForValue(d.v) : size;
+    return (d.premium || vis(d) >= 100000) ? sizeForValue(vis(d)) : size;
   };
   const actualW = (d: ChipDenom) => {
     if (d.isCustom) return 60;
-    const h = actualH(d); return isPlaque(d.v) ? Math.round(h * 1.28) : h;
+    const h = actualH(d); return isPlaque(vis(d)) ? Math.round(h * 1.28) : h;
   };
   const pileW = Math.max(...items.map(d => actualW(d)));
   const pileH = Math.max(...items.map(d => actualH(d)));
@@ -507,9 +554,9 @@ export const createColumns = <T,>(arr: T[], itemsPerStack: number, stacksPerCol:
 
 // Betting circle stack: rounds / plaques / larges in SEPARATE piles (never mixed).
 export const ChipStack = ({ chips, size = 36 }: { chips: ChipDenom[]; size?: number }) => {
-  const rounds  = chips.filter(c => c.v < 1000 && !c.isCustom);
-  const plaques = chips.filter(c => !c.premium && c.v >= 1000 && c.v < 100000 && !c.isCustom);
-  const larges  = chips.filter(c => (c.premium || c.v >= 100000) && !c.isCustom);
+  const rounds  = chips.filter(c => vis(c) < 1000 && !c.isCustom);
+  const plaques = chips.filter(c => !c.premium && vis(c) >= 1000 && vis(c) < 100000 && !c.isCustom);
+  const larges  = chips.filter(c => (c.premium || vis(c) >= 100000) && !c.isCustom);
   const customs = chips.filter(c => c.isCustom);
 
   const roundCols = createColumns(rounds, 10, 2);
