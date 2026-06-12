@@ -8,6 +8,7 @@ import { triviaHandlers } from './triviaHandlers';
 import { crashHandlers } from './crashHandler';
 import { updateLastSeen, bumpStat } from '../db';
 import { broadcastPresence } from '../socketHelpers';
+import { rouletteEngine } from '../rouletteEngine';
 
 const MAX_EVENTS_PER_SEC = 20;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -69,6 +70,7 @@ export const registerAllHandlers = (socket: Socket) => {
     if (socket.data?.user?.id) {
       // Tiempo jugado: duración de la conexión del socket autenticado.
       bumpStat(socket.data.user.id, 'time_played_ms', Date.now() - connectedAt);
+      rouletteEngine.leaveTable(socket.data.user.id);
       updateLastSeen(socket.data.user.id)
         .then(() => broadcastPresence())
         .catch(console.error);
