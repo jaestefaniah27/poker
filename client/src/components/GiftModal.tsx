@@ -12,6 +12,12 @@ interface Props {
   onSend: (amount: number) => void;
 }
 
+function quickAmounts(balance: number): number[] {
+  const n = Math.floor(Math.log10(Math.max(balance, 10)));
+  const base = Math.pow(10, Math.max(0, n - 6));
+  return [base, base * 100, base * 10_000, base * 1_000_000];
+}
+
 export default function GiftModal({ targetName, targetAvatar, targetLevel, balance, onClose, onSend }: Props) {
   const [amountStr, setAmountStr] = useState('');
   const [loading, setLoading] = useState(false);
@@ -87,7 +93,7 @@ export default function GiftModal({ targetName, targetAvatar, targetLevel, balan
           </div>
 
           <div className="grid grid-cols-4 gap-2">
-            {[10000, 100000, 1000000, 10000000].map(amt => (
+            {quickAmounts(balance).map(amt => (
               <button
                 key={amt}
                 onClick={() => addAmount(amt)}

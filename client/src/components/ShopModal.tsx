@@ -16,6 +16,15 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
   const [tab, setTab] = useState<'cosmetics' | 'social'>('cosmetics');
   const [israelDonation, setIsraelDonation] = useState('');
 
+  const israelParsed = parseInt(israelDonation.replace(/\D/g, ''), 10) || 0;
+  const israelValid = israelParsed > 0;
+
+  const israelQuickAmounts = (balance: number): number[] => {
+    const n = Math.floor(Math.log10(Math.max(balance, 10)));
+    const base = Math.pow(10, Math.max(0, n - 6));
+    return [base, base * 100, base * 10_000, base * 1_000_000];
+  };
+
   const items = SHOP_CATALOG;
 
   const isUnlocked = (id: string, type: string) => {
@@ -50,9 +59,8 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
   };
 
   const handleDonateIsrael = () => {
-    const amt = parseInt(israelDonation);
-    if (isNaN(amt) || amt <= 0) return onError('Cantidad inválida');
-    socket.emit('donateToIsrael', { token: getStorage().getItem('pokerToken'), amount: amt }, (res: any) => {
+    if (!israelValid) return onError('Cantidad inválida');
+    socket.emit('donateToIsrael', { token: getStorage().getItem('pokerToken'), amount: israelParsed }, (res: any) => {
       if (res.error) onError(res.error);
       else {
         onUpdateUser(res.user);
@@ -227,25 +235,48 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
 
         {tab === 'social' ? (
           <div>
-            <div className="mb-8 p-6 bg-blue-900/30 border border-blue-500/30 rounded-xl">
-              <h3 className="text-xl font-bold text-blue-400 mb-2">🇮🇱 Donar a Israel</h3>
-              <p className="text-sm text-gray-300 mb-4">
+            <div className="mb-8 p-6 bg-blue-900/30 border border-blue-500/30 rounded-2xl">
+              <h3 className="text-xl font-bold text-blue-400 mb-1">🇮🇱 Donar a Israel</h3>
+              <p className="text-sm text-gray-300 mb-1">
                 Apoya la causa y serás bendecido. Tu RTP en minijuegos se verá potenciado hasta recuperar x1.5 lo que hayas donado.
-                <br />
-                <span className="text-yellow-400 font-bold">Pool actual de bendición: {fmtChips(user.israelPool || 0)}</span>
               </p>
-              <div className="flex gap-2">
+              <p className="text-sm text-yellow-400 font-bold mb-4">Pool actual de bendición: {fmtChips(user.israelPool || 0)}</p>
+
+              <div className="space-y-3">
                 <input
-                  type="number"
-                  min="1"
-                  placeholder="Cantidad a donar..."
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded p-2 text-white outline-none focus:border-blue-500"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 text-center text-3xl font-black text-blue-300 focus:outline-none focus:border-blue-500/50 transition-colors"
                   value={israelDonation}
-                  onChange={e => setIsraelDonation(e.target.value)}
+                  onChange={e => setIsraelDonation(e.target.value.replace(/\D/g, ''))}
                 />
+
+                <div className="grid grid-cols-4 gap-2">
+                  {israelQuickAmounts(user.balance).map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => setIsraelDonation(String(israelParsed + amt))}
+                      className="py-2 rounded-xl bg-white/5 border border-white/5 text-xs font-bold text-gray-300 hover:bg-white/10 active:scale-95 transition-all"
+                    >
+                      +{fmtChips(amt)}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-xs text-gray-500">Saldo disponible:</span>
+                  <span className="text-sm font-bold text-emerald-400">{fmtChips(user.balance)}</span>
+                </div>
+
                 <button
                   onClick={handleDonateIsrael}
-                  className="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition-colors"
+                  disabled={!israelValid}
+                  className={`w-full py-3 rounded-xl font-black text-sm uppercase tracking-wider transition-all active:scale-[0.98] ${
+                    israelValid
+                      ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]'
+                      : 'bg-white/5 text-gray-500 cursor-not-allowed'
+                  }`}
                 >
                   Donar
                 </button>
