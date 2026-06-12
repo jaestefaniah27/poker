@@ -51,7 +51,7 @@ const INACTIVITY_LIMIT = 5 * 60 * 1000;
 const OFFLINE_KICK_LIMIT = 5 * 60 * 1000;
 const SWEEP_INTERVAL = 30 * 1000;
 
-import { initDB, loadRoomsFromDB, setOnBalanceChanged } from './db';
+import { initDB, loadRoomsFromDB, setOnBalanceChanged, resetJorgeCooldowns } from './db';
 import { restoreRoom, resumeBlindTimers } from './roomManager';
 import { loadJackpotState } from './jackpotEngine';
 import { rouletteEngine } from './rouletteEngine';
@@ -67,6 +67,8 @@ setOnBalanceChanged(() => {
 const bootServer = async () => {
   console.log('Initializing database migrations...');
   await initDB();
+
+  setInterval(() => { resetJorgeCooldowns(); }, 20_000);
 
   console.log('Loading jackpot state...');
   await loadJackpotState();

@@ -26,10 +26,11 @@ import {
   addUnlockedShopItem,
   equipShopItem,
   setMovedToAndorra,
-  addIsraelDonation
+  addIsraelDonation,
+  dbRun
 } from '../db';
 import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
-import { levelFromXp, SHOP_CATALOG } from '../../../shared/types';
+import { levelFromXp, SHOP_CATALOG, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser, chipsInPlayFor } from '../roomManager';
 
@@ -178,7 +179,7 @@ export const authHandlers = (socket: Socket) => {
     }
 
     await applyBalanceDelta(user.id, -item.price);
-    
+
     if (item.type === 'social' && itemId === 'social_andorra') {
       const { setMovedToAndorra } = require('../db');
       await setMovedToAndorra(user.id);
@@ -461,5 +462,55 @@ export const authHandlers = (socket: Socket) => {
     broadcastPresence();
     
     callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('donateToIsrael', async ({ token, amount }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const amt = Math.floor(Number(amount));
+    if (isNaN(amt) || amt <= 0) { callback({ error: 'Cantidad inválida' }); return; }
+
+    await addIsraelDonation(user.id, amt);
+
+    const updated = await getUser(user.id);
+    callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('buyTrackBoost', async ({ token, track }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const validTracks: LevelTrack[] = ['paguita', 'dieta', 'ruleta', 'trivia'];
+    if (!validTracks.includes(track)) { callback({ error: 'Track inválido' }); return; }
+    const t = track as LevelTrack;
+
+    const dbUser = await getUser(user.id);
+    if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+
+    // Require max level
+    const maxLevelMap: Record<LevelTrack, number> = { paguita: PAGUITA_MAX_LEVEL, dieta: DIETA_MAX_LEVEL, ruleta: RULETA_MAX_LEVEL, trivia: TRIVIA_MAX_LEVEL };
+    const userLevelMap: Record<LevelTrack, number> = { paguita: dbUser.paguita_level ?? 0, dieta: dbUser.dieta_level ?? 0, ruleta: dbUser.ruleta_level ?? 0, trivia: dbUser.trivia_level ?? 0 };
+    const maxLevel = maxLevelMap[t];
+    const userLevel = userLevelMap[t];
+    if (userLevel < maxLevel) { callback({ error: `Necesitas ${track} al nivel máximo (${maxLevel})` }); return; }
+
+    const boosts: TrackBoosts = (() => { try { const p = JSON.parse(dbUser.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+    const currentCount = trackBoostCount(t, boosts);
+    const maxBoosts = TRACK_BOOST_MAX[t];
+    if (currentCount >= maxBoosts) { callback({ error: 'Ya tienes el máximo de mejoras para este track' }); return; }
+
+    const cost = boostCost(t, currentCount);
+    if (dbUser.balance < cost) { callback({ error: 'Saldo insuficiente' }); return; }
+
+    await applyBalanceDelta(user.id, -cost);
+    const newBoosts: TrackBoosts = { ...boosts, [t]: currentCount + 1 };
+    await dbRun('UPDATE users SET unlocked_boosts = ? WHERE id = ?', [JSON.stringify(newBoosts), user.id]);
+
+    const updated = await getUser(user.id);
+    if (updated) {
+      socket.data.user = toPublicUser(updated);
+      callback({ ok: true, user: socket.data.user });
+    }
   });
 };

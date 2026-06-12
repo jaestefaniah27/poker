@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
-import { ruletaOptionsFor, ruletaSpinsFor } from '../../../shared/types';
+import { ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions } from '../../../shared/types';
+import type { TrackBoosts } from '../../../shared/types';
 
 interface WheelModalProps {
   user: any;
@@ -46,7 +47,7 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
   const [wonSpins, setWonSpins] = useState<number>(expectedSpins);
   const [hasSpun, setHasSpun] = useState(false);
 
-  const wheelOptions = useMemo(() => shuffle(ruletaOptionsFor(user.ruletaLevel ?? 0)), [user.ruletaLevel]);
+  const wheelOptions = useMemo(() => shuffle(ruletaBoostedOptions(user.ruletaLevel ?? 0, (user.unlockedBoosts ?? {}) as TrackBoosts)), [user.ruletaLevel, user.unlockedBoosts]);
   const sliceAngle = DEG;
 
   const handleSpin = () => {

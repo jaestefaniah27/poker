@@ -205,6 +205,9 @@ export interface PublicUser {
   israelDonation?: number;
   israelPool?: number; // 1.5x of donation pool remaining
   movedToAndorra?: boolean;
+
+  // --- Mejoras de Tienda ---
+  unlockedBoosts?: Partial<Record<LevelTrack, number>>; // count per track
 }
 
 export const STAKE_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];
@@ -212,6 +215,12 @@ export const STAKE_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 100
 // Jackpot-specific tiers and unlock costs (cost = 10x bet)
 export const JACKPOT_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000, 25000000, 50000000, 100000000, 250000000, 500000000, 1000000000, 5000000000, 10000000000, 25000000000, 50000000000, 100000000000, 250000000000, 500000000000, 1000000000000, 5000000000000, 10000000000000, 25000000000000, 50000000000000, 100000000000000];
 export const JACKPOT_UNLOCK_COSTS: number[] = JACKPOT_TIERS.map(t => t * 10);
+export const snapToJackpotTier = (v: number): number =>
+  JACKPOT_TIERS.reduce((best, t) => Math.abs(t - v) < Math.abs(best - v) ? t : best);
+export const ruletaBoostedOptions = (ruletaLevel: number, boosts: TrackBoosts): number[] => {
+  const mult = boostMultiplier('ruleta', boosts);
+  return ruletaOptionsFor(ruletaLevel).map(v => mult === 1 ? v : snapToJackpotTier(v * mult));
+};
 export const BLIND_DIVISORS: number[] = [20, 10, 5, 4];
 export const DEFAULT_BLIND_DIVISOR = 10;
 
@@ -407,6 +416,31 @@ export interface ShopItem {
   description?: string;
 }
 
+export type TrackBoosts = Partial<Record<LevelTrack, number>>;
+
+export const TRACK_BASE_PRIZE: Record<LevelTrack, number> = {
+  paguita: 10_000_000,
+  dieta: 1_000_000,
+  ruleta: 10_000_000,
+  trivia: 10_000_000,
+};
+
+export const TRACK_BOOST_MAX: Record<LevelTrack, number> = {
+  paguita: 3,
+  dieta: 4,
+  ruleta: 3,
+  trivia: 3,
+};
+
+export const trackBoostCount = (track: LevelTrack, boosts: TrackBoosts | undefined): number =>
+  boosts?.[track] ?? 0;
+
+export const boostMultiplier = (track: LevelTrack, boosts: TrackBoosts | undefined): number =>
+  Math.pow(100, trackBoostCount(track, boosts));
+
+export const boostCost = (track: LevelTrack, currentCount: number): number =>
+  Math.round(TRACK_BASE_PRIZE[track] * Math.pow(100, currentCount) * 1000);
+
 export const SHOP_CATALOG: ShopItem[] = [
   // --- Avatar Decorations ---
   // Bronce
@@ -441,14 +475,19 @@ export const SHOP_CATALOG: ShopItem[] = [
   { id: 'name_ruby', name: 'Placa de Rubí', price: 50_000_000_000, type: 'name' },
   { id: 'name_emerald', name: 'Placa de Esmeralda', price: 150_000_000_000, type: 'name' },
   { id: 'name_rainbow', name: 'Brillo Arcoíris Animado', price: 300_000_000_000, type: 'name' },
+  { id: 'name_fire', name: 'Nombre en Llamas', price: 750_000_000_000, type: 'name', description: 'Tu nombre arde con fuego vivo. Que tiemble la mesa.' },
+  { id: 'name_royal', name: 'Sello Real', price: 2_000_000_000_000, type: 'name', description: 'Oro líquido animado digno de la realeza. El cosmético más exclusivo de la casa.' },
 
   // --- Blackjack Felts ---
   { id: 'felt_red', name: 'Tapete Rojo Casino', price: 100_000_000, type: 'felt' },
   { id: 'felt_blue', name: 'Tapete Azul Noche', price: 500_000_000, type: 'felt' },
   { id: 'felt_purple', name: 'Tapete Morado Neón', price: 2_000_000_000, type: 'felt' },
   { id: 'felt_vip', name: 'Tapete VIP Negro y Oro', price: 10_000_000_000, type: 'felt' },
+  { id: 'felt_galaxy', name: 'Tapete Galaxia', price: 50_000_000_000, type: 'felt', description: 'Juega entre estrellas. Fondo cósmico con destellos animados.' },
+  { id: 'felt_royal', name: 'Tapete Esmeralda Real', price: 250_000_000_000, type: 'felt', description: 'Esmeralda profunda con ribete dorado. Solo para alta sociedad.' },
 
   // --- Social Benefits ---
   { id: 'social_andorra', name: 'Mudanza a Andorra', price: 500_000_000_000, type: 'social', description: 'Otorga una exención fiscal que reduce la posibilidad de que Hacienda te incaute dinero a 1/10. Además, añade el sello de Andorra a tu nombre de forma permanente.' },
+
 ];
 

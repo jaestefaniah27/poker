@@ -2,14 +2,18 @@ import { Socket } from 'socket.io';
 import { authUser } from '../socketHelpers';
 import { applyBalanceDelta, getUser, addOneFreeSpin, toPublicUser, addXp, bumpStat } from '../db';
 import { TRIVIA_QUESTIONS } from '../triviaQuestions';
-import { triviaRewardsFor, TriviaReward, XP_PER_TRIVIA_CORRECT, XP_PER_TRIVIA_PARTICIPATION, triviaCooldownMs, triviaSpinCount } from '../../../shared/types';
+import { triviaRewardsFor, TriviaReward, XP_PER_TRIVIA_CORRECT, XP_PER_TRIVIA_PARTICIPATION, triviaCooldownMs, triviaSpinCount, boostMultiplier, snapToJackpotTier, TrackBoosts } from '../../../shared/types';
 
 const triviaState = new Map<string, { lastAnswered: number; pendingId: number | null; seenIds: Set<number> }>();
 
 // Elige recompensa del pool filtrado por el nivel de trivia del jugador.
-function pickReward(triviaLevel: number): TriviaReward {
+function pickReward(triviaLevel: number, unlockedBoosts: TrackBoosts): TriviaReward {
   const pool = triviaRewardsFor(triviaLevel);
-  return pool[Math.floor(Math.random() * pool.length)];
+  const reward = pool[Math.floor(Math.random() * pool.length)];
+  const mult = boostMultiplier('trivia', unlockedBoosts);
+  if (mult === 1) return reward;
+  if (reward.type === 'chips') return { type: 'chips', amount: reward.amount * mult };
+  return { type: 'spin', value: snapToJackpotTier(reward.value * mult) };
 }
 
 function pickQuestion(userId: string) {
@@ -69,7 +73,8 @@ export const triviaHandlers = (socket: Socket) => {
     if (isCorrect) {
       await addXp(user.id, XP_PER_TRIVIA_CORRECT);
       const dbUser = await getUser(user.id);
-      const reward = pickReward(dbUser?.trivia_level ?? 0);
+      const boosts: TrackBoosts = (() => { try { const p = JSON.parse(dbUser?.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+      const reward = pickReward(dbUser?.trivia_level ?? 0, boosts);
       if (reward.type === 'chips') {
         const newBalance = await applyBalanceDelta(user.id, reward.amount);
         socket.emit('balanceUpdated', { balance: newBalance });

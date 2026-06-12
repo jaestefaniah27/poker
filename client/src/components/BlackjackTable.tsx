@@ -8,6 +8,7 @@ import AnimatedNumber from './AnimatedNumber';
 import type { Room, Player, Card, SidebetType, BjSidebetResult } from '../../../shared/types';
 import { SIDEBET_ORDER, SIDEBET_SHORT, SIDEBET_TOP_PAYOUT } from '../../../shared/types';
 import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip, chipMultiplierFor } from './Chips';
+import { FeltSurface, getFeltTheme } from './FeltSurface';
 
 type Sidebet = SidebetType;
 const sumChips = (cs: ChipDenom[]): number => cs.reduce((s, c) => s + c.v, 0);
@@ -157,7 +158,9 @@ const feltRanks: Record<string, number> = {
   'felt_red': 1,
   'felt_blue': 2,
   'felt_purple': 3,
-  'felt_vip': 4
+  'felt_vip': 4,
+  'felt_galaxy': 5,
+  'felt_royal': 6
 };
 
 const getHighestFelt = (players: Player[]) => {
@@ -175,13 +178,6 @@ const getHighestFelt = (players: Player[]) => {
   return highest;
 };
 
-const feltColors: Record<string, string> = {
-  'felt_red': 'radial-gradient(ellipse 130% 80% at 50% 35%, #7f1d1d 0%, #450a0a 40%, #220505 75%, #000000 100%)',
-  'felt_blue': 'radial-gradient(ellipse 130% 80% at 50% 35%, #1e3a8a 0%, #172554 40%, #020617 75%, #000000 100%)',
-  'felt_purple': 'radial-gradient(ellipse 130% 80% at 50% 35%, #581c87 0%, #3b0764 40%, #1e0231 75%, #000000 100%)',
-  'felt_vip': 'radial-gradient(ellipse 130% 80% at 50% 35%, #a16207 0%, #422006 40%, #1c0b01 75%, #000000 100%)',
-};
-const defaultFelt = 'radial-gradient(ellipse 130% 80% at 50% 35%, #14743f 0%, #0d4f2c 40%, #07321b 75%, #02110a 100%)';
 
 const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const myPlayer = room.players.find(p => p.userId === user.id) || null;
@@ -690,6 +686,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   }, [phase, myPlayer?.id]);
 
   const activeFeltId = getHighestFelt(room.players);
+  const feltTheme = getFeltTheme(activeFeltId || undefined);
 
   return (
     <div
@@ -707,18 +704,19 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           exit={{ y: '100%', zIndex: -1 }}
           transition={{ type: 'spring', stiffness: 200, damping: 25 }}
           className="absolute inset-0"
-          style={{ background: activeFeltId ? feltColors[activeFeltId] : defaultFelt }}
-        />
+        >
+          <FeltSurface feltId={activeFeltId || undefined} />
+        </motion.div>
       </AnimatePresence>
       {/* Felt micro-texture */}
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.06] z-0"
         style={{ backgroundImage: 'repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4) 0, rgba(255,255,255,0.4) 1px, transparent 1px, transparent 6px)' }}
       />
-      {/* Outer gold rim arc — subtle casino frame */}
+      {/* Outer rim arc — casino frame, color según tapete */}
       <div
         className="absolute inset-3 rounded-[40px] pointer-events-none z-10"
-        style={{ boxShadow: 'inset 0 0 0 2px rgba(217,164,65,0.18), inset 0 0 60px rgba(0,0,0,0.5)' }}
+        style={{ boxShadow: `inset 0 0 0 2px ${feltTheme.rim}, inset 0 0 60px rgba(0,0,0,0.5)` }}
       />
 
       {/* Contenido a 100dvh (altura visible real): deja la barra de URL del navegador fuera,

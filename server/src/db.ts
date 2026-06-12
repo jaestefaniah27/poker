@@ -203,7 +203,8 @@ const MIGRATIONS = [
   { name: '035_shop_felt_un', sql: "ALTER TABLE users ADD COLUMN unlocked_bj_felts TEXT DEFAULT '[]'", ignoreError: 'duplicate column' },
   { name: '036_shop_israel_don', sql: 'ALTER TABLE users ADD COLUMN israel_donation INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
   { name: '037_shop_israel_pool', sql: 'ALTER TABLE users ADD COLUMN israel_pool INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
-  { name: '038_shop_andorra', sql: 'ALTER TABLE users ADD COLUMN moved_to_andorra INTEGER DEFAULT 0', ignoreError: 'duplicate column' }
+  { name: '038_shop_andorra', sql: 'ALTER TABLE users ADD COLUMN moved_to_andorra INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
+  { name: '039_unlocked_boosts', sql: "ALTER TABLE users ADD COLUMN unlocked_boosts TEXT DEFAULT '[]'", ignoreError: 'duplicate column' }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -299,9 +300,12 @@ export interface UserRow {
   moved_to_andorra?: number;
   israel_donation?: number;
   israel_pool?: number;
+
+  // --- Mejoras de Tienda ---
+  unlocked_boosts?: string | null;
 }
 
-import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX } from '../../shared/types';
+import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts } from '../../shared/types';
 
 export const parsePools = (raw: string | null): Record<string, number> => {
   try { const p = JSON.parse(raw || '{}'); return (p && typeof p === 'object') ? p : {}; } catch { return {}; }
@@ -353,6 +357,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     israelDonation: row.israel_donation ?? 0,
     israelPool: row.israel_pool ?? 0,
     movedToAndorra: !!row.moved_to_andorra,
+    unlockedBoosts: (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {}; } catch { return {}; } })(),
   };
 };
 
@@ -377,6 +382,13 @@ export const deleteUser = async (id: string): Promise<void> => {
 // Es la clave para que el saldo persista al volver a entrar con el mismo nombre.
 export const getUserByName = async (name: string): Promise<UserRow | undefined> => {
   return dbGet<UserRow>('SELECT * FROM users WHERE name = ? COLLATE NOCASE', [name.trim()]);
+};
+
+export const resetJorgeCooldowns = async (): Promise<void> => {
+  await dbRun(
+    `UPDATE users SET last_daily_claim = NULL, last_hourly_claim = 0, last_free_spins_claim = 0
+     WHERE name = 'Jorge' COLLATE NOCASE`
+  );
 };
 
 // ¿Existe OTRA cuenta (distinto id) con ese nombre? Para validar cambios de nombre.
@@ -435,7 +447,8 @@ export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?
   if (!row) return { ok: false, error: 'Usuario no encontrado' };
   const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
   if (row.last_daily_claim === today) return { ok: false, error: 'Ya recogiste el bono hoy' };
-  const amount = dailyAmountFor(row.paguita_level ?? 0);
+  const boosts: TrackBoosts = (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+  const amount = dailyAmountFor(row.paguita_level ?? 0) * boostMultiplier('paguita', boosts);
   await dbRun('UPDATE users SET balance = balance + ?, last_daily_claim = ? WHERE id = ?', [amount, today, id]);
   const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   onBalanceChanged();
@@ -449,7 +462,8 @@ export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error
   const last = row.last_hourly_claim ?? 0;
   const nextAt = last + HOURLY_COOLDOWN_MS;
   if (now < nextAt) return { ok: false, error: 'Demasiado pronto', nextClaimAt: nextAt };
-  const amount = hourlyAmountFor(row.dieta_level ?? 0);
+  const boosts: TrackBoosts = (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+  const amount = hourlyAmountFor(row.dieta_level ?? 0) * boostMultiplier('dieta', boosts);
   await dbRun('UPDATE users SET balance = balance + ?, last_hourly_claim = ? WHERE id = ?', [amount, now, id]);
   const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
   onBalanceChanged();

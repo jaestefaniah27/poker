@@ -229,6 +229,9 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     existing.id = player.id;
     existing.name = player.name;
     existing.avatar = player.avatar;
+    existing.equippedBjFelt = player.equippedBjFelt;
+    existing.equippedAvatarDecoration = player.equippedAvatarDecoration;
+    existing.equippedNameDecoration = player.equippedNameDecoration;
     return 'reconnected';
   }
 
@@ -239,6 +242,9 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     existing.id = player.id;
     existing.name = player.name;
     existing.avatar = player.avatar;
+    existing.equippedBjFelt = player.equippedBjFelt;
+    existing.equippedAvatarDecoration = player.equippedAvatarDecoration;
+    existing.equippedNameDecoration = player.equippedNameDecoration;
     existing.chips = player.chips;
     existing.balance = player.balance;
     if (player.lastBuyIn) existing.lastBuyIn = player.lastBuyIn;

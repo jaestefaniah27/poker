@@ -1,9 +1,10 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
 import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat } from '../db';
+import { boostMultiplier, TrackBoosts } from '../../../shared/types';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
-import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
+import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
 
 interface MinesGame {
   userId: string;
@@ -96,7 +97,8 @@ export const minigameHandlers = (socket: Socket) => {
     if (now < nextAt) { callback({ error: 'Demasiado pronto', nextClaimAt: nextAt }); return; }
 
     // Premios según el nivel de ruleta del jugador (8 valores).
-    const options = ruletaOptionsFor(dbUser.ruleta_level ?? 0);
+    const boosts: TrackBoosts = (() => { try { const p = JSON.parse(dbUser.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+    const options = ruletaBoostedOptions(dbUser.ruleta_level ?? 0, boosts);
     const weights = [35, 25, 18, 12, 6, 3, 0.8, 0.2];
     let totalWeight = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
