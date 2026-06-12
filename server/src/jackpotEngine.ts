@@ -5,7 +5,7 @@ type Sym = typeof SYMBOLS[number];
 
 // Pesos base: los 4 palos comunes son frecuentes, chip/crown/ace son raros
 //              club  diamond  heart  spade  chip  crown  ace
-const BASE_WEIGHTS = [35,   25,     25,    15,    3,    2,     1];
+const BASE_WEIGHTS = [32,   25,     25,    15,    4,    3,     2];
 
 export interface JackpotWin {
   type: 'ace' | 'crown' | 'chip';
@@ -84,13 +84,13 @@ export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0): { 
   spinsSinceChip++;
 
   // Pity timer exponencial con límites aleatorios por tirada para mayor impredecibilidad
-  const aceTarget = 300 + Math.random() * 1200; // Entre 300 y 1500
-  const crownTarget = 150 + Math.random() * 600; // Entre 150 y 750
-  const chipTarget = 90 + Math.random() * 420; // Entre 90 y 510
+  const aceTarget = 100 + Math.random() * 100; // Entre 100 y 200
+  const crownTarget = 50 + Math.random() * 50; // Entre 50 y 100
+  const chipTarget = 25 + Math.random() * 25; // Entre 25 y 50
 
-  const acePity   = Math.floor(Math.pow(spinsSinceAce / aceTarget, 3) * 1000);
-  const crownPity = Math.floor(Math.pow(spinsSinceCrown / crownTarget, 3) * 500);
-  const chipPity  = Math.floor(Math.pow(spinsSinceChip / chipTarget, 3) * 300);
+  const acePity   = Math.floor(Math.pow(spinsSinceAce / aceTarget, 3) * 100);
+  const crownPity = Math.floor(Math.pow(spinsSinceCrown / crownTarget, 3) * 50);
+  const chipPity  = Math.floor(Math.pow(spinsSinceChip / chipTarget, 3) * 25);
 
   const dynamicWeights = [...BASE_WEIGHTS];
   dynamicWeights[4] += chipPity;  // chip
