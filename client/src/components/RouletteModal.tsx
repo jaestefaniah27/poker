@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate } from '../utils';
+import { sfx } from '../sounds';
 import { ChipRail, ChipStack, chipsFromAmount, pageForAmount, chipMultiplierFor, type ChipDenom } from './Chips';
 import AnimatedNumber from './AnimatedNumber';
 import Avatar from './Avatar';
@@ -164,7 +165,14 @@ export default function RouletteModal({
       const spins = 5 * 360;
       
       setSpinDeg(prev => prev + spins + ((targetAngle - (prev % 360)) + 360) % 360);
-      
+
+      // Ticks de la bola: rápidos al inicio, frenando hasta detenerse (~4s)
+      let tickDelay = 0;
+      for (let i = 0; tickDelay < 3800; i++) {
+        setTimeout(() => sfx.tick(), tickDelay);
+        tickDelay += 45 + i * 9;
+      }
+
       setTimeout(() => {
         setSpinning(false);
         setBets(currentBets => {
@@ -190,6 +198,11 @@ export default function RouletteModal({
           
           if (totalBetted > 0) {
             setResult({ num: resultNum, win, net: win - totalBetted });
+            const net = win - totalBetted;
+            if (net > 0 && win >= totalBetted * 10) sfx.bigWin();
+            else if (net > 0) { sfx.win(); sfx.chips(); }
+            else if (win > 0) sfx.push();
+            else sfx.lose();
           } else {
             setResult({ num: resultNum, win: 0, net: 0 });
           }
@@ -256,6 +269,7 @@ export default function RouletteModal({
     setBets(prev => ({ ...prev, [zone]: (prev[zone] || 0) + activeChip.v }));
     updateBalance(balance - activeChip.v);
     vibrate(10);
+    sfx.chip();
     
     socket.emit('roulette_place_bet', { token, bets: { [zone]: activeChip.v } }, (res: any) => {
       if (res.error) {
@@ -288,6 +302,7 @@ export default function RouletteModal({
     });
     updateBalance(balance - totalNeeded);
     vibrate(10);
+    sfx.chip();
     
     socket.emit('roulette_place_bet', { token, bets: previousBets }, (res: any) => {
       if (res.error) socket.emit('roulette_sync', { token }, (s: any) => { if (s.ok) setBets(s.myBets || {}); });
@@ -307,6 +322,7 @@ export default function RouletteModal({
     });
     updateBalance(balance - totalNeeded);
     vibrate(10);
+    sfx.chip();
     
     socket.emit('roulette_place_bet', { token, bets: currentBets }, (res: any) => {
       if (res.error) socket.emit('roulette_sync', { token }, (s: any) => { if (s.ok) setBets(s.myBets || {}); });

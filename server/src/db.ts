@@ -770,3 +770,17 @@ export const deductIsraelPool = async (id: string, amount: number): Promise<numb
   return deducted;
 };
 
+export const resetShopPurchases = async (id: string): Promise<void> => {
+  await dbRun(`
+    UPDATE users SET
+      equipped_avatar_decoration = NULL,
+      unlocked_avatar_decorations = '[]',
+      equipped_name_decoration = NULL,
+      unlocked_name_decorations = '[]',
+      equipped_bj_felt = NULL,
+      unlocked_bj_felts = '[]',
+      moved_to_andorra = 0
+    WHERE id = ?
+  `, [id]);
+};
+

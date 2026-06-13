@@ -55,7 +55,7 @@ export default function GiftModal({ targetName, targetAvatar, targetLevel, balan
           <div className="relative">
             <Avatar seed={String(targetAvatar ?? 1)} size={64} />
             {targetLevel != null && (
-              <span className="absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full bg-amber-500 border-2 border-surface text-black text-xs font-black">
+              <span className="absolute -bottom-1 -right-1 z-30 px-2 py-0.5 rounded-full bg-amber-500 border-2 border-surface text-black text-xs font-black">
                 {targetLevel}
               </span>
             )}

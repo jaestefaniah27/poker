@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
+import { sfx } from '../sounds';
 
 interface TriviaQuestion {
   id: number;
@@ -81,6 +82,7 @@ export const TriviaModal = ({
     socket.emit('submitTriviaAnswer', { token, questionId: question.id, answerIndex: idx }, (res: any) => {
       setResult(res);
       setPhase('answered');
+      if (res.correct) { sfx.win(); sfx.coin(); } else sfx.lose();
       if (res.user) onUpdateUser(res.user);
     });
   };

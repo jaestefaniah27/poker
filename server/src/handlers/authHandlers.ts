@@ -27,7 +27,8 @@ import {
   equipShopItem,
   setMovedToAndorra,
   addIsraelDonation,
-  dbRun
+  dbRun,
+  resetShopPurchases
 } from '../db';
 import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
 import { levelFromXp, SHOP_CATALOG, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount } from '../../../shared/types';
@@ -162,6 +163,11 @@ export const authHandlers = (socket: Socket) => {
 
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+
+    const userLevel = levelFromXp(dbUser.xp ?? 0);
+    if (item.minLevel && userLevel < item.minLevel) {
+      callback({ error: `Necesitas nivel ${item.minLevel} para comprar esto` }); return;
+    }
 
     if (item.type === 'social' && itemId === 'social_andorra') {
       if (dbUser.moved_to_andorra) { callback({ error: 'Ya vives en Andorra' }); return; }
@@ -374,6 +380,33 @@ export const authHandlers = (socket: Socket) => {
     await resetUserLevels(user.id);
     const updated = await getUser(user.id);
     callback({ ok: true, user: updated ? toPublicUser(updated) : undefined });
+  });
+
+  socket.on('adminResetShopPurchases', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    await resetShopPurchases(user.id);
+    const updated = await getUser(user.id);
+    
+    if (updated) {
+      socket.data.user = toPublicUser(updated);
+      callback({ ok: true, user: socket.data.user });
+      
+      const { findActiveRoomForUser, broadcastRoom } = require('../roomManager');
+      const room = findActiveRoomForUser(user.id);
+      if (room) {
+        const p = room.players.find((pl: any) => pl.userId === user.id);
+        if (p) {
+          p.equippedAvatarDecoration = undefined;
+          p.equippedNameDecoration = undefined;
+          p.equippedBjFelt = undefined;
+          broadcastRoom(room.id);
+        }
+      }
+      
+      const { broadcastPresence } = require('../socketHelpers');
+      broadcastPresence();
+    }
   });
 
   socket.on('adminDeleteUser', async ({ token, targetId }, callback) => {

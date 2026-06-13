@@ -194,3 +194,27 @@
   border: 2px solid rgba(232,121,249,0.55);
   animation: neonPulse 2.8s ease-in-out infinite;
 }
+
+/* Recompensa disponible: pulso de brillo que llama a pulsar (color via --glow) */
+@keyframes claimPulse {
+  0%, 100% { box-shadow: 0 0 4px 0 var(--glow); }
+  50%      { box-shadow: 0 0 16px 3px var(--glow); }
+}
+
+.claim-ready {
+  animation: claimPulse 1.6s ease-in-out infinite;
+}
+
+/* Flash del saldo al cambiar */
+@keyframes balanceUp {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.25); color: #4ade80; text-shadow: 0 0 12px rgba(74,222,128,0.8); }
+  100% { transform: scale(1); }
+}
+@keyframes balanceDown {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(0.92); color: #f87171; }
+  100% { transform: scale(1); }
+}
+.balance-flash-up   { animation: balanceUp 0.9s ease-out; }
+.balance-flash-down { animation: balanceDown 0.9s ease-out; }

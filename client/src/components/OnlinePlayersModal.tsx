@@ -52,7 +52,7 @@ const OnlinePlayersModal = ({ onClose }: OnlinePlayersModalProps) => {
               <div key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-background border border-transparent hover:border-gray-700 transition-colors">
                 <div className="shrink-0 relative">
                   <Avatar seed={p.avatar || p.id} size={28} decorationId={p.equippedAvatarDecoration} />
-                  <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
+                  <span className="absolute -top-1 -left-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                     {p.level ?? 1}
                   </span>
                 </div>

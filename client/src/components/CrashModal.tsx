@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips } from '../utils';
+import { socket, fmtChips, vibrate } from '../utils';
+import { sfx } from '../sounds';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 import BettingCarousel from './BettingCarousel';
 
@@ -46,6 +47,7 @@ export default function CrashModal({ user, token, onClose, onUpdateUser }: Crash
   const [loading, setLoading]       = useState(false);
   const [history, setHistory]       = useState<number[]>([]);
   const [unlocking, setUnlocking] = useState(false);
+  const lastTickRef = useRef(0);
 
   const handleUnlock = () => {
     if (unlocking) return;
@@ -64,7 +66,18 @@ export default function CrashModal({ user, token, onClose, onUpdateUser }: Crash
       if (data.crashed) {
         setCrashPoint(data.multiplier);
         setHistory(prev => [data.multiplier, ...prev].slice(0, 15));
-        setPhase('crashed');
+        setPhase(prev => {
+          if (prev === 'playing') { sfx.boom(); vibrate([80, 40, 160]); }
+          return 'crashed';
+        });
+      } else {
+        // Tick con throttle: más rápido cuanto más alto el multiplicador (tensión creciente)
+        const now = Date.now();
+        const interval = Math.max(120, 400 - data.multiplier * 30);
+        if (now - lastTickRef.current >= interval) {
+          lastTickRef.current = now;
+          sfx.tick();
+        }
       }
     };
     socket.on('crashTick', handler);
@@ -91,6 +104,8 @@ export default function CrashModal({ user, token, onClose, onUpdateUser }: Crash
     socket.emit('crashCashout', { token }, (res: any) => {
       setLoading(false);
       if (res.error) { alert(res.error); return; }
+      sfx.cashout();
+      if (res.multiplier >= 10) sfx.bigWin();
       setMultiplier(res.multiplier);
       setWinAmount(res.winAmount);
       setBalance(res.newBalance ?? balance);

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate } from '../utils';
+import { sfx } from '../sounds';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 import SlotIcon from './SlotIcon';
 import BettingCarousel from './BettingCarousel';
@@ -118,6 +119,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
             return next;
           });
           vibrate(30);
+          sfx.tick();
 
           if (i === 2) {
             const t2 = setTimeout(() => {
@@ -130,8 +132,10 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                 onUpdateUser({ ...user, balance: res.newBalance });
                 setBalance(res.newBalance);
               }
-              if (res.multiplier >= 5) vibrate([80, 40, 80, 40, 200]);
-              else if (res.multiplier > 0) vibrate([60, 30, 60]);
+              if (res.multiplier >= 10) { vibrate([80, 40, 80, 40, 200]); sfx.jackpot(); }
+              else if (res.multiplier >= 5) { vibrate([80, 40, 80, 40, 200]); sfx.bigWin(); }
+              else if (res.multiplier > 0) { vibrate([60, 30, 60]); sfx.win(); }
+              else sfx.lose();
             }, 250);
             timersRef.current.push(t2);
           }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
+import { sfx } from '../sounds';
 
 interface WordleModalProps {
   user: { id: string; name: string; balance: number };
@@ -161,6 +162,9 @@ export default function WordleModal({ user, token, onClose, onUpdateUser }: Word
     setGuesses(newGuesses);
     setTileStates(newTiles);
     setCurrent('');
+    if (isWon) sfx.bigWin();
+    else if (isDone) sfx.lose();
+    else sfx.card();
     if (isWon) setWon(true);
     if (isDone) setDone(true);
 
@@ -193,6 +197,7 @@ export default function WordleModal({ user, token, onClose, onUpdateUser }: Word
     socket.emit('wordleComplete', { token, won, attempts: guesses.length }, (res: any) => {
       setClaiming(false);
       if (res.error) { alert(res.error); return; }
+      sfx.cashout();
       setClaimed(true);
       if (res.newBalance != null) setBalance(res.newBalance);
       if (res.user) onUpdateUser(res.user);

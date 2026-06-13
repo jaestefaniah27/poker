@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { socket, fmtChips, fmtDuration, HAND_NAMES_ES } from '../utils';
 import { CHIP_MULT_THRESHOLD } from './Chips';
+import { SHOP_CATALOG } from '../../../shared/types';
+import Avatar from './Avatar';
+import { FeltSurface } from './FeltSurface';
+import { getNameDecorationClasses } from './Decorations';
+import { sfx } from '../sounds';
 
 const StatCell = ({ label, value, accent }: { label: string; value: string | number; accent?: string }) => (
   <div className="bg-background rounded-xl p-2.5 flex flex-col items-center border border-gray-800">
@@ -20,7 +25,15 @@ const fmtMult = (x100: number) => `x${(x100 / 100).toFixed(2)}`;
 const pct = (part: number, total: number) => `${Math.round((part / total) * 100)}%`;
 
 interface ProfileModalProps {
-  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean };
+  user: {
+    id: string; name: string; balance: number; avatar: string; hasPassword: boolean;
+    equippedAvatarDecoration?: string;
+    equippedNameDecoration?: string;
+    equippedBjFelt?: string;
+    unlockedAvatarDecorations?: string[];
+    unlockedNameDecorations?: string[];
+    unlockedBjFelts?: string[];
+  };
   token: string | null;
   onClose: () => void;
   onUpdate: (u: any) => void;
@@ -85,6 +98,23 @@ const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModal
   const savePassword = () => emit('setPassword', { currentPassword: curPwd, newPassword: newPwd },
     user.hasPassword ? 'Contraseña cambiada' : 'Contraseña añadida');
   const removePassword = () => emit('removePassword', { currentPassword: curPwd }, 'Contraseña eliminada');
+
+  const equipItem = (type: 'avatar' | 'name' | 'felt', itemId: string | null) => {
+    socket.emit('equipShopItem', { token, type, itemId }, (res: any) => {
+      if (res?.error) { flash(false, res.error); return; }
+      if (res?.user) onUpdate(res.user);
+      sfx.click();
+    });
+  };
+
+  const itemName = (id: string) => SHOP_CATALOG.find(i => i.id === id)?.name ?? id;
+  const catalogOrder = (ids: string[], type: string) =>
+    SHOP_CATALOG.filter(i => i.type === type && ids.includes(i.id)).map(i => i.id);
+
+  const ownedFrames = catalogOrder(user.unlockedAvatarDecorations ?? [], 'avatar');
+  const ownedNames = catalogOrder(user.unlockedNameDecorations ?? [], 'name');
+  const ownedFelts = catalogOrder(user.unlockedBjFelts ?? [], 'felt');
+  const hasEquipment = ownedFrames.length > 0 || ownedNames.length > 0 || ownedFelts.length > 0;
 
   const deleteUser = (targetId: string) => {
     if (!window.confirm('¿Seguro que quieres borrar este usuario?')) return;
@@ -180,6 +210,92 @@ const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModal
             <button onClick={saveAvatar} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-full transition-colors">Guardar avatar</button>
           </div>
         </div>
+
+        {/* Equipamiento rápido */}
+        {hasEquipment && (
+          <div className="mb-6">
+            <label className="text-[11px] text-gray-400 uppercase tracking-wider font-semibold">Equipamiento</label>
+
+            {ownedFrames.length > 0 && (
+              <div className="mt-2">
+                <p className="text-[10px] text-gray-500 mb-1.5">Marco de avatar</p>
+                <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1 pt-1">
+                  <button
+                    onClick={() => equipItem('avatar', null)}
+                    title="Sin marco"
+                    className={`shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center text-gray-500 text-lg transition-all active:scale-90 ${!user.equippedAvatarDecoration ? 'border-amber-400 bg-amber-500/10 text-amber-400' : 'border-gray-700 bg-background hover:border-gray-500'}`}
+                  >∅</button>
+                  {ownedFrames.map(id => {
+                    const eq = user.equippedAvatarDecoration === id;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => equipItem('avatar', eq ? null : id)}
+                        title={itemName(id)}
+                        className={`shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all active:scale-90 ${eq ? 'border-amber-400 bg-amber-500/10' : 'border-gray-700 bg-background hover:border-gray-500'}`}
+                      >
+                        <Avatar seed={user.avatar} size={30} decorationId={id} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {ownedNames.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[10px] text-gray-500 mb-1.5">Estilo de nombre</p>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                  <button
+                    onClick={() => equipItem('name', null)}
+                    className={`shrink-0 px-3 py-1.5 rounded-full border text-xs transition-all active:scale-95 ${!user.equippedNameDecoration ? 'border-amber-400 bg-amber-500/10 text-amber-400' : 'border-gray-700 bg-background text-gray-400 hover:border-gray-500'}`}
+                  >Normal</button>
+                  {ownedNames.map(id => {
+                    const eq = user.equippedNameDecoration === id;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => equipItem('name', eq ? null : id)}
+                        title={itemName(id)}
+                        className={`shrink-0 px-3 py-1.5 rounded-full border text-xs transition-all active:scale-95 ${eq ? 'border-amber-400 bg-amber-500/10' : 'border-gray-700 bg-background hover:border-gray-500'}`}
+                      >
+                        <span className={getNameDecorationClasses(id)}>{user.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {ownedFelts.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[10px] text-gray-500 mb-1.5">Tapete de blackjack</p>
+                <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1">
+                  <button
+                    onClick={() => equipItem('felt', null)}
+                    title="Tapete clásico"
+                    className={`shrink-0 w-20 h-12 rounded-xl border-2 overflow-hidden relative transition-all active:scale-95 ${!user.equippedBjFelt ? 'border-amber-400' : 'border-gray-700 hover:border-gray-500'}`}
+                  >
+                    <FeltSurface compact />
+                  </button>
+                  {ownedFelts.map(id => {
+                    const eq = user.equippedBjFelt === id;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => equipItem('felt', eq ? null : id)}
+                        title={itemName(id)}
+                        className={`shrink-0 w-20 h-12 rounded-xl border-2 overflow-hidden relative transition-all active:scale-95 ${eq ? 'border-amber-400' : 'border-gray-700 hover:border-gray-500'}`}
+                      >
+                        <FeltSurface feltId={id} compact />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Estadísticas */}
         <div className="mb-6">

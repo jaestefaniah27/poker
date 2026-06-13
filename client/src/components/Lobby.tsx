@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Avatar from './Avatar';
 import ProfileModal from './ProfileModal';
 import MatchHistoryModal from './MatchHistoryModal';
@@ -7,7 +7,8 @@ import SlotIcon from './SlotIcon';
 import { AnimatePresence, motion } from 'framer-motion';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage, playCheckSound } from '../utils';
-import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor } from '../../../shared/types';
+import { sfx, isMuted, toggleMute } from '../sounds';
+import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor, boostMultiplier, type TrackBoosts } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
 import TriviaModal from './TriviaModal';
 import MinesModal from './MinesModal';
@@ -18,6 +19,7 @@ import OnlinePlayersModal from './OnlinePlayersModal';
 import LevelsModal from './LevelsModal';
 import GiftModal from './GiftModal';
 import { ShopModal } from './ShopModal';
+import { DecoratedName } from './Decorations';
 
 interface LobbyProps {
   user: { 
@@ -45,6 +47,7 @@ interface LobbyProps {
     unlockedAvatarDecorations?: string[];
     unlockedNameDecorations?: string[];
     unlockedBjFelts?: string[];
+    unlockedBoosts?: TrackBoosts;
     israelPool?: number;
     movedToAndorra?: boolean;
   };
@@ -123,6 +126,17 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [now, setNow] = useState(Date.now());
   const [claimingDaily, setClaimingDaily] = useState(false);
   const [claimingHourly, setClaimingHourly] = useState(false);
+  const [muted, setMuted] = useState(isMuted());
+  const [balanceFlash, setBalanceFlash] = useState<'up' | 'down' | null>(null);
+  const prevBalanceRef = useRef(user.balance);
+  useEffect(() => {
+    const prev = prevBalanceRef.current;
+    prevBalanceRef.current = user.balance;
+    if (user.balance === prev) return;
+    setBalanceFlash(user.balance > prev ? 'up' : 'down');
+    const t = setTimeout(() => setBalanceFlash(null), 900);
+    return () => clearTimeout(t);
+  }, [user.balance]);
   const [showWheelModal, setShowWheelModal] = useState(false);
 
   useEffect(() => {
@@ -149,7 +163,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     setClaimingDaily(true);
     socket.emit('claimDaily', { token }, (res: any) => {
       setClaimingDaily(false);
-      if (res?.ok && res.user) onUpdateUser(res.user);
+      if (res?.ok && res.user) { onUpdateUser(res.user); sfx.cashout(); }
     });
   };
 
@@ -158,7 +172,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     setClaimingHourly(true);
     socket.emit('claimHourly', { token }, (res: any) => {
       setClaimingHourly(false);
-      if (res?.ok && res.user) onUpdateUser(res.user);
+      if (res?.ok && res.user) { onUpdateUser(res.user); sfx.coin(); }
     });
   };
 
@@ -228,6 +242,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     const handleGiftReceived = (data: { from: string, amount: number, updatedUser?: any }) => {
       setGiftAlert({ from: data.from, amount: data.amount });
       playCheckSound();
+      sfx.coin();
       if (typeof window !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(100);
       setTimeout(() => setGiftAlert(null), 5000);
       if (data.updatedUser) {
@@ -391,22 +406,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
             </button>
             <div className="flex flex-col items-end leading-tight">
               <span className="text-xs text-gray-400 font-medium relative">
-                {user.equippedNameDecoration === 'name_silver' && <span className="absolute -inset-1 bg-gradient-to-r from-gray-300 via-white to-gray-300 opacity-20 blur-sm rounded"></span>}
-                {user.equippedNameDecoration === 'name_gold' && <span className="absolute -inset-1 bg-gradient-to-r from-yellow-300 via-yellow-100 to-yellow-500 opacity-30 blur-sm rounded"></span>}
-                {user.equippedNameDecoration === 'name_diamond' && <span className="absolute -inset-1 bg-gradient-to-r from-cyan-300 via-blue-100 to-cyan-500 opacity-40 blur-sm rounded"></span>}
-                {user.equippedNameDecoration === 'name_rainbow' && <span className="absolute -inset-1 bg-gradient-to-r from-red-500 via-green-500 to-blue-500 opacity-50 blur-sm rounded animate-pulse"></span>}
-                <span className={`relative z-10 ${
-                  user.equippedNameDecoration === 'name_silver' ? 'text-gray-200 drop-shadow-[0_0_2px_rgba(255,255,255,0.8)]' :
-                  user.equippedNameDecoration === 'name_gold' ? 'text-yellow-300 drop-shadow-[0_0_5px_rgba(253,224,71,0.8)] font-bold' :
-                  user.equippedNameDecoration === 'name_diamond' ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(103,232,249,0.9)] font-black' :
-                  user.equippedNameDecoration === 'name_ruby' ? 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.9)] font-black' :
-                  user.equippedNameDecoration === 'name_emerald' ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.9)] font-black' :
-                  user.equippedNameDecoration === 'name_rainbow' ? 'text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-400 to-blue-400 drop-shadow-[0_0_5px_rgba(255,255,255,0.5)] font-black animate-pulse' :
-                  ''
-                }`}>{user.name}</span>
+                <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} />
                 {user.movedToAndorra && <span className="ml-1 text-[10px]" title="Empadronado en Andorra">🇦🇩</span>}
               </span>
-              <span className={`font-mono text-sm ${user.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+              <span className={`font-mono text-sm inline-block ${user.balance < 0 ? 'text-red-400' : 'text-emerald-400'} ${balanceFlash === 'up' ? 'balance-flash-up' : balanceFlash === 'down' ? 'balance-flash-down' : ''}`}>
                 {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
               </span>
             </div>
@@ -426,6 +429,21 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </span>
+              )}
+            </button>
+            <button
+              onClick={() => { const m = toggleMute(); setMuted(m); if (!m) sfx.click(); }}
+              title={muted ? 'Activar sonido' : 'Silenciar'}
+              className={`transition-colors active:scale-95 ${muted ? 'text-gray-600 hover:text-gray-400' : 'text-gray-400 hover:text-white'}`}
+            >
+              {muted ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 9l4 6m0-6l-4 6" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728" />
+                </svg>
               )}
             </button>
             <button onClick={() => window.location.reload()} title="Recargar" className="text-gray-500 hover:text-white transition-colors">
@@ -451,11 +469,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               <button
                 onClick={handleClaimDaily}
                 disabled={!dailyAvailable || claimingDaily}
-                className="flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
-                style={{ borderColor: dailyAvailable ? '#f59e0b' : '#374151', background: dailyAvailable ? 'rgba(245,158,11,0.1)' : 'transparent' }}
+                className={`flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100 ${dailyAvailable ? 'claim-ready' : ''}`}
+                style={{ borderColor: dailyAvailable ? '#f59e0b' : '#374151', background: dailyAvailable ? 'rgba(245,158,11,0.1)' : 'transparent', ['--glow' as any]: 'rgba(245,158,11,0.5)' }}
               >
                 <span className="text-[10px] font-extrabold tracking-wider text-center">PAGUITA</span>
-                <span className="text-xs font-bold text-amber-400">+{fmtChips(dailyAmountFor(user.paguitaLevel ?? 0))}</span>
+                <span className="text-xs font-bold text-amber-400">+{fmtChips(dailyAmountFor(user.paguitaLevel ?? 0) * boostMultiplier('paguita', user.unlockedBoosts))}</span>
                 <span className="text-[9px] text-gray-400 text-center">{dailyAvailable ? 'Bono diario' : 'Mañana'}</span>
               </button>
 
@@ -463,11 +481,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               <button
                 onClick={handleClaimHourly}
                 disabled={!hourlyAvailable || claimingHourly}
-                className="flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
-                style={{ borderColor: hourlyAvailable ? '#34d399' : '#374151', background: hourlyAvailable ? 'rgba(52,211,153,0.1)' : 'transparent' }}
+                className={`flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100 ${hourlyAvailable ? 'claim-ready' : ''}`}
+                style={{ borderColor: hourlyAvailable ? '#34d399' : '#374151', background: hourlyAvailable ? 'rgba(52,211,153,0.1)' : 'transparent', ['--glow' as any]: 'rgba(52,211,153,0.5)' }}
               >
                 <span className="text-[10px] font-extrabold tracking-wider text-center">DIETAS</span>
-                <span className="text-xs font-bold text-emerald-400">+{fmtChips(hourlyAmountFor(user.dietaLevel ?? 0))}</span>
+                <span className="text-xs font-bold text-emerald-400">+{fmtChips(hourlyAmountFor(user.dietaLevel ?? 0) * boostMultiplier('dieta', user.unlockedBoosts))}</span>
                 <span className="text-[9px] text-gray-400 text-center">{hourlyAvailable ? '30 min' : `${hourlyMM}:${hourlySS}`}</span>
               </button>
 
@@ -475,8 +493,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               <button
                 onClick={() => setShowWheelModal(true)}
                 disabled={!freeSpinsAvailable}
-                className="flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100"
-                style={{ borderColor: freeSpinsAvailable ? '#a855f7' : '#374151', background: freeSpinsAvailable ? 'rgba(168,85,247,0.1)' : 'transparent' }}
+                className={`flex-1 flex flex-col items-center justify-between gap-1 py-3 px-1.5 rounded-2xl border transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 disabled:active:scale-100 ${freeSpinsAvailable ? 'claim-ready' : ''}`}
+                style={{ borderColor: freeSpinsAvailable ? '#a855f7' : '#374151', background: freeSpinsAvailable ? 'rgba(168,85,247,0.1)' : 'transparent', ['--glow' as any]: 'rgba(168,85,247,0.5)' }}
               >
                 <span className="text-[10px] font-extrabold tracking-wider text-center">RULETA</span>
                 <span className="text-xs font-bold text-purple-400">10 Gs</span>
@@ -826,7 +844,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                       </span>
                       <div className="relative shrink-0">
                         <Avatar seed={entry.avatar} size={28} decorationId={entry.equippedAvatarDecoration} />
-                        <span className="absolute -top-1 -left-1 z-10 min-w-[14px] h-3.5 px-0.5 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[8px] font-black text-black leading-none">
+                        <span className="absolute -top-1 -left-1 z-30 min-w-[14px] h-3.5 px-0.5 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[8px] font-black text-black leading-none">
                           {entry.level ?? 1}
                         </span>
                       </div>

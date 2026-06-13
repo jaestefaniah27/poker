@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
+import { sfx } from '../sounds';
 import { ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions } from '../../../shared/types';
 import type { TrackBoosts } from '../../../shared/types';
 
@@ -68,12 +69,21 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
       const spinAngle = 3600 - (targetIdx * sliceAngle) - (sliceAngle / 2);
       setRotation(spinAngle);
 
+      // Ticks de la rueda frenando
+      let tickDelay = 0;
+      for (let i = 0; tickDelay < 4000; i++) {
+        setTimeout(() => sfx.tick(), tickDelay);
+        tickDelay += 45 + i * 9;
+      }
+
       setTimeout(() => {
         setIsSpinning(false);
         setHasSpun(true);
         setWonValue(chosenValue);
         setWonSpins(freeSpins || expectedSpins);
         if (updatedUser) onUpdateUser(updatedUser);
+        sfx.win();
+        sfx.coin();
       }, 4200);
     });
   };

@@ -414,6 +414,7 @@ export interface ShopItem {
   price: number;
   type: 'avatar' | 'name' | 'felt' | 'social';
   description?: string;
+  minLevel?: number;
 }
 
 export type TrackBoosts = Partial<Record<LevelTrack, number>>;
@@ -443,48 +444,35 @@ export const boostCost = (track: LevelTrack, currentCount: number): number =>
 
 export const SHOP_CATALOG: ShopItem[] = [
   // --- Avatar Decorations ---
-  // Bronce
-  { id: 'avatar_bronze', name: 'Marco de Bronce Básico', price: 5_000_000, type: 'avatar' },
-  { id: 'avatar_bronze_2', name: 'Marco de Bronce Forjado', price: 10_000_000, type: 'avatar' },
-  { id: 'avatar_bronze_3', name: 'Marco de Bronce Épico', price: 25_000_000, type: 'avatar' },
   // Plata
-  { id: 'avatar_silver', name: 'Marco de Plata Simple', price: 50_000_000, type: 'avatar' },
-  { id: 'avatar_silver_2', name: 'Marco de Plata Brillante', price: 100_000_000, type: 'avatar' },
-  { id: 'avatar_silver_3', name: 'Marco de Plata Estelar', price: 250_000_000, type: 'avatar' },
+  { id: 'avatar_silver', name: 'Marco de Plata Simple', price: 50_000_000, type: 'avatar', minLevel: 5 },
+  { id: 'avatar_silver_2', name: 'Marco de Plata Brillante', price: 100_000_000, type: 'avatar', minLevel: 7 },
+  { id: 'avatar_silver_3', name: 'Marco de Plata Estelar', price: 250_000_000, type: 'avatar', minLevel: 10 },
   // Oro
-  { id: 'avatar_gold', name: 'Marco de Oro', price: 500_000_000, type: 'avatar' },
-  { id: 'avatar_gold_2', name: 'Marco de Oro Radiante', price: 1_000_000_000, type: 'avatar' },
-  { id: 'avatar_gold_3', name: 'Marco de Oro Imperial', price: 2_500_000_000, type: 'avatar' },
+  { id: 'avatar_gold', name: 'Marco de Oro', price: 500_000_000, type: 'avatar', minLevel: 15 },
+  { id: 'avatar_gold_2', name: 'Marco de Oro Radiante', price: 1_000_000_000, type: 'avatar', minLevel: 18 },
+  { id: 'avatar_gold_3', name: 'Marco de Oro Imperial', price: 2_500_000_000, type: 'avatar', minLevel: 22 },
   // Amatista
-  { id: 'avatar_diamond', name: 'Aura de Amatista', price: 5_000_000_000, type: 'avatar' },
-  { id: 'avatar_diamond_2', name: 'Cristal de Amatista', price: 10_000_000_000, type: 'avatar' },
-  { id: 'avatar_diamond_3', name: 'Corona de Amatista', price: 25_000_000_000, type: 'avatar' },
-  // Rubí
-  { id: 'avatar_ruby', name: 'Partículas de Rubí', price: 25_000_000_000, type: 'avatar' },
-  { id: 'avatar_ruby_2', name: 'Gema de Rubí', price: 50_000_000_000, type: 'avatar' },
-  { id: 'avatar_ruby_3', name: 'Aura de Sangre Rubí', price: 100_000_000_000, type: 'avatar' },
-  // Esmeralda
-  { id: 'avatar_emerald', name: 'Aura Esmeralda Mística', price: 100_000_000_000, type: 'avatar' },
-  { id: 'avatar_emerald_2', name: 'Bosque de Esmeralda', price: 250_000_000_000, type: 'avatar' },
-  { id: 'avatar_emerald_3', name: 'Magia Élfica Esmeralda', price: 500_000_000_000, type: 'avatar' },
+  { id: 'avatar_diamond', name: 'Aura de Amatista', price: 5_000_000_000, type: 'avatar', minLevel: 30 },
+  { id: 'avatar_diamond_2', name: 'Cristal de Amatista', price: 10_000_000_000, type: 'avatar', minLevel: 35 },
+  { id: 'avatar_diamond_3', name: 'Corona de Amatista', price: 25_000_000_000, type: 'avatar', minLevel: 40 },
 
   // --- Name Decorations ---
-  { id: 'name_silver', name: 'Placa de Plata', price: 200_000_000, type: 'name' },
-  { id: 'name_gold', name: 'Placa de Oro', price: 2_000_000_000, type: 'name' },
-  { id: 'name_diamond', name: 'Placa de Diamante', price: 10_000_000_000, type: 'name' },
-  { id: 'name_ruby', name: 'Placa de Rubí', price: 50_000_000_000, type: 'name' },
-  { id: 'name_emerald', name: 'Placa de Esmeralda', price: 150_000_000_000, type: 'name' },
-  { id: 'name_rainbow', name: 'Brillo Arcoíris Animado', price: 300_000_000_000, type: 'name' },
-  { id: 'name_fire', name: 'Nombre en Llamas', price: 750_000_000_000, type: 'name', description: 'Tu nombre arde con fuego vivo. Que tiemble la mesa.' },
-  { id: 'name_royal', name: 'Sello Real', price: 2_000_000_000_000, type: 'name', description: 'Oro líquido animado digno de la realeza. El cosmético más exclusivo de la casa.' },
+  { id: 'name_silver', name: 'Placa de Plata', price: 200_000_000, type: 'name', minLevel: 5 },
+  { id: 'name_diamond', name: 'Placa de Diamante', price: 10_000_000_000, type: 'name', minLevel: 30 },
+  { id: 'name_ruby', name: 'Placa de Rubí', price: 50_000_000_000, type: 'name', minLevel: 40 },
+  { id: 'name_emerald', name: 'Placa de Esmeralda', price: 150_000_000_000, type: 'name', minLevel: 50 },
+  { id: 'name_rainbow', name: 'Brillo Arcoíris Animado', price: 300_000_000_000, type: 'name', minLevel: 60 },
+  { id: 'name_fire', name: 'Nombre en Llamas', price: 750_000_000_000, type: 'name', description: 'Tu nombre arde con fuego vivo. Que tiemble la mesa.', minLevel: 70 },
+  { id: 'name_royal', name: 'Sello Real', price: 2_000_000_000_000, type: 'name', description: 'Oro líquido animado digno de la realeza. El cosmético más exclusivo de la casa.', minLevel: 80 },
 
   // --- Blackjack Felts ---
-  { id: 'felt_red', name: 'Tapete Rojo Casino', price: 100_000_000, type: 'felt' },
-  { id: 'felt_blue', name: 'Tapete Azul Noche', price: 500_000_000, type: 'felt' },
-  { id: 'felt_purple', name: 'Tapete Morado Neón', price: 2_000_000_000, type: 'felt' },
-  { id: 'felt_vip', name: 'Tapete VIP Negro y Oro', price: 10_000_000_000, type: 'felt' },
-  { id: 'felt_galaxy', name: 'Tapete Galaxia', price: 50_000_000_000, type: 'felt', description: 'Juega entre estrellas. Fondo cósmico con destellos animados.' },
-  { id: 'felt_royal', name: 'Tapete Esmeralda Real', price: 250_000_000_000, type: 'felt', description: 'Esmeralda profunda con ribete dorado. Solo para alta sociedad.' },
+  { id: 'felt_red', name: 'Tapete Rojo Casino', price: 100_000_000, type: 'felt', minLevel: 5 },
+  { id: 'felt_blue', name: 'Tapete Azul Noche', price: 500_000_000, type: 'felt', minLevel: 15 },
+  { id: 'felt_purple', name: 'Tapete Morado Neón', price: 2_000_000_000, type: 'felt', minLevel: 30 },
+  { id: 'felt_vip', name: 'Tapete VIP Negro y Oro', price: 10_000_000_000, type: 'felt', minLevel: 40 },
+  { id: 'felt_galaxy', name: 'Tapete Galaxia', price: 50_000_000_000, type: 'felt', description: 'Juega entre estrellas. Fondo cósmico con destellos animados.', minLevel: 50 },
+  { id: 'felt_royal', name: 'Tapete Esmeralda Real', price: 250_000_000_000, type: 'felt', description: 'Esmeralda profunda con ribete dorado. Solo para alta sociedad.', minLevel: 60 },
 
   // --- Social Benefits ---
   { id: 'social_andorra', name: 'Mudanza a Andorra', price: 500_000_000_000, type: 'social', description: 'Otorga una exención fiscal que reduce la posibilidad de que Hacienda te incaute dinero a 1/10. Además, añade el sello de Andorra a tu nombre de forma permanente.' },

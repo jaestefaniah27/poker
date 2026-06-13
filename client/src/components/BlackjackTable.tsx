@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate, STAKE_TIERS } from '../utils';
+import { getAvatarDecorationClasses, getNameDecorationClasses, DecoratedName } from './Decorations';
 import PlayingCard from './PlayingCard';
 import Slider from './Slider';
 import Avatar from './Avatar';
@@ -9,6 +10,7 @@ import type { Room, Player, Card, SidebetType, BjSidebetResult } from '../../../
 import { SIDEBET_ORDER, SIDEBET_SHORT, SIDEBET_TOP_PAYOUT } from '../../../shared/types';
 import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip, chipMultiplierFor } from './Chips';
 import { FeltSurface, getFeltTheme } from './FeltSurface';
+import { sfx } from '../sounds';
 
 type Sidebet = SidebetType;
 const sumChips = (cs: ChipDenom[]): number => cs.reduce((s, c) => s + c.v, 0);
@@ -312,7 +314,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   }, []);
   const bettingLeft = (phase === 'betting' && room.bettingDeadline) ? Math.max(0, Math.ceil((room.bettingDeadline - now) / 1000)) : null;
 
-  useEffect(() => { if (canAct) vibrate([200]); }, [canAct]);
+  useEffect(() => { if (canAct) { vibrate([200]); sfx.turn(); } }, [canAct]);
 
   // Reset auto-place flag at the start of each betting round
   useEffect(() => {
@@ -342,6 +344,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       if (sidebetChips[betTarget].length >= 12) return; // límite visual
       setSidebetChips(s => ({ ...s, [betTarget]: [...s[betTarget], d] }));
       vibrate(20);
+      sfx.chip();
       return;
     }
     if (pendingTotal + d.v > maxBet) return;
@@ -368,6 +371,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
 
     setPendingChips(s => [...s, d]);
     vibrate(20);
+    sfx.chip();
   };
   const clearBet = () => { setPendingChips([]); setSidebetChips(emptySidebetChips()); };
   const halfBet = () => {
@@ -389,6 +393,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const sendAction = (action: 'Hit' | 'Stand' | 'Double' | 'Surrender' | 'Split' | 'Insurance') => {
     socket.emit('bjAction', { roomId: room.id, action });
     vibrate(15);
+    if (action === 'Hit' || action === 'Split') sfx.card();
+    else if (action === 'Double') sfx.chip();
+    else sfx.click();
   };
   const startRound = () => socket.emit('bjStartRound', { roomId: room.id });
 
@@ -581,7 +588,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     let delay = 500;
     for (let c = startCount + 1; c <= total; c++) {
       const cc = c;
-      timers.push(setTimeout(() => { setDealerResolveCount(cc); vibrate(15); }, delay));
+      timers.push(setTimeout(() => { setDealerResolveCount(cc); vibrate(15); sfx.card(); }, delay));
       delay += 650;
     }
     timers.push(setTimeout(() => setResolveReady(true), delay + 150));
@@ -600,6 +607,11 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     const circle = circleRef.current?.getBoundingClientRect();
     const dealerEl = dealerRef.current?.getBoundingClientRect();
     if (!circle || !dealerEl) return;
+
+    if (result === 'blackjack') sfx.bigWin();
+    else if (result === 'win') { sfx.win(); sfx.chips(); }
+    else if (result === 'lose') sfx.lose();
+    else if (result === 'push') sfx.push();
 
     if (result === 'lose') {
       // Fichas del jugador vuelan al dealer
@@ -676,10 +688,10 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     setDealDone(false);
     setRevealedPlayer(0);
     setRevealedDealer(0);
-    const t1 = setTimeout(() => setRevealedPlayer(1),  200);  // P1
-    const t2 = setTimeout(() => setRevealedDealer(1), 750);   // D1
-    const t3 = setTimeout(() => setRevealedPlayer(2), 1300);  // P2
-    const t4 = setTimeout(() => setRevealedDealer(2), 1850);  // D2
+    const t1 = setTimeout(() => { setRevealedPlayer(1); sfx.card(); },  200);  // P1
+    const t2 = setTimeout(() => { setRevealedDealer(1); sfx.card(); }, 750);   // D1
+    const t3 = setTimeout(() => { setRevealedPlayer(2); sfx.card(); }, 1300);  // P2
+    const t4 = setTimeout(() => { setRevealedDealer(2); sfx.card(); }, 1850);  // D2
     const t5 = setTimeout(() => setDealDone(true), 2300);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -748,7 +760,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] text-white/50 leading-none">{user.name}</div>
+          <div className="text-[10px] text-white/50 leading-none">
+            <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} />
+          </div>
           <div className={`font-mono text-xs font-bold ${myNetWorth < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
             {myNetWorth < 0 ? `-$${fmtChips(Math.abs(myNetWorth))}` : `$${fmtChips(myNetWorth)}`}
           </div>
@@ -815,12 +829,14 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                   <div className="flex items-center gap-1 self-stretch">
                     <div className="relative shrink-0">
                       <Avatar seed={p.avatar || p.userId} size={16} decorationId={p.equippedAvatarDecoration} />
-                      <span className="absolute -top-1 -left-1 min-w-[12px] h-3 px-0.5 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[7px] font-black text-black leading-none">
+                      <span className="absolute -top-1 -left-1 z-30 min-w-[12px] h-3 px-0.5 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[7px] font-black text-black leading-none">
                         {p.level ?? 1}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[9px] font-bold truncate leading-tight">{p.name}</div>
+                      <div className="text-[9px] font-bold truncate leading-tight">
+                        <DecoratedName name={p.name} decorationId={p.equippedNameDecoration} />
+                      </div>
                       <div className="text-[8px] text-white/50 font-mono leading-none">{fmtChips(p.chips)}</div>
                     </div>
                     {oppHands.length === 1 && (oppHands[0].cards?.length || 0) > 0 && (
@@ -1042,8 +1058,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
         {/* compact player row */}
         <div className="relative flex items-center gap-2 mb-2">
           <div className="relative shrink-0">
-            <Avatar seed={user.avatar} size={32} />
-            <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
+            <Avatar seed={user.avatar} size={32} decorationId={user.equippedAvatarDecoration} />
+            <span className="absolute -top-1 -left-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
               {myPlayer?.level ?? user.level ?? 1}
             </span>
             {canAct && (
@@ -1055,7 +1071,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold truncate">{user.name}</div>
+            <div className="text-xs font-bold truncate">
+              <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} />
+            </div>
             <div ref={countRef} className="text-[11px] text-amber-200 font-mono font-bold inline-flex items-center gap-1">
               <AnimatedNumber value={frozenChips ?? displayedChips} maxDurationMs={650} baseStepMs={6} /> fichas
             </div>

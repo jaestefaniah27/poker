@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { socket, fmtChips, playCheckSound, vibrate, getStorage, HAND_NAMES_ES, fmtDuration } from './utils';
+import { sfx } from './sounds';
 import EmoteBubble, { EMOTES, type ActiveEmote } from './components/EmoteBubble';
 import LoginScreen from './components/LoginScreen';
 import Lobby from './components/Lobby';
@@ -186,6 +187,7 @@ function App() {
         displayCommCountRef.current = shown + 1;
         setDisplayCommCount(shown + 1);
         setNewCommunityIdx([shown]);
+        sfx.card();
         const nt = setTimeout(step, STEP_MS);
         revealTimersRef.current.push(nt);
       }, wait);
@@ -285,8 +287,16 @@ function App() {
       const myId = curr.players.find((p: any) => p.userId === user?.id)?.id;
       
       const amIWinner = curr.winners?.some((w: any) => w.id === myId);
-      if (amIWinner) vibrate([100, 50, 100, 50, 300]); // long happy vibration
-      else vibrate([100]); // short end hand vibration
+      if (amIWinner) {
+        vibrate([100, 50, 100, 50, 300]); // long happy vibration
+        const myWin = curr.winners?.find((w: any) => w.id === myId)?.amount ?? 0;
+        const myChips = curr.players.find((p: any) => p.id === myId)?.chips ?? 0;
+        if (myWin > 0 && myWin >= myChips) sfx.bigWin(); else sfx.win();
+        sfx.chips();
+      } else {
+        vibrate([100]); // short end hand vibration
+        sfx.lose();
+      }
 
       const outerTimeout = setTimeout(() => {
         const potEl = potRef.current;
@@ -321,6 +331,7 @@ function App() {
       const activePlayer = curr.players[currTurn];
       if (activePlayer?.userId === user?.id) {
         vibrate([200]); // my turn vibration
+        sfx.turn();
       }
     }
 
@@ -520,6 +531,8 @@ function App() {
 
   const handleAction = (action: string, amount?: number) => {
     socket.emit('playerAction', { roomId: currentRoom?.id, userId: user?.id, action, amount });
+    if (action === 'Raise' || action === 'Call' || action === 'All-in') sfx.chip();
+    else if (action === 'Fold') sfx.card();
     if (action === 'Raise') setShowBetMenu(false);
   };
 
@@ -728,7 +741,7 @@ function App() {
             >
               <div className="relative">
                 <Avatar seed={viewPlayer.avatar || viewPlayer.userId} decorationId={viewPlayer.equippedAvatarDecoration} />
-                <span className="absolute -top-1 -left-1 z-10 min-w-[18px] h-5 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[10px] font-black text-black leading-none">
+                <span className="absolute -top-1 -left-1 z-30 min-w-[18px] h-5 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[10px] font-black text-black leading-none">
                   {(viewPlayer as any).level ?? 1}
                 </span>
               </div>
@@ -855,9 +868,9 @@ function App() {
                       <TurnPie fraction={turnTimer.fraction} danger={turnTimer.danger} />
                     </div>
                   )}
-                  <Avatar seed={p.avatar || p.userId} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} />
+                  <Avatar seed={p.avatar || p.userId} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} decorationId={p.equippedAvatarDecoration} />
                   {isDealer(indexInRoom) && <DealerBadge />}
-                  <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
+                  <span className="absolute -top-1 -left-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                     {p.level ?? 1}
                   </span>
                   {hasFolded && (
@@ -1220,8 +1233,8 @@ function App() {
                      <TurnPie fraction={turnTimer.fraction} danger={turnTimer.danger} />
                    </div>
                  )}
-                 <Avatar seed={user.avatar} />
-                 <span className="absolute -top-1 -left-1 z-10 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
+                 <Avatar seed={user.avatar} decorationId={user.equippedAvatarDecoration} />
+                 <span className="absolute -top-1 -left-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                    {myPlayer?.level ?? user.level ?? 1}
                  </span>
                  {isDealer(myPlayerIndex) && <DealerBadge />}

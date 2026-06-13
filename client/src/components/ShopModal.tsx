@@ -6,6 +6,7 @@ import { fmtChips, socket, getStorage } from '../utils';
 import Avatar from './Avatar';
 import { DecoratedName } from './Decorations';
 import { FeltSurface } from './FeltSurface';
+import { sfx } from '../sounds';
 
 interface ShopModalProps {
   user: PublicUser;
@@ -87,7 +88,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
   const handleBuy = (id: string) => {
     socket.emit('buyShopItem', { token: getStorage().getItem('pokerToken'), itemId: id }, (res: any) => {
       if (res.error) onError(res.error);
-      else onUpdateUser(res.user);
+      else { onUpdateUser(res.user); sfx.buy(); }
     });
   };
 
@@ -97,7 +98,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
     const newId = isCurrentlyEquipped ? null : id;
     socket.emit('equipShopItem', { token: getStorage().getItem('pokerToken'), type, itemId: newId }, (res: any) => {
       if (res.error) onError(res.error);
-      else onUpdateUser(res.user);
+      else { onUpdateUser(res.user); sfx.click(); }
     });
   };
 
@@ -134,6 +135,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
 
     const rarity = rarityOf(item.price);
     const isNew = NEW_ITEM_IDS.includes(item.id);
+    const meetsLevelReq = !item.minLevel || (user.level ?? 1) >= item.minLevel;
 
     return (
       <div key={item.id} className={`shop-card h-full p-5 rounded-2xl border flex flex-col justify-between transition-all duration-300 ${
@@ -174,9 +176,16 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
 
         <div className="flex-1 flex flex-col">
           <h3 className={`text-xl font-black mb-1 ${equipped ? 'text-yellow-400' : 'text-white'}`}>{item.name}</h3>
-          <p className="text-amber-300 font-bold text-lg mb-3 flex items-center gap-1.5 bg-gradient-to-r from-amber-500/15 to-transparent w-fit px-3 py-1 rounded-lg border border-amber-500/20">
-            <span className="text-sm">🪙</span>{fmtChips(item.price)}
-          </p>
+          <div className="flex items-center gap-2 mb-3">
+            <p className="text-amber-300 font-bold text-lg flex items-center gap-1.5 bg-gradient-to-r from-amber-500/15 to-transparent w-fit px-3 py-1 rounded-lg border border-amber-500/20">
+              <span className="text-sm">🪙</span>{fmtChips(item.price)}
+            </p>
+            {item.minLevel && (
+              <p className={`text-xs font-bold px-2 py-1 rounded-lg border ${meetsLevelReq ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                Nivel {item.minLevel}
+              </p>
+            )}
+          </div>
           {item.description && (
             <p className="text-xs text-gray-400 mb-4 leading-relaxed line-clamp-3">{item.description}</p>
           )}
@@ -188,9 +197,10 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
               <>
                 <button
                   onClick={() => handleBuy(item.id)}
-                  className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-black py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-yellow-500/20"
+                  disabled={!meetsLevelReq}
+                  className={`w-full font-black py-3 rounded-xl transition-all shadow-lg ${meetsLevelReq ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black hover:scale-[1.02] active:scale-95 shadow-yellow-500/20' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
                 >
-                  Mejorar
+                  {meetsLevelReq ? 'Mejorar' : `Requiere Nivel ${item.minLevel}`}
                 </button>
                 <button
                   onClick={() => handleEquip(avatarState.highestOwned.id, item.type)}
@@ -217,17 +227,19 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
             ) : (
               <button
                 onClick={() => handleBuy(item.id)}
-                className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-black py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-yellow-500/20"
+                disabled={!meetsLevelReq}
+                className={`w-full font-black py-3 rounded-xl transition-all shadow-lg ${meetsLevelReq ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black hover:scale-[1.02] active:scale-95 shadow-yellow-500/20' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
               >
-                Comprar
+                {meetsLevelReq ? 'Comprar' : `Requiere Nivel ${item.minLevel}`}
               </button>
             )
           ) : !owned ? (
             <button
               onClick={() => handleBuy(item.id)}
-              className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-black py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-yellow-500/20"
+              disabled={!meetsLevelReq}
+              className={`w-full font-black py-3 rounded-xl transition-all shadow-lg ${meetsLevelReq ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black hover:scale-[1.02] active:scale-95 shadow-yellow-500/20' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
             >
-              Comprar
+              {meetsLevelReq ? 'Comprar' : `Requiere Nivel ${item.minLevel}`}
             </button>
           ) : item.type !== 'social' ? (
             <button
@@ -266,9 +278,24 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
           <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-400 to-yellow-200 animate-gradient-x flex items-center gap-3">
             👑 Tienda Exclusiva
           </h2>
-          <div className="flex items-center gap-2 bg-black/50 border border-amber-500/30 rounded-full px-4 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-            <span className="text-sm">🪙</span>
-            <span className="font-black text-amber-300 text-sm">{fmtChips(user.balance)}</span>
+          <div className="flex items-center gap-4">
+            {user.name === 'Jorge' && (
+              <button
+                onClick={() => {
+                  socket.emit('adminResetShopPurchases', { token: getStorage().getItem('pokerToken') }, (res: any) => {
+                    if (res?.error) onError(res.error);
+                    else if (res?.ok && res.user) onUpdateUser(res.user);
+                  });
+                }}
+                className="text-[10px] font-bold text-red-400 border border-red-900/40 bg-red-500/10 px-2 py-1 rounded active:scale-95 transition-all"
+              >
+                🔄 Reiniciar mis compras
+              </button>
+            )}
+            <div className="flex items-center gap-2 bg-black/50 border border-amber-500/30 rounded-full px-4 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <span className="text-sm">🪙</span>
+              <span className="font-black text-amber-300 text-sm">{fmtChips(user.balance)}</span>
+            </div>
           </div>
         </div>
         <p className="text-[11px] text-amber-200/40 uppercase tracking-[0.3em] mb-5">Lujo · Estatus · Envidia ajena</p>
@@ -293,6 +320,60 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
 
         {tab === 'social' ? (
           <div>
+            <div className="mb-8">
+              <h3 className="text-2xl font-black text-white mb-4 flex items-center gap-3">Mejoras x100<span className="flex-1 h-px bg-gradient-to-r from-amber-500/40 to-transparent" /></h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {([
+                  { label: 'Paguita', emoji: '💸', track: 'paguita' as LevelTrack, maxLevel: PAGUITA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.paguita, userLevel: user.paguitaLevel ?? 0 },
+                  { label: 'Dieta', emoji: '🥗', track: 'dieta' as LevelTrack, maxLevel: DIETA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.dieta, userLevel: user.dietaLevel ?? 0 },
+                  { label: 'Ruleta', emoji: '🎡', track: 'ruleta' as LevelTrack, maxLevel: RULETA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.ruleta, userLevel: user.ruletaLevel ?? 0 },
+                  { label: 'Trivia', emoji: '🧠', track: 'trivia' as LevelTrack, maxLevel: TRIVIA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.trivia, userLevel: user.triviaLevel ?? 0 },
+                ]).map(b => {
+                  const boosts = user.unlockedBoosts ?? {};
+                  const count = trackBoostCount(b.track, boosts);
+                  const maxBoosts = TRACK_BOOST_MAX[b.track];
+                  const atMax = b.userLevel >= b.maxLevel;
+                  const atBoostMax = count >= maxBoosts;
+                  const currentPrize = b.basePrize * Math.pow(100, count);
+                  const nextPrize = currentPrize * 100;
+                  const cost = boostCost(b.track, count);
+                  return (
+                    <div key={b.track} className={`p-5 rounded-2xl border transition-all ${count > 0 ? 'bg-amber-500/10 border-amber-500/40' : atMax ? 'bg-white/5 border-white/10' : 'bg-white/3 border-white/5 opacity-60'}`}>
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="text-3xl">{b.emoji}</span>
+                        <div>
+                          <p className="font-black text-white">{b.label} Deluxe</p>
+                          <p className="text-xs text-gray-400">Track {b.userLevel}/{b.maxLevel} · Boost {count}/{maxBoosts}</p>
+                        </div>
+                        {atBoostMax && <span className="ml-auto text-xs font-black text-amber-400 bg-amber-500/20 px-2 py-1 rounded-full">MAX</span>}
+                      </div>
+                      <div className="flex justify-between text-xs mb-4">
+                        <span className="text-gray-400">Premio: <span className="text-white font-bold">{fmtChips(currentPrize)}</span></span>
+                        {!atBoostMax && atMax && <span className="text-amber-400">→ <span className="font-bold">{fmtChips(nextPrize)}</span></span>}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (!atMax || atBoostMax) return;
+                          socket.emit('buyTrackBoost', { token: getStorage().getItem('pokerToken'), track: b.track }, (res: any) => {
+                            if (res.error) onError(res.error);
+                            else onUpdateUser(res.user);
+                          });
+                        }}
+                        disabled={!atMax || atBoostMax}
+                        className={`w-full py-2.5 rounded-xl font-black text-sm transition-all active:scale-[0.98] ${
+                          atBoostMax ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed'
+                          : atMax ? 'bg-amber-500 text-black hover:bg-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                          : 'bg-white/5 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {atBoostMax ? '✓ Máximo alcanzado' : atMax ? `${fmtChips(cost)} fichas` : `Necesitas nivel ${b.maxLevel}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="mb-8 bg-surface border border-surfaceLight rounded-3xl p-6 shadow-2xl">
               <div className="flex flex-col items-center gap-3 mb-6">
                 <div className="text-5xl">🇮🇱</div>
@@ -356,7 +437,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
             <section>
               <h3 className="text-2xl font-black text-white mb-4 flex items-center gap-3">Marcos de Avatar<span className="flex-1 h-px bg-gradient-to-r from-amber-500/40 to-transparent" /></h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {['bronze', 'silver', 'gold', 'diamond', 'ruby', 'emerald'].map(material => {
+                {['silver', 'gold', 'diamond'].map(material => {
                   const state = getActiveAvatarFrame(material);
                   return (
                     <div key={material}>
@@ -389,59 +470,6 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
               </div>
             </section>
 
-            <section>
-              <h3 className="text-2xl font-black text-white mb-4 flex items-center gap-3">Mejoras x100<span className="flex-1 h-px bg-gradient-to-r from-amber-500/40 to-transparent" /></h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {([
-                  { label: 'Paguita', emoji: '💸', track: 'paguita' as LevelTrack, maxLevel: PAGUITA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.paguita, userLevel: user.paguitaLevel ?? 0 },
-                  { label: 'Dieta', emoji: '🥗', track: 'dieta' as LevelTrack, maxLevel: DIETA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.dieta, userLevel: user.dietaLevel ?? 0 },
-                  { label: 'Ruleta', emoji: '🎡', track: 'ruleta' as LevelTrack, maxLevel: RULETA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.ruleta, userLevel: user.ruletaLevel ?? 0 },
-                  { label: 'Trivia', emoji: '🧠', track: 'trivia' as LevelTrack, maxLevel: TRIVIA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.trivia, userLevel: user.triviaLevel ?? 0 },
-                ]).map(b => {
-                  const boosts = user.unlockedBoosts ?? {};
-                  const count = trackBoostCount(b.track, boosts);
-                  const maxBoosts = TRACK_BOOST_MAX[b.track];
-                  const atMax = b.userLevel >= b.maxLevel;
-                  const atBoostMax = count >= maxBoosts;
-                  const currentPrize = b.basePrize * Math.pow(100, count);
-                  const nextPrize = currentPrize * 100;
-                  const cost = boostCost(b.track, count);
-                  return (
-                    <div key={b.track} className={`p-5 rounded-2xl border transition-all ${count > 0 ? 'bg-amber-500/10 border-amber-500/40' : atMax ? 'bg-white/5 border-white/10' : 'bg-white/3 border-white/5 opacity-60'}`}>
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="text-3xl">{b.emoji}</span>
-                        <div>
-                          <p className="font-black text-white">{b.label} Deluxe</p>
-                          <p className="text-xs text-gray-400">Track {b.userLevel}/{b.maxLevel} · Boost {count}/{maxBoosts}</p>
-                        </div>
-                        {atBoostMax && <span className="ml-auto text-xs font-black text-amber-400 bg-amber-500/20 px-2 py-1 rounded-full">MAX</span>}
-                      </div>
-                      <div className="flex justify-between text-xs mb-4">
-                        <span className="text-gray-400">Premio: <span className="text-white font-bold">{fmtChips(currentPrize)}</span></span>
-                        {!atBoostMax && atMax && <span className="text-amber-400">→ <span className="font-bold">{fmtChips(nextPrize)}</span></span>}
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (!atMax || atBoostMax) return;
-                          socket.emit('buyTrackBoost', { token: getStorage().getItem('pokerToken'), track: b.track }, (res: any) => {
-                            if (res.error) onError(res.error);
-                            else onUpdateUser(res.user);
-                          });
-                        }}
-                        disabled={!atMax || atBoostMax}
-                        className={`w-full py-2.5 rounded-xl font-black text-sm transition-all active:scale-[0.98] ${
-                          atBoostMax ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed'
-                          : atMax ? 'bg-amber-500 text-black hover:bg-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
-                          : 'bg-white/5 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        {atBoostMax ? '✓ Máximo alcanzado' : atMax ? `${fmtChips(cost)} fichas` : `Necesitas nivel ${b.maxLevel}`}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
           </div>
         )}
       </div>

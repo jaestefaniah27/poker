@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { socket, fmtChips } from '../utils';
+import { socket, fmtChips, vibrate } from '../utils';
+import { sfx } from '../sounds';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 import BettingCarousel from './BettingCarousel';
 
@@ -68,11 +69,14 @@ export default function MinesModal({ user, token, onClose, onUpdateUser }: Mines
       if (res.error) return;
 
       if (res.safe) {
+        const streak = cells.filter(c => c === 'safe').length;
+        sfx.reveal(streak);
         setCells(prev => { const next = [...prev]; next[idx] = 'safe'; return next; });
         setMultiplier(res.multiplier ?? 1);
         setWinnable(res.winnable ?? 0);
 
         if (res.autoWin) {
+          sfx.bigWin();
           setCells(prev => {
             const next = [...prev];
             (res.minePositions ?? []).forEach((m: number) => { if (next[m] === 'hidden') next[m] = 'mine'; });
@@ -84,6 +88,8 @@ export default function MinesModal({ user, token, onClose, onUpdateUser }: Mines
           setPhase('cashout');
         }
       } else {
+        sfx.boom();
+        vibrate([80, 40, 160]);
         setCells(prev => {
           const next = [...prev];
           (res.minePositions ?? []).forEach((m: number) => { next[m] = m === res.hitCell ? 'mine-hit' : 'mine'; });
@@ -100,6 +106,7 @@ export default function MinesModal({ user, token, onClose, onUpdateUser }: Mines
     socket.emit('minesCashout', { token }, (res: any) => {
       setLoading(false);
       if (res.error) { alert(res.error); return; }
+      sfx.cashout();
       setWinAmount(res.winAmount ?? 0);
       setMultiplier(res.multiplier ?? 1);
       setBalance(res.newBalance ?? balance);

@@ -14,14 +14,14 @@ export const getAvatarDecorationClasses = (id?: string) => {
 
 export const getNameDecorationClasses = (id?: string) => {
   switch (id) {
-    case 'name_silver': return 'text-[#c0c0c0] font-black drop-shadow-[0_2px_2px_rgba(192,192,192,0.8)] border-b-2 border-[#c0c0c0]';
-    case 'name_gold': return 'text-[#ffd700] font-black drop-shadow-[0_2px_4px_rgba(255,215,0,0.8)] border-b-2 border-[#ffd700] uppercase tracking-wider';
-    case 'name_diamond': return 'text-transparent bg-clip-text bg-gradient-to-r from-[#b9f2ff] to-[#00e5ff] font-black drop-shadow-[0_0_8px_#00e5ff] uppercase tracking-widest';
-    case 'name_ruby': return 'text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-[#e0115f] font-black drop-shadow-[0_0_10px_#e0115f] uppercase tracking-widest';
-    case 'name_emerald': return 'text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-[#50c878] font-black drop-shadow-[0_0_12px_#50c878] uppercase tracking-widest';
-    case 'name_rainbow': return 'text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 font-black animate-pulse drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] uppercase tracking-widest';
-    case 'name_fire': return 'text-transparent bg-clip-text bg-gradient-to-t from-red-600 via-orange-500 to-yellow-300 font-black uppercase tracking-widest name-fire';
-    case 'name_royal': return 'text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-500 to-yellow-200 animate-gradient-x font-black uppercase tracking-widest drop-shadow-[0_0_12px_rgba(245,158,11,0.7)]';
+    case 'name_silver': return 'text-[#c0c0c0] font-black border-b-2 border-[#c0c0c0]';
+    case 'name_gold': return 'text-[#ffd700] font-black uppercase tracking-wider';
+    case 'name_diamond': return 'text-transparent bg-clip-text bg-gradient-to-r from-[#b9f2ff] to-[#00e5ff] font-black uppercase tracking-widest';
+    case 'name_ruby': return 'text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-[#e0115f] font-black uppercase tracking-widest';
+    case 'name_emerald': return 'text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-[#50c878] font-black uppercase tracking-widest';
+    case 'name_rainbow': return 'text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 font-black animate-gradient-x uppercase tracking-widest';
+    case 'name_fire': return 'text-transparent bg-clip-text bg-gradient-to-t from-red-600 via-orange-500 to-yellow-300 font-black uppercase tracking-widest animate-gradient-x';
+    case 'name_royal': return 'text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-500 to-yellow-200 animate-gradient-x font-black uppercase tracking-widest';
     default: return 'text-white font-bold';
   }
 };
