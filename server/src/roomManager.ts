@@ -954,7 +954,9 @@ export const placeBlackjackBet = (
   }
 
   const min = room.minBet || 1;
-  const max = Math.min(room.maxBet || player.chips, player.chips);
+  // maxBet === MAX_SAFE_INTEGER es el sentinel "sin tope": el límite real son las fichas del jugador.
+  const noCap = !room.maxBet || room.maxBet >= Number.MAX_SAFE_INTEGER;
+  const max = noCap ? player.chips : Math.min(room.maxBet ?? player.chips, player.chips);
   const safe = Math.floor(Math.max(min, Math.min(max, amount)));
   if (!Number.isFinite(safe) || safe <= 0) return false;
   player.bet = safe;
