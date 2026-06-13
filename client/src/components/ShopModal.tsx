@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { PublicUser } from '../../../shared/types';
 import { SHOP_CATALOG, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, TRACK_BASE_PRIZE, boostCost, trackBoostCount } from '../../../shared/types';
 import type { LevelTrack } from '../../../shared/types';
@@ -33,8 +33,18 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
     setIsraelDonation(String(Math.min(user.balance, israelParsed + val)));
   };
 
-  const items = SHOP_CATALOG;
+  const [items, setItems] = useState<any[]>(SHOP_CATALOG);
 
+  useEffect(() => {
+    socket.emit('getShopCatalog', {}, (data: any[]) => {
+      if (data && data.length > 0) setItems(data);
+    });
+    const onUpdate = (data: any[]) => {
+      if (data && data.length > 0) setItems(data);
+    };
+    socket.on('shopCatalogUpdated', onUpdate);
+    return () => { socket.off('shopCatalogUpdated', onUpdate); };
+  }, []);
   const NEW_ITEM_IDS = ['name_fire', 'name_royal', 'felt_galaxy', 'felt_royal'];
 
   type Rarity = { label: string; badge: string; border: string; glow: string };

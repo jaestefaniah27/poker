@@ -16,6 +16,7 @@ import TournamentResults from './components/TournamentResults';
 import Slider from './components/Slider';
 import BlackjackTable from './components/BlackjackTable';
 import { AvatarAdjuster } from './components/AvatarAdjuster';
+import AdminShop from './components/AdminShop';
 import type { Room, Player, PublicUser } from '../../shared/types';
 
 const AppSkeleton = ({ hasToken }: { hasToken: boolean }) => (
@@ -85,9 +86,13 @@ function App() {
   const [onlineCount, setOnlineCount] = useState(0);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [showAdjuster, setShowAdjuster] = useState(window.location.hash === '#adjust');
+  const [showAdmin, setShowAdmin] = useState(window.location.hash === '#admin');
 
   useEffect(() => {
-    const handleHashChange = () => setShowAdjuster(window.location.hash === '#adjust');
+    const handleHashChange = () => {
+      setShowAdjuster(window.location.hash === '#adjust');
+      setShowAdmin(window.location.hash === '#admin');
+    };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
@@ -548,6 +553,10 @@ function App() {
 
   if (showAdjuster) {
     return <AvatarAdjuster />;
+  }
+
+  if (showAdmin) {
+    return <AdminShop />;
   }
 
   if (showSkeleton) {

@@ -204,7 +204,8 @@ const MIGRATIONS = [
   { name: '036_shop_israel_don', sql: 'ALTER TABLE users ADD COLUMN israel_donation INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
   { name: '037_shop_israel_pool', sql: 'ALTER TABLE users ADD COLUMN israel_pool INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
   { name: '038_shop_andorra', sql: 'ALTER TABLE users ADD COLUMN moved_to_andorra INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
-  { name: '039_unlocked_boosts', sql: "ALTER TABLE users ADD COLUMN unlocked_boosts TEXT DEFAULT '[]'", ignoreError: 'duplicate column' }
+  { name: '039_unlocked_boosts', sql: "ALTER TABLE users ADD COLUMN unlocked_boosts TEXT DEFAULT '[]'", ignoreError: 'duplicate column' },
+  { name: '040_settings_table', sql: 'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)' }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -704,6 +705,27 @@ export const addOneFreeSpin = async (id: string, value: number, count = 1): Prom
 export const getHaciendaTotal = async (): Promise<number> => {
   const row = await dbGet<{ total: number }>('SELECT total FROM hacienda_state WHERE id = 1');
   return row?.total ?? 0;
+};
+
+// --- Shop Catalog Settings ---
+import { SHOP_CATALOG } from '../../shared/types';
+import type { ShopItem } from '../../shared/types';
+
+export const getShopCatalog = async (): Promise<ShopItem[]> => {
+  const row = await dbGet<{value: string}>('SELECT value FROM settings WHERE key = "shop_catalog"');
+  if (row) {
+    try {
+      return JSON.parse(row.value);
+    } catch (e) {
+      console.error('Error parsing shop_catalog setting:', e);
+    }
+  }
+  return SHOP_CATALOG; // fallback al default si no hay en DB
+};
+
+export const saveShopCatalog = async (catalog: ShopItem[]): Promise<void> => {
+  const value = JSON.stringify(catalog);
+  await dbRun('INSERT INTO settings (key, value) VALUES ("shop_catalog", ?) ON CONFLICT(key) DO UPDATE SET value = ?', [value, value]);
 };
 
 export const addHaciendaTotal = async (amount: number): Promise<number> => {

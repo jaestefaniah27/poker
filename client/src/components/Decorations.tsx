@@ -17,7 +17,6 @@ export const getNameDecorationClasses = (id?: string) => {
     case 'name_silver': return 'text-[#c0c0c0] font-black border-b-2 border-[#c0c0c0]';
     case 'name_gold': return 'text-[#ffd700] font-black uppercase tracking-wider';
     case 'name_diamond': return 'text-transparent bg-clip-text bg-gradient-to-r from-[#b9f2ff] to-[#00e5ff] font-black uppercase tracking-widest';
-    case 'name_ruby': return 'text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-[#e0115f] font-black uppercase tracking-widest';
     case 'name_emerald': return 'text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-[#50c878] font-black uppercase tracking-widest';
     case 'name_rainbow': return 'text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 font-black animate-gradient-x uppercase tracking-widest';
     case 'name_fire': return 'text-transparent bg-clip-text bg-gradient-to-t from-red-600 via-orange-500 to-yellow-300 font-black uppercase tracking-widest animate-gradient-x';

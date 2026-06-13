@@ -285,64 +285,30 @@ export const availableLevelPoints = (
 
 // --- Paguita (bono diario): nv.0 base 10k → nv.10 máx 10M.
 //     Sube ~x3 al principio, luego lineal para no dispararse. ---
-export const PAGUITA_AMOUNTS = [
-  10_000,    // 0
-  30_000,    // 1
-  90_000,    // 2
-  250_000,   // 3
-  500_000,   // 4
-  1_000_000, // 5
-  2_000_000, // 6
-  4_000_000, // 7
-  6_000_000, // 8
-  8_000_000, // 9
-  10_000_000,// 10 (máx)
-];
-export const PAGUITA_MAX_LEVEL = PAGUITA_AMOUNTS.length - 1; // 10
-export const dailyAmountFor = (paguitaLevel: number): number =>
-  PAGUITA_AMOUNTS[Math.max(0, Math.min(paguitaLevel, PAGUITA_MAX_LEVEL))];
+export const PAGUITA_MAX_LEVEL = 50;
+export const dailyAmountFor = (paguitaLevel: number): number => {
+  const lvl = Math.max(0, Math.min(paguitaLevel, PAGUITA_MAX_LEVEL));
+  return Math.floor(10_000 * Math.pow(1.58489, lvl));
+};
 
-// --- Dietas (bono cada 30 min): nv.0 base 1k → nv.10 máx 1M.
-//     Sube x2 al principio, luego lineal. ---
-export const DIETA_AMOUNTS = [
-  1_000,     // 0
-  2_000,     // 1
-  4_000,     // 2
-  8_000,     // 3
-  16_000,    // 4
-  50_000,    // 5
-  100_000,   // 6
-  250_000,   // 7
-  500_000,   // 8
-  750_000,   // 9
-  1_000_000, // 10 (máx)
-];
-export const DIETA_MAX_LEVEL = DIETA_AMOUNTS.length - 1; // 10
-export const hourlyAmountFor = (dietaLevel: number): number =>
-  DIETA_AMOUNTS[Math.max(0, Math.min(dietaLevel, DIETA_MAX_LEVEL))];
+// --- Dietas (bono cada 30 min): nv.0 base 1k → nv.50 máx 10T. ---
+export const DIETA_MAX_LEVEL = 50;
+export const hourlyAmountFor = (dietaLevel: number): number => {
+  const lvl = Math.max(0, Math.min(dietaLevel, DIETA_MAX_LEVEL));
+  return Math.floor(1_000 * Math.pow(1.58489, lvl));
+};
 
-// --- Ruleta: cada nivel mejora un valor del set de 8 premios ---
-const K = 1_000, M = 1_000_000;
-export const RULETA_LEVELS: number[][] = [
-  [1*K, 5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 0
-  [5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K, 1*M], // 1
-  [10*K, 25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M], // 2
-  [25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M],  // 3
-  [25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M],  // 4
-  [50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M],  // 5
-  [100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M],  // 6
-  [250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M],   // 7
-  [500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M],    // 8
-  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 9
-  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 10
-];
-export const RULETA_MAX_LEVEL = RULETA_LEVELS.length - 1; // 10
-export const ruletaOptionsFor = (ruletaLevel: number): number[] =>
-  RULETA_LEVELS[Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL))];
+// --- Ruleta: cada nivel mejora el set de premios ---
+export const RULETA_MAX_LEVEL = 50;
+export const ruletaOptionsFor = (ruletaLevel: number): number[] => {
+  const lvl = Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL));
+  const mult = Math.pow(1.4649, lvl);
+  return [1_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000].map(v => Math.floor(v * mult));
+};
 export const ruletaSpinsFor = (ruletaLevel: number): number => {
   const lvl = Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL));
-  if (lvl >= 10) return 50;
-  if (lvl >= 4) return 25;
+  if (lvl >= 30) return 50;
+  if (lvl >= 10) return 25;
   return 10;
 };
 
@@ -460,7 +426,6 @@ export const SHOP_CATALOG: ShopItem[] = [
   // --- Name Decorations ---
   { id: 'name_silver', name: 'Placa de Plata', price: 200_000_000, type: 'name', minLevel: 5 },
   { id: 'name_diamond', name: 'Placa de Diamante', price: 10_000_000_000, type: 'name', minLevel: 30 },
-  { id: 'name_ruby', name: 'Placa de Rubí', price: 50_000_000_000, type: 'name', minLevel: 40 },
   { id: 'name_emerald', name: 'Placa de Esmeralda', price: 150_000_000_000, type: 'name', minLevel: 50 },
   { id: 'name_rainbow', name: 'Brillo Arcoíris Animado', price: 300_000_000_000, type: 'name', minLevel: 60 },
   { id: 'name_fire', name: 'Nombre en Llamas', price: 750_000_000_000, type: 'name', description: 'Tu nombre arde con fuego vivo. Que tiemble la mesa.', minLevel: 70 },

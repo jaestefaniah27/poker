@@ -31,7 +31,8 @@ import {
   resetShopPurchases
 } from '../db';
 import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
-import { levelFromXp, SHOP_CATALOG, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount } from '../../../shared/types';
+import { getShopCatalog, saveShopCatalog } from '../db';
+import { levelFromXp, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser, chipsInPlayFor } from '../roomManager';
 
@@ -62,7 +63,7 @@ export const authHandlers = (socket: Socket) => {
     socket.data.user = publicUser;
     updateLastSeen(user.id).catch(console.error);
     broadcastPresence();
-    callback({ user: publicUser, token, activeRoomId });
+    callback({ user: publicUser, token, activeRoomId, shopCatalog: await getShopCatalog() });
   });
 
   socket.on('resumeSession', async ({ token }, callback) => {
@@ -73,7 +74,7 @@ export const authHandlers = (socket: Socket) => {
     socket.data.user = publicUser;
     updateLastSeen(user.id).catch(console.error);
     broadcastPresence();
-    callback({ user: publicUser, token, activeRoomId });
+    callback({ user: publicUser, token, activeRoomId, shopCatalog: await getShopCatalog() });
   });
 
   socket.on('setPassword', async ({ token, currentPassword, newPassword }, callback) => {
@@ -158,7 +159,8 @@ export const authHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
 
-    const item = SHOP_CATALOG.find(i => i.id === itemId);
+    const catalog = await getShopCatalog();
+    const item = catalog.find(i => i.id === itemId);
     if (!item) { callback({ error: 'Item no encontrado' }); return; }
 
     const dbUser = await getUser(user.id);
@@ -407,6 +409,22 @@ export const authHandlers = (socket: Socket) => {
       const { broadcastPresence } = require('../socketHelpers');
       broadcastPresence();
     }
+  });
+
+  socket.on('adminSaveShopCatalog', async ({ token, catalog }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    
+    await saveShopCatalog(catalog);
+    callback({ ok: true });
+    
+    const { io } = require('../socketHelpers');
+    if (io) io.emit('shopCatalogUpdated', catalog);
+  });
+
+  socket.on('getShopCatalog', async (_data, callback) => {
+    const catalog = await getShopCatalog();
+    callback(catalog);
   });
 
   socket.on('adminDeleteUser', async ({ token, targetId }, callback) => {
