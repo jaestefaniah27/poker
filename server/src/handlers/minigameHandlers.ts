@@ -466,7 +466,7 @@ export const minigameHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback?.({ error: 'No autenticado' }); return; }
     const dbUser = await getUser(user.id);
-    rouletteEngine.joinTable(user.id, user.name, dbUser?.avatar || user.id);
+    rouletteEngine.joinTable(user.id, user.name, dbUser?.avatar || user.id, dbUser?.equipped_name_decoration || undefined, dbUser?.equipped_avatar_decoration || undefined, !!dbUser?.moved_to_andorra);
     callback?.({ ok: true });
   });
 

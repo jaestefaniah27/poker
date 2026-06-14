@@ -13,10 +13,11 @@ export const getNameDecorationClasses = (id?: string) => {
   }
 };
 
-export const DecoratedName: React.FC<{ name: string; decorationId?: string; className?: string }> = ({ name, decorationId, className = '' }) => {
+export const DecoratedName: React.FC<{ name: string; decorationId?: string; className?: string; andorra?: boolean }> = ({ name, decorationId, className = '', andorra }) => {
   return (
-    <span className={`${getNameDecorationClasses(decorationId)} ${className}`}>
-      {name}
+    <span className={`inline-flex items-center justify-center gap-0.5 ${className}`}>
+      <span className={`${getNameDecorationClasses(decorationId)} truncate`}>{name}</span>
+      {andorra && <span className="text-[0.8em] flex-shrink-0" title="Empadronado en Andorra">🇦🇩</span>}
     </span>
   );
 };

@@ -15,7 +15,7 @@ export class RouletteEngine {
   private userBets = new Map<string, UserBet>(); // userId -> UserBet
   private history: number[] = [];
   private tickInterval?: NodeJS.Timeout;
-  private playerInfo = new Map<string, { name: string; avatar: string }>(); // userId -> display info
+  private playerInfo = new Map<string, { name: string; avatar: string; equippedNameDecoration?: string; equippedAvatarDecoration?: string; movedToAndorra?: boolean }>(); // userId -> display info
   private viewers = new Set<string>(); // userIds currently watching
 
   public init(io: Server) {
@@ -70,9 +70,9 @@ export class RouletteEngine {
     };
   }
 
-  public joinTable(userId: string, name: string, avatar: string) {
+  public joinTable(userId: string, name: string, avatar: string, equippedNameDecoration?: string, equippedAvatarDecoration?: string, movedToAndorra?: boolean) {
     this.viewers.add(userId);
-    this.playerInfo.set(userId, { name, avatar });
+    this.playerInfo.set(userId, { name, avatar, equippedNameDecoration, equippedAvatarDecoration, movedToAndorra });
     this.broadcastPlayers();
   }
 
@@ -86,7 +86,7 @@ export class RouletteEngine {
   }
 
   public getPlayersInfo() {
-    const players: Array<{ id: string; name: string; avatar: string; totalBet: number; bets: Record<string, number> }> = [];
+    const players: Array<{ id: string; name: string; avatar: string; equippedNameDecoration?: string; equippedAvatarDecoration?: string; movedToAndorra?: boolean; totalBet: number; bets: Record<string, number> }> = [];
     // Include all viewers + anyone with active bets
     const allIds = new Set([...this.viewers, ...this.userBets.keys()]);
     for (const id of allIds) {
@@ -97,6 +97,9 @@ export class RouletteEngine {
         id,
         name: info.name,
         avatar: info.avatar,
+        equippedNameDecoration: info.equippedNameDecoration,
+        equippedAvatarDecoration: info.equippedAvatarDecoration,
+        movedToAndorra: info.movedToAndorra,
         totalBet: ub?.total || 0,
         bets: ub?.bets || {}
       });

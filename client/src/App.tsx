@@ -8,6 +8,7 @@ import PlayingCard from './components/PlayingCard';
 import Avatar from './components/Avatar';
 import TurnPie from './components/TurnPie';
 import DealerBadge from './components/DealerBadge';
+import { DecoratedName } from './components/Decorations';
 import BetChip from './components/BetChip';
 import AnimatedNumber from './components/AnimatedNumber';
 import HandRankingsModal from './components/HandRankingsModal';
@@ -919,7 +920,9 @@ function App() {
                      </div>
                   )}
                 </div>
-                <span className="text-[11px] text-gray-400 mt-2 font-medium truncate w-14 text-center">{p.name}</span>
+                <div className="mt-2 flex justify-center w-full">
+                  <DecoratedName name={p.name} decorationId={p.equippedNameDecoration} andorra={p.movedToAndorra} className="text-[11px] max-w-[64px] truncate" />
+                </div>
                 {p.isOnline === false && (
                   <span className="text-[9px] bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wide mb-0.5">Offline</span>
                 )}
@@ -1274,7 +1277,9 @@ function App() {
                  </span>
                  {isDealer(myPlayerIndex) && <DealerBadge />}
               </div>
-              <div className="text-[10px] text-gray-400 font-bold">{user.name}</div>
+              <div className="mt-1 flex justify-center w-full">
+                <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} andorra={user.movedToAndorra} className="text-[10px] max-w-[80px] truncate" />
+              </div>
               <div className="text-white font-medium text-base" ref={myChipsRef}>
                 <AnimatedNumber value={myPlayer ? (myPlayer?.chips || 0) : user.balance} />
               </div>
