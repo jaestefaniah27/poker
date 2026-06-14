@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import { authUser } from '../socketHelpers';
 import { getUser, toPublicUser, applyBalanceDelta, bumpStat, maxStat } from '../db';
-import { JACKPOT_TIERS } from '../../../shared/types';
+import { JACKPOT_TIERS, toBig } from '../../../shared/types';
 
 interface CrashGame {
   userId: string;
@@ -52,7 +52,7 @@ export const crashHandlers = (socket: Socket) => {
 
     const betAmt = Math.floor(Number(bet));
     if (betAmt <= 0 || !JACKPOT_TIERS.includes(betAmt)) { callback({ error: 'Apuesta inválida' }); return; }
-    if (user.balance < betAmt) { callback({ error: 'Saldo insuficiente' }); return; }
+    if (toBig(user.balance) < toBig(betAmt)) { callback({ error: 'Saldo insuficiente' }); return; }
 
     await applyBalanceDelta(user.id, -betAmt);
     bumpStat(user.id, 'crash_games');

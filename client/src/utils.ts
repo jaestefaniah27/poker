@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client';
-import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor } from '../../shared/types';
+import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor, toBig } from '../../shared/types';
 
-export { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor };
+export { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor, toBig };
 
 export const socket: Socket = io(
   import.meta.env.PROD 
@@ -18,25 +18,28 @@ export const getStorage = (): Storage => {
 
 export const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Normal', 5: 'Rápida', 4: 'Express' };
 
-export const fmtChips = (n: number | null | undefined): string => {
-  if (n == null) return '0';
-  const abs = Math.abs(n);
-  
-  const trunc2 = (v: number) => {
-    const match = v.toString().match(/^-?\d+(?:\.\d{0,2})?/);
-    return match ? match[0] : '0';
-  };
+// Escala de unidades (de mayor a menor). Se formatea con BigInt para ser EXACTO
+// a cualquier tamaño (los saldos pueden superar 2^53, donde el number falla).
+const UNIT_TIERS: [bigint, string][] = [
+  [10n ** 24n, 'Sp'], [10n ** 21n, 'Sx'], [10n ** 18n, 'Qi'],
+  [10n ** 15n, 'Q'], [10n ** 12n, 'T'], [10n ** 9n, 'B'], [10n ** 6n, 'M'], [10n ** 3n, 'k'],
+];
 
-  if (abs >= 1e24) return trunc2(n / 1e24) + 'Sp';
-  if (abs >= 1e21) return trunc2(n / 1e21) + 'Sx';
-  if (abs >= 1e18) return trunc2(n / 1e18) + 'Qi';
-  if (abs >= 1_000_000_000_000_000) return trunc2(n / 1_000_000_000_000_000) + 'Q';
-  if (abs >= 1_000_000_000_000) return trunc2(n / 1_000_000_000_000) + 'T';
-  if (abs >= 1_000_000_000) return trunc2(n / 1_000_000_000) + 'B';
-  if (abs >= 1_000_000) return trunc2(n / 1_000_000) + 'M';
-  if (abs >= 1000) return trunc2(n / 1000) + 'k';
-  
-  return String(n);
+export const fmtChips = (input: number | string | bigint | null | undefined): string => {
+  if (input == null) return '0';
+  const v = toBig(input);
+  const neg = v < 0n;
+  const abs = neg ? -v : v;
+  for (const [tier, suf] of UNIT_TIERS) {
+    if (abs >= tier) {
+      const whole = abs / tier;
+      // 2 decimales truncados, sin ceros sobrantes.
+      const frac = ((abs % tier) * 100n) / tier;
+      const fracStr = frac > 0n ? '.' + frac.toString().padStart(2, '0').replace(/0+$/, '') : '';
+      return (neg ? '-' : '') + whole.toString() + fracStr + suf;
+    }
+  }
+  return v.toString();
 };
 
 // Formatea milisegundos como duración legible: "3d 5h", "2h 14m", "8m".

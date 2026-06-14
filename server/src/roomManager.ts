@@ -1,4 +1,4 @@
-import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp, SidebetType, SIDEBET_ORDER } from '../../shared/types';
+import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp, SidebetType, SIDEBET_ORDER, toBig } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 import { dealBlackjack, dealerPlay as bjDealerPlay, resolveBlackjack, resetBlackjackHand, handValue as bjHandValue, needsReshuffle, initShoe } from './blackjackEngine';
 import { deleteRoomFromDB, recordMatchHistory, addXp, getUser, recordHandStats, bumpStat, maxStat } from './db';
@@ -378,7 +378,7 @@ export const rebuy = (roomId: string, userId: string, buyIn: number): boolean =>
   const player = room.players.find(p => p.userId === userId);
   if (!player || player.chips > 0) return false; // Solo se recompra estando a 0
   player.chips = buyIn;
-  player.balance -= buyIn;
+  player.balance = (toBig(player.balance) - toBig(buyIn)).toString();
   player.hasCashedOut = false;
   player.isSpectating = true; // Se incorpora en la siguiente mano
   player.sessionBuyIn = (player.sessionBuyIn ?? 0) + buyIn;
@@ -835,7 +835,7 @@ export const restartTournament = (roomId: string): { userId: string; socketId: s
     if (!p.isActive) return;
     const delta = p.chips - buyIn; // banca ganancias / cobra nueva entrada
     deltas.push({ userId: p.userId, socketId: p.id, delta });
-    p.balance += delta;
+    p.balance = (toBig(p.balance) + toBig(delta)).toString();
     // Cerramos historial de la sesión que acaba (cash_out = fichas actuales)
     closePlayerSession(room, p, p.chips);
     p.chips = buyIn;
@@ -1281,7 +1281,7 @@ export const rebuyBlackjack = (roomId: string, userId: string, requestedAmount?:
   if (!player || !player.isActive || player.chips > 0) return 0;
   const amount = requestedAmount && requestedAmount > 0 ? requestedAmount : (player.lastBuyIn && player.lastBuyIn > 0 ? player.lastBuyIn : 1000);
   player.chips = amount;
-  player.balance -= amount;
+  player.balance = (toBig(player.balance) - toBig(amount)).toString();
   player.lastBuyIn = amount;
   player.isSpectating = false;
   player.sessionBuyIn = (player.sessionBuyIn ?? 0) + amount;

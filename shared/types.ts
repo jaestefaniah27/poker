@@ -1,3 +1,32 @@
+// ============================================================
+// Dinero de precisión arbitraria (BigInt)
+// ------------------------------------------------------------
+// El SALDO persistente y los pools sociales pueden superar 2^53 (≈9Q), donde
+// el `number` de JS deja de ser exacto. Por eso se representan como `string`
+// decimal en el wire/almacenamiento y se operan como `bigint` en la lógica.
+// Las fichas EN MESA (chips/pot/bets) NO usan esto: van acotadas por el buy-in
+// máximo (5M) y caben de sobra en `number`.
+// ============================================================
+
+// Convierte cualquier representación de dinero a bigint exacto.
+export const toBig = (v: string | number | bigint | null | undefined): bigint => {
+  if (v == null) return 0n;
+  if (typeof v === 'bigint') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? BigInt(Math.round(v)) : 0n;
+  const s = String(v).trim();
+  const m = s.match(/^-?\d+/);
+  return m ? BigInt(m[0]) : 0n;
+};
+
+// bigint → string decimal (representación canónica para wire/DB).
+export const bigStr = (v: bigint): string => v.toString();
+
+// Suma segura de un delta (number|bigint) a un saldo (string|bigint), nunca < 0.
+export const addClamped = (balance: string | bigint, delta: string | number | bigint): bigint => {
+  const r = toBig(balance) + toBig(delta);
+  return r < 0n ? 0n : r;
+};
+
 export type Suit = 'h' | 'd' | 'c' | 's'; // hearts, diamonds, clubs, spades
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'T' | 'J' | 'Q' | 'K' | 'A';
 
@@ -66,7 +95,7 @@ export interface Player {
   hasActed: boolean;
   isActive: boolean;
   isSpectating?: boolean;
-  balance: number;
+  balance: string; // saldo persistente fuera de mesa (dinero grande → string)
   hasCashedOut?: boolean;
   isOnline?: boolean;
   reducedTime?: boolean;
@@ -171,7 +200,7 @@ export interface HandHistory {
 export interface PublicUser {
   id: string;
   name: string;
-  balance: number;
+  balance: string; // dinero grande: string decimal (bigint en lógica)
   avatar: string;
   hasPassword: boolean;
   lastDailyClaim: string | null;  // "YYYY-MM-DD"
@@ -193,7 +222,7 @@ export interface PublicUser {
   triviaLevel?: number;   // 0 = base, nº de recompensas malas eliminadas
   lastSeen?: number;
   paidIsrael?: boolean;
-  israelDebt?: number;
+  israelDebt?: string;
   
   // --- Tienda y Cosméticos ---
   equippedAvatarDecoration?: string;
@@ -206,8 +235,8 @@ export interface PublicUser {
   unlockedBjFelts?: string[];
   
   // --- Beneficios Sociales ---
-  israelDonation?: number;
-  israelPool?: number; // 1.5x of donation pool remaining
+  israelDonation?: string;
+  israelPool?: string; // 1.5x of donation pool remaining
   movedToAndorra?: boolean;
 
   // --- Mejoras de Tienda ---

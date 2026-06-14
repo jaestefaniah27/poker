@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
 import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat } from '../db';
-import { boostMultiplier, TrackBoosts } from '../../../shared/types';
+import { boostMultiplier, TrackBoosts, toBig } from '../../../shared/types';
 import { spinJackpot, getJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
@@ -46,13 +46,13 @@ const JACKPOT_ANIM_MS = 800;
 interface PendingJackpot { readyAt: number; finalWinAmount: number; }
 const pendingJackpots = new Map<string, PendingJackpot>(); // userId -> pendiente
 
-const settlePendingJackpot = async (userId: string): Promise<{ balance: number; user: any } | null> => {
+const settlePendingJackpot = async (userId: string): Promise<{ balance: string; user: any } | null> => {
   const p = pendingJackpots.get(userId);
   if (!p) return null;
   pendingJackpots.delete(userId);
   if (p.finalWinAmount > 0) await applyBalanceDelta(userId, p.finalWinAmount);
   const u = await getUser(userId);
-  return { balance: u?.balance ?? 0, user: u ? toPublicUser(u) : undefined };
+  return { balance: u?.balance ?? '0', user: u ? toPublicUser(u) : undefined };
 };
 
 export const minigameHandlers = (socket: Socket) => {
@@ -60,7 +60,7 @@ export const minigameHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
     const dbUser = await getUser(user.id);
-    if (dbUser && dbUser.israel_debt && dbUser.israel_debt > 0) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la paguita' }); return; }
+    if (dbUser && toBig(dbUser.israel_debt) > 0n) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la paguita' }); return; }
     const result = await claimDailyBonus(user.id);
     if (!result.ok) { callback({ error: result.error }); return; }
     bumpStat(user.id, 'bonus_claims');
@@ -106,7 +106,7 @@ export const minigameHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
     const dbUser = await getUser(user.id);
-    if (dbUser && dbUser.israel_debt && dbUser.israel_debt > 0) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la dieta' }); return; }
+    if (dbUser && toBig(dbUser.israel_debt) > 0n) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la dieta' }); return; }
     const result = await claimHourlyBonus(user.id);
     if (!result.ok) { callback({ error: result.error, nextClaimAt: result.nextClaimAt }); return; }
     bumpStat(user.id, 'bonus_claims');
@@ -121,7 +121,7 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
 
-    if (dbUser.israel_debt && dbUser.israel_debt > 0) {
+    if (toBig(dbUser.israel_debt) > 0n) {
       callback({ error: 'Debes saldar tu deuda con Israel antes de tirar la ruleta' });
       return;
     }
@@ -160,7 +160,7 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
 
-    if (dbUser.israel_debt && dbUser.israel_debt > 0) {
+    if (toBig(dbUser.israel_debt) > 0n) {
       callback({ error: 'Debes saldar tu deuda con Israel para poder jugar a la Jackpot' });
       return;
     }
@@ -198,7 +198,7 @@ export const minigameHandlers = (socket: Socket) => {
       // No se permite apostar por encima del saldo (saldo ya no puede ser
       // negativo). Releemos el saldo por si un settle previo acaba de acreditar.
       const fresh = await getUser(dbUser.id);
-      if (!fresh || fresh.balance < amount) { callback({ error: 'Saldo insuficiente' }); return; }
+      if (!fresh || toBig(fresh.balance) < toBig(amount)) { callback({ error: 'Saldo insuficiente' }); return; }
     }
 
     // Solo se castiga si el Admin lo ha marcado manualmente Y ADEMÁS está usando el script
@@ -240,7 +240,7 @@ export const minigameHandlers = (socket: Socket) => {
     }
 
     let israelBonus = 0;
-    if (finalWinAmount > 0 && dbUser.israel_pool && dbUser.israel_pool > 0) {
+    if (finalWinAmount > 0 && toBig(dbUser.israel_pool) > 0n) {
       israelBonus = await deductIsraelPool(dbUser.id, finalWinAmount);
       finalWinAmount += israelBonus;
     }
@@ -342,7 +342,7 @@ export const minigameHandlers = (socket: Socket) => {
     }
 
     const cost = JACKPOT_UNLOCK_COSTS[currentLevel];
-    if (dbUser.balance < cost) {
+    if (toBig(dbUser.balance) < toBig(cost)) {
       callback({ error: 'Saldo insuficiente para desbloquear este nivel' });
       return;
     }
@@ -359,7 +359,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
     const dbUserLocal = await getUser(user.id);
-    if (dbUserLocal && dbUserLocal.israel_debt && dbUserLocal.israel_debt > 0) {
+    if (dbUserLocal && toBig(dbUserLocal.israel_debt) > 0n) {
       callback({ error: 'Debes saldar tu deuda con Israel para poder jugar a las Minas' });
       return;
     }
@@ -368,7 +368,7 @@ export const minigameHandlers = (socket: Socket) => {
     const betAmt = Math.floor(Number(bet));
     if (nm < 1 || nm > 24) { callback({ error: 'Minas inválidas (1-24)' }); return; }
     if (betAmt <= 0) { callback({ error: 'Apuesta inválida' }); return; }
-    if (user.balance < betAmt) { callback({ error: 'Saldo insuficiente' }); return; }
+    if (toBig(user.balance) < toBig(betAmt)) { callback({ error: 'Saldo insuficiente' }); return; }
 
     activeMinesGames.delete(socket.id);
 
@@ -446,7 +446,7 @@ export const minigameHandlers = (socket: Socket) => {
       const dbUser = await getUser(user.id);
       let finalWinnable = winnable;
       let israelBonus = 0;
-      if (dbUser && dbUser.israel_pool && dbUser.israel_pool > 0) {
+      if (dbUser && toBig(dbUser.israel_pool) > 0n) {
         israelBonus = await deductIsraelPool(user.id, winnable);
         finalWinnable += israelBonus;
       }
@@ -483,7 +483,7 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     let finalWinAmount = winAmount;
     let israelBonus = 0;
-    if (dbUser && dbUser.israel_pool && dbUser.israel_pool > 0) {
+    if (dbUser && toBig(dbUser.israel_pool) > 0n) {
       israelBonus = await deductIsraelPool(user.id, winAmount);
       finalWinAmount += israelBonus;
     }
@@ -533,7 +533,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
     const dbUserLocal = await getUser(user.id);
-    if (dbUserLocal && dbUserLocal.israel_debt && dbUserLocal.israel_debt > 0) {
+    if (dbUserLocal && toBig(dbUserLocal.israel_debt) > 0n) {
       callback({ error: 'Debes saldar tu deuda con Israel para poder apostar en la Ruleta' });
       return;
     }
@@ -542,7 +542,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (totalBet <= 0) { callback({ error: 'Apuesta inválida' }); return; }
 
     const dbUser = await getUser(user.id);
-    if (!dbUser || dbUser.balance < totalBet) { callback({ error: 'Saldo insuficiente' }); return; }
+    if (!dbUser || toBig(dbUser.balance) < toBig(totalBet)) { callback({ error: 'Saldo insuficiente' }); return; }
 
     const timeRemainingMs = rouletteEngine.phaseEndsAt - Date.now();
     if (rouletteEngine.phase !== 'betting' || timeRemainingMs <= 5000) {
@@ -582,7 +582,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
     const dbUserLocal = await getUser(user.id);
-    if (dbUserLocal && dbUserLocal.israel_debt && dbUserLocal.israel_debt > 0) {
+    if (dbUserLocal && toBig(dbUserLocal.israel_debt) > 0n) {
       callback({ error: 'Debes saldar tu deuda con Israel' });
       return;
     }

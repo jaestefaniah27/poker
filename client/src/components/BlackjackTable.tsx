@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips, vibrate, STAKE_TIERS } from '../utils';
+import { socket, fmtChips, vibrate, STAKE_TIERS, toBig } from '../utils';
 import { DecoratedName } from './Decorations';
 import PlayingCard from './PlayingCard';
 import Slider from './Slider';
@@ -194,7 +194,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   // Sin tope de mesa: puedes apostar todas tus fichas. Las que no puedas pagar salen transparentes.
   const maxBet = myChips;
   // Patrimonio en mesa = saldo fuera de mesa + fichas (las dos bolsas son disjuntas en BJ).
-  const myNetWorth = user.balance + myChips;
+  const myNetWorth = toBig(user.balance) + toBig(myChips);
   // Multiplicador automático de fichas, fijado por el patrimonio al entrar a la mesa.
   // Usa patrimonio (no solo saldo) porque el buy-in mueve dinero a fichas y dejaría el saldo bajo el umbral.
   const [chipMult, setChipMult] = useState(1);
@@ -202,7 +202,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   useEffect(() => {
     if (chipMultLockedRef.current || !myPlayer) return;
     chipMultLockedRef.current = true;
-    setChipMult(chipMultiplierFor(user.balance + (myPlayer.chips || 0)));
+    setChipMult(chipMultiplierFor(Number(toBig(user.balance) + toBig(myPlayer.chips || 0))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myPlayer]);
   const myBet = myPlayer?.bet || 0;
@@ -239,20 +239,20 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const showResult = phase === 'resolve' && resolveReady;
   const [prizeArrived, setPrizeArrived] = useState(false);
 
-  const initialNetWorthRef = useRef<number | null>(null);
+  const initialNetWorthRef = useRef<bigint | null>(null);
   const lastValidDiffRef = useRef<number>(0);
 
   if (myPlayer) {
     if (initialNetWorthRef.current === null) {
-      initialNetWorthRef.current = user.balance + myPlayer.chips;
+      initialNetWorthRef.current = toBig(user.balance) + toBig(myPlayer.chips);
     }
     
     // Actualizamos el diff en cualquier fase, EXCEPTO cuando el servidor ya resolvió (rawPhase === 'resolve')
     // pero aún estamos animando las cartas del dealer (!showResult). Esto evita hacer "spoiler" del premio.
     // Además, myPlayer.chips NO se deduce al apostar en Blackjack, por lo que el net worth es siempre balance + chips.
     if (rawPhase !== 'resolve' || showResult) {
-      const currentNetWorth = user.balance + myPlayer.chips;
-      lastValidDiffRef.current = currentNetWorth - (initialNetWorthRef.current || currentNetWorth);
+      const currentNetWorth = toBig(user.balance) + toBig(myPlayer.chips);
+      lastValidDiffRef.current = Number(currentNetWorth - (initialNetWorthRef.current ?? currentNetWorth));
     }
   }
 
@@ -763,8 +763,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           <div className="text-[10px] text-white/50 leading-none flex items-center justify-end">
             <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} andorra={user.movedToAndorra} />
           </div>
-          <div className={`font-mono text-xs font-bold ${myNetWorth < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
-            {myNetWorth < 0 ? `-$${fmtChips(Math.abs(myNetWorth))}` : `$${fmtChips(myNetWorth)}`}
+          <div className={`font-mono text-xs font-bold ${myNetWorth < 0n ? 'text-red-300' : 'text-emerald-300'}`}>
+            {myNetWorth < 0n ? `-$${fmtChips(-myNetWorth)}` : `$${fmtChips(myNetWorth)}`}
           </div>
         </div>
       </div>

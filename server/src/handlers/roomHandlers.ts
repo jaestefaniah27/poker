@@ -4,7 +4,7 @@ import { getRooms, createRoom, getRoom, joinRoom, leaveRoom } from '../roomManag
 import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR } from '../pokerEngine';
 import { authUser, broadcastRoom, armTurnTimer, clearTurnTimer, io } from '../socketHelpers';
 import { applyBalanceDelta, getUser, toPublicUser } from '../db';
-import { levelFromXp } from '../../../shared/types';
+import { levelFromXp, toBig } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { maybeStartBlackjack, handleBlackjackLeave, clearBlackjackTimers } from './blackjackHandlers';
 
@@ -42,12 +42,12 @@ export const roomHandlers = (socket: Socket) => {
 
     // Check balance BEFORE joining room (prevents entering with phantom chips)
     const isReconnect = room.players.some(p => p.userId === dbUser.id && p.isActive);
-    if (!isReconnect && dbUser.balance < buyIn) {
+    if (!isReconnect && toBig(dbUser.balance) < toBig(buyIn)) {
       socket.emit('error', 'Saldo insuficiente para entrar a esta mesa.');
       return;
     }
 
-    const offTableBalance = dbUser.balance - buyIn;
+    const offTableBalance = (toBig(dbUser.balance) - toBig(buyIn)).toString();
 
     const result = joinRoom(roomId, {
       id: socket.id,

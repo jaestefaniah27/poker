@@ -9,7 +9,7 @@ import {
 import { initShoe } from '../blackjackEngine';
 import { broadcastRoom, io, hasOnlinePlayers } from '../socketHelpers';
 import { applyBalanceDelta, getUser } from '../db';
-import { Room } from '../../../shared/types';
+import { Room, toBig } from '../../../shared/types';
 
 const RESHUFFLE_PAUSE_MS = 2_500;
 
@@ -339,7 +339,7 @@ export const blackjackHandlers = (socket: Socket) => {
     const requestedAmount = Number(amount) || 0;
     const expectedAmount = requestedAmount > 0 ? requestedAmount : (seat.lastBuyIn && seat.lastBuyIn > 0 ? seat.lastBuyIn : 1000);
     const dbSeat = await getUser(seat.userId);
-    if (!dbSeat || dbSeat.balance < expectedAmount) return;
+    if (!dbSeat || toBig(dbSeat.balance) < toBig(expectedAmount)) return;
     const reboughtAmount = rebuyBlackjack(roomId, seat.userId, requestedAmount);
     if (reboughtAmount <= 0) return;
     const newBalance = await applyBalanceDelta(seat.userId, -reboughtAmount);

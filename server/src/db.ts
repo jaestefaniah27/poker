@@ -209,7 +209,12 @@ const MIGRATIONS = [
   { name: '040_settings_table', sql: 'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)' },
   { name: '041_user_is_bot', sql: 'ALTER TABLE users ADD COLUMN is_bot INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
   { name: '042_user_is_cursed', sql: 'ALTER TABLE users ADD COLUMN is_cursed INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
-  { name: '043_curse_adrian', sql: "UPDATE users SET is_cursed = 1 WHERE name LIKE '%adrian%' COLLATE NOCASE" }
+  { name: '043_curse_adrian', sql: "UPDATE users SET is_cursed = 1 WHERE name LIKE '%adrian%' COLLATE NOCASE" },
+  // Saldo de precisión arbitraria: columna TEXT (los INTEGER pierden exactitud
+  // >2^53 al leerse en JS, y >2^63 se corrompen a REAL al escribirse). balance_t
+  // es la fuente de verdad; se opera con BigInt. Backfill desde la INTEGER vieja.
+  { name: '044_balance_text', sql: 'ALTER TABLE users ADD COLUMN balance_t TEXT', ignoreError: 'duplicate column' },
+  { name: '045_balance_text_fill', sql: "UPDATE users SET balance_t = CAST(balance AS TEXT) WHERE balance_t IS NULL OR balance_t = ''" }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -272,7 +277,7 @@ export const initDB = async (): Promise<void> => {
 export interface UserRow {
   id: string;
   name: string;
-  balance: number;
+  balance: string; // dinero grande: string decimal exacto (se opera con BigInt)
   password_hash: string | null;
   avatar: string | null;
   last_daily_claim: string | null;
@@ -292,7 +297,7 @@ export interface UserRow {
   trivia_level: number;
   last_seen?: number;
   paid_israel?: number;
-  israel_debt?: number;
+  israel_debt?: string;
   
   // --- Shop y Cosméticos ---
   equipped_avatar_decoration?: string | null;
@@ -306,14 +311,35 @@ export interface UserRow {
   
   // --- Beneficios Sociales ---
   moved_to_andorra?: number;
-  israel_donation?: number;
-  israel_pool?: number;
+  israel_donation?: string;
+  israel_pool?: string;
 
   // --- Mejoras de Tienda ---
   unlocked_boosts?: string | null;
 }
 
-import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts } from '../../shared/types';
+import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, toBig } from '../../shared/types';
+
+// Columnas de usuario con el dinero leído exacto. balance_t (TEXT) es la fuente
+// de verdad del saldo; el alias pisa la columna `balance` INTEGER del `*` (en
+// node-sqlite3 gana la última columna con el mismo nombre). Los pools sociales
+// se castean a TEXT para no perder precisión al leerlos como number.
+const USER_COLS =
+  "*, COALESCE(balance_t, CAST(balance AS TEXT), '0') AS balance, " +
+  "CAST(COALESCE(israel_debt,0) AS TEXT) AS israel_debt, " +
+  "CAST(COALESCE(israel_donation,0) AS TEXT) AS israel_donation, " +
+  "CAST(COALESCE(israel_pool,0) AS TEXT) AS israel_pool";
+
+// Mutex por usuario para que el read-modify-write del saldo (BigInt en JS, no
+// se puede hacer atómico en SQL con TEXT) no sufra carreras entre operaciones
+// concurrentes del mismo usuario.
+const balanceChain = new Map<string, Promise<unknown>>();
+const withBalanceLock = <T>(id: string, fn: () => Promise<T>): Promise<T> => {
+  const prev = balanceChain.get(id) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  balanceChain.set(id, run.catch(() => {}));
+  return run;
+};
 
 export const parsePools = (raw: string | null): Record<string, number> => {
   try { const p = JSON.parse(raw || '{}'); return (p && typeof p === 'object') ? p : {}; } catch { return {}; }
@@ -336,7 +362,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
   return {
     id: row.id,
     name: row.name,
-    balance: row.balance,
+    balance: row.balance ?? '0',
     avatar: row.avatar || row.id,
     hasPassword: !!row.password_hash,
     lastDailyClaim: row.last_daily_claim ?? null,
@@ -357,30 +383,32 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     triviaLevel,
     lastSeen: row.last_seen ?? undefined,
     paidIsrael: !!row.paid_israel,
-    israelDebt: row.israel_debt ?? 0,
+    israelDebt: row.israel_debt ?? '0',
     equippedAvatarDecoration: row.equipped_avatar_decoration ?? undefined,
     unlockedAvatarDecorations: row.unlocked_avatar_decorations ? JSON.parse(row.unlocked_avatar_decorations) : [],
     equippedNameDecoration: row.equipped_name_decoration ?? undefined,
     unlockedNameDecorations: row.unlocked_name_decorations ? JSON.parse(row.unlocked_name_decorations) : [],
     equippedBjFelt: row.equipped_bj_felt ?? undefined,
     unlockedBjFelts: row.unlocked_bj_felts ? JSON.parse(row.unlocked_bj_felts) : [],
-    israelDonation: row.israel_donation ?? 0,
-    israelPool: row.israel_pool ?? 0,
+    israelDonation: row.israel_donation ?? '0',
+    israelPool: row.israel_pool ?? '0',
     movedToAndorra: !!row.moved_to_andorra,
     unlockedBoosts: (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {}; } catch { return {}; } })(),
   };
 };
 
 export const getAllUsersRanked = async (): Promise<UserRow[]> => {
-  return dbAll<UserRow>("SELECT * FROM users WHERE name != 'Jorge' ORDER BY balance DESC");
+  // Orden numérico exacto sobre el string del saldo: para enteros no negativos
+  // sin ceros a la izquierda, más largo = mayor; a igual longitud, lexicográfico = numérico.
+  return dbAll<UserRow>(`SELECT ${USER_COLS} FROM users WHERE name != 'Jorge' ORDER BY LENGTH(balance) DESC, balance DESC`);
 };
 
 export const getAllUsersAdmin = async (): Promise<UserRow[]> => {
-  return dbAll<UserRow>("SELECT * FROM users ORDER BY name ASC");
+  return dbAll<UserRow>(`SELECT ${USER_COLS} FROM users ORDER BY name ASC`);
 };
 
 export const getUser = async (id: string): Promise<UserRow | undefined> => {
-  return dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
+  return dbGet<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = ?`, [id]);
 };
 
 export const deleteUser = async (id: string): Promise<void> => {
@@ -391,7 +419,7 @@ export const deleteUser = async (id: string): Promise<void> => {
 // Búsqueda por nombre (sin distinguir mayúsculas ni espacios sobrantes).
 // Es la clave para que el saldo persista al volver a entrar con el mismo nombre.
 export const getUserByName = async (name: string): Promise<UserRow | undefined> => {
-  return dbGet<UserRow>('SELECT * FROM users WHERE name = ? COLLATE NOCASE', [name.trim()]);
+  return dbGet<UserRow>(`SELECT ${USER_COLS} FROM users WHERE name = ? COLLATE NOCASE`, [name.trim()]);
 };
 
 export const resetJorgeCooldowns = async (): Promise<void> => {
@@ -415,7 +443,7 @@ export const updateLastSeen = async (id: string): Promise<void> => {
 };
 
 export const createUser = async (id: string, name: string): Promise<void> => {
-  await dbRun('INSERT OR IGNORE INTO users (id, name, balance) VALUES (?, ?, 1000)', [id, name.trim()]);
+  await dbRun("INSERT OR IGNORE INTO users (id, name, balance, balance_t) VALUES (?, ?, 1000, '1000')", [id, name.trim()]);
 };
 
 export const setPasswordHash = async (id: string, hash: string | null): Promise<void> => {
@@ -433,40 +461,46 @@ export const updateUserAvatar = async (id: string, avatar: string): Promise<void
   await dbRun('UPDATE users SET avatar = ? WHERE id = ?', [avatar, id]);
 };
 
-export const updateUserBalance = async (id: string, amount: number): Promise<void> => {
-  await dbRun('UPDATE users SET balance = balance + ? WHERE id = ?', [amount, id]);
-  onBalanceChanged();
+export const updateUserBalance = async (id: string, amount: number | bigint): Promise<void> => {
+  await applyBalanceDelta(id, amount);
 };
 
-// Aplica un delta al saldo y devuelve el saldo resultante.
-// sqlite3 serializa las sentencias sobre la conexión, así que UPDATE+SELECT es atómico aquí.
-export const applyBalanceDelta = async (id: string, delta: number): Promise<number> => {
-  await dbRun('UPDATE users SET balance = MAX(0, balance + ?) WHERE id = ?', [delta, id]);
-  const row = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
-  onBalanceChanged();
-  const balance = row?.balance ?? 0;
-  // Récord histórico de saldo. Fire-and-forget: no frena el flujo de pagos.
-  void maxStat(id, 'max_balance', balance);
-  return balance;
+// Aplica un delta al saldo (BigInt, precisión arbitraria) y devuelve el saldo
+// resultante como string decimal. El read-modify-write va bajo mutex por usuario
+// para evitar carreras (no se puede hacer atómico en SQL sobre TEXT). Nunca < 0.
+export const applyBalanceDelta = async (id: string, delta: number | bigint): Promise<string> => {
+  return withBalanceLock(id, async () => {
+    const row = await dbGet<{ balance: string | null; balance_t: string | null }>(
+      'SELECT CAST(balance AS TEXT) AS balance, balance_t FROM users WHERE id = ?', [id]
+    );
+    let next = toBig(row?.balance_t ?? row?.balance ?? 0) + toBig(delta);
+    if (next < 0n) next = 0n;
+    const s = next.toString();
+    await dbRun('UPDATE users SET balance_t = ? WHERE id = ?', [s, id]);
+    onBalanceChanged();
+    // Récord histórico (stat de display; tolera la imprecisión de number a gran escala).
+    void maxStat(id, 'max_balance', Number(next));
+    return s;
+  });
 };
 
 const HOURLY_COOLDOWN_MS = 30 * 60 * 1000;
 
-export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: number }> => {
-  const row = await dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
+export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: string }> => {
+  const row = await dbGet<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = ?`, [id]);
   if (!row) return { ok: false, error: 'Usuario no encontrado' };
   const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
   if (row.last_daily_claim === today) return { ok: false, error: 'Ya recogiste el bono hoy' };
   const boosts: TrackBoosts = (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
   const amount = dailyAmountFor(row.paguita_level ?? 0) * boostMultiplier('paguita', boosts);
-  await dbRun('UPDATE users SET balance = balance + ?, last_daily_claim = ? WHERE id = ?', [amount, today, id]);
-  const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
-  onBalanceChanged();
-  return { ok: true, newBalance: updated?.balance ?? 0 };
+  // Marca el claim primero (anti doble-claim), luego acredita con precisión arbitraria.
+  await dbRun('UPDATE users SET last_daily_claim = ? WHERE id = ?', [today, id]);
+  const newBalance = await applyBalanceDelta(id, amount);
+  return { ok: true, newBalance };
 };
 
-export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: number; nextClaimAt?: number }> => {
-  const row = await dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
+export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: string; nextClaimAt?: number }> => {
+  const row = await dbGet<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = ?`, [id]);
   if (!row) return { ok: false, error: 'Usuario no encontrado' };
   const now = Date.now();
   const last = row.last_hourly_claim ?? 0;
@@ -474,10 +508,9 @@ export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error
   if (now < nextAt) return { ok: false, error: 'Demasiado pronto', nextClaimAt: nextAt };
   const boosts: TrackBoosts = (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
   const amount = hourlyAmountFor(row.dieta_level ?? 0) * boostMultiplier('dieta', boosts);
-  await dbRun('UPDATE users SET balance = balance + ?, last_hourly_claim = ? WHERE id = ?', [amount, now, id]);
-  const updated = await dbGet<{ balance: number }>('SELECT balance FROM users WHERE id = ?', [id]);
-  onBalanceChanged();
-  return { ok: true, newBalance: updated?.balance ?? 0, nextClaimAt: now + HOURLY_COOLDOWN_MS };
+  await dbRun('UPDATE users SET last_hourly_claim = ? WHERE id = ?', [now, id]);
+  const newBalance = await applyBalanceDelta(id, amount);
+  return { ok: true, newBalance, nextClaimAt: now + HOURLY_COOLDOWN_MS };
 };
 
 // --- Niveles personales: XP y gasto de puntos ---
@@ -504,7 +537,7 @@ export const spendLevelPoint = async (
   id: string,
   track: LevelTrack
 ): Promise<{ ok: boolean; error?: string }> => {
-  const row = await dbGet<UserRow>('SELECT * FROM users WHERE id = ?', [id]);
+  const row = await dbGet<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = ?`, [id]);
   if (!row) return { ok: false, error: 'Usuario no encontrado' };
   const level = levelFromXp(row.xp ?? 0);
   const paguita = row.paguita_level ?? 0;
@@ -719,9 +752,9 @@ export const addOneFreeSpin = async (id: string, value: number, count = 1): Prom
   await dbRun('UPDATE users SET free_spins_pools = ? WHERE id = ?', [JSON.stringify(pools), id]);
 };
 
-export const getHaciendaTotal = async (): Promise<number> => {
-  const row = await dbGet<{ total: number }>('SELECT total FROM hacienda_state WHERE id = 1');
-  return row?.total ?? 0;
+export const getHaciendaTotal = async (): Promise<string> => {
+  const row = await dbGet<{ total: string }>('SELECT CAST(total AS TEXT) AS total FROM hacienda_state WHERE id = 1');
+  return row?.total ?? '0';
 };
 
 // --- Shop Catalog Settings ---
@@ -772,21 +805,21 @@ export const saveShopCatalog = async (catalog: ShopItem[]): Promise<void> => {
   }
 };
 
-export const addHaciendaTotal = async (amount: number): Promise<number> => {
+export const addHaciendaTotal = async (amount: number): Promise<string> => {
   await dbRun('INSERT OR IGNORE INTO hacienda_state (id, total) VALUES (1, 0)');
   await dbRun('UPDATE hacienda_state SET total = total + ? WHERE id = 1', [amount]);
   return await getHaciendaTotal();
 };
 
-export const payIsrael = async (id: string): Promise<number> => {
+export const payIsrael = async (id: string): Promise<string> => {
   const user = await getUser(id);
-  const debt = user?.israel_debt ?? 0;
-  if (debt <= 0) return 0;
-  
+  const debt = toBig(user?.israel_debt ?? 0);
+  if (debt <= 0n) return '0';
+
   await dbRun('UPDATE users SET israel_debt = 0, paid_israel = 1 WHERE id = ?', [id]);
-  const balanceBefore = user?.balance ?? 0;
+  const balanceBefore = toBig(user?.balance ?? 0);
   await applyBalanceDelta(id, -debt);
-  return Math.min(balanceBefore, debt); // Return what was actually able to be taken (if we only want to give Israel what Padre actually had), or we just return debt.
+  return (balanceBefore < debt ? balanceBefore : debt).toString(); // lo que realmente se pudo cobrar
 }
 
 // --- Shop Helpers ---
@@ -810,30 +843,32 @@ export const setMovedToAndorra = async (id: string): Promise<void> => {
   await dbRun('UPDATE users SET moved_to_andorra = 1 WHERE id = ?', [id]);
 };
 
-export const addIsraelDonation = async (donorId: string, amount: number): Promise<void> => {
-  // Transfer to Israel player
+export const addIsraelDonation = async (donorId: string, amount: number | bigint): Promise<void> => {
+  const amt = toBig(amount);
+  if (amt <= 0n) return;
+  // Transferir a la cuenta de Israel (saldo exacto vía applyBalanceDelta).
   const israelUser = await getUserByName('Israel');
   if (israelUser) {
-    await applyBalanceDelta(israelUser.id, amount);
+    await applyBalanceDelta(israelUser.id, amt);
   } else {
-    // If Israel doesn't exist, just deduct from donor, or we could create him
     await createUser('israel-id', 'Israel');
-    await applyBalanceDelta('israel-id', amount);
+    await applyBalanceDelta('israel-id', amt);
   }
-  // Deduct from donor
-  await applyBalanceDelta(donorId, -amount);
-  
-  // Add to donor's stats
-  const poolAddition = Math.floor(amount * 1.5);
-  await dbRun('UPDATE users SET israel_donation = israel_donation + ?, israel_pool = israel_pool + ? WHERE id = ?', [amount, poolAddition, donorId]);
+  // Descontar del donante.
+  await applyBalanceDelta(donorId, -amt);
+
+  // Stats del donante (donación acumulada + pool 1.5×).
+  const poolAddition = (amt * 3n) / 2n;
+  await dbRun('UPDATE users SET israel_donation = israel_donation + ?, israel_pool = israel_pool + ? WHERE id = ?', [amt.toString(), poolAddition.toString(), donorId]);
 };
 
 export const deductIsraelPool = async (id: string, amount: number): Promise<number> => {
   const row = await getUser(id);
-  if (!row || !row.israel_pool || row.israel_pool <= 0) return 0;
-  const deducted = Math.min(amount, row.israel_pool);
-  await dbRun('UPDATE users SET israel_pool = israel_pool - ? WHERE id = ?', [deducted, id]);
-  return deducted;
+  const pool = toBig(row?.israel_pool ?? 0);
+  if (pool <= 0n) return 0;
+  const deducted = toBig(amount) < pool ? toBig(amount) : pool; // amount (premio) ≤ ~1e14 → cabe en number al devolver
+  await dbRun('UPDATE users SET israel_pool = israel_pool - ? WHERE id = ?', [deducted.toString(), id]);
+  return Number(deducted);
 };
 
 export const resetShopPurchases = async (id: string): Promise<void> => {

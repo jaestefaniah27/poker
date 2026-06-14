@@ -5,6 +5,7 @@ import {
 } from '../roomManager';
 import { broadcastRoom, armTurnTimer, clearTurnTimer, processAction, io, SHOWDOWN_LOCK_MS } from '../socketHelpers';
 import { applyBalanceDelta, getUser, getPokerStats, getAllStats } from '../db';
+import { toBig } from '../../../shared/types';
 
 // Emotes permitidos en mesa (lista cerrada: el server no reenvía texto libre).
 const ALLOWED_EMOTES = ['😂', '😭', '🔥', '💀', '🐔', '😡', '🤑', '👏'];
@@ -44,7 +45,7 @@ export const gameHandlers = (socket: Socket) => {
     if (!player) return;
 
     const dbUser = await getUser(player.userId);
-    if (!dbUser || dbUser.balance < room.buyIn) return;
+    if (!dbUser || toBig(dbUser.balance) < toBig(room.buyIn)) return;
 
     const ok = rebuy(roomId, player.userId, room.buyIn);
     if (!ok) return;

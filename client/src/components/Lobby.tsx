@@ -6,7 +6,7 @@ import JackpotModal from './JackpotModal';
 import SlotIcon from './SlotIcon';
 import { AnimatePresence, motion } from 'framer-motion';
 import Slider from './Slider';
-import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage, playCheckSound } from '../utils';
+import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage, playCheckSound, toBig } from '../utils';
 import { sfx, isMuted, toggleMute } from '../sounds';
 import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor, boostMultiplier, type TrackBoosts } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
@@ -120,10 +120,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
   // Gifts
   const [giftTarget, setGiftTarget] = useState<LeaderboardEntry | null>(null);
-  const [giftAlert, setGiftAlert] = useState<{from: string, amount: number} | null>(null);
+  const [giftAlert, setGiftAlert] = useState<{from: string, amount: number | string} | null>(null);
 
   // Hacienda
-  const [haciendaTotal, setHaciendaTotal] = useState<number>(0);
+  const [haciendaTotal, setHaciendaTotal] = useState<string>('0');
 
   // MINISTERIO DE DERECHOS SOCIALES
   const [now, setNow] = useState(Date.now());
@@ -136,7 +136,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     const prev = prevBalanceRef.current;
     prevBalanceRef.current = user.balance;
     if (user.balance === prev) return;
-    setBalanceFlash(user.balance > prev ? 'up' : 'down');
+    setBalanceFlash(toBig(user.balance) > toBig(prev) ? 'up' : 'down');
     const t = setTimeout(() => setBalanceFlash(null), 900);
     return () => clearTimeout(t);
   }, [user.balance]);
@@ -242,7 +242,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     socket.on('jackpot_viewers', handleJackpotViewers);
     socket.on('roulette_players', handleRoulettePlayers);
 
-    const handleGiftReceived = (data: { from: string, amount: number, updatedUser?: any }) => {
+    const handleGiftReceived = (data: { from: string, amount: number | string, updatedUser?: any }) => {
       setGiftAlert({ from: data.from, amount: data.amount });
       playCheckSound();
       sfx.coin();
@@ -258,7 +258,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       if (data?.total !== undefined) setHaciendaTotal(data.total);
     });
 
-    const handleHaciendaUpdate = (data: { total: number }) => setHaciendaTotal(data.total);
+    const handleHaciendaUpdate = (data: { total: number | string }) => setHaciendaTotal(String(data.total));
     socket.on('haciendaUpdated', handleHaciendaUpdate);
 
     return () => {
@@ -977,7 +977,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 <button onClick={() => confirmBuyIn()} className="flex-1 bg-sky-500 text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Entrar con {fmtChips(amount)}</button>
               </div>
               {user.balance > 0 && (
-                <button onClick={() => confirmBuyIn(user.balance)} className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform">
+                <button onClick={() => confirmBuyIn(Number(user.balance))} className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform">
                   💰 Todo mi saldo — {fmtChips(user.balance)}
                 </button>
               )}

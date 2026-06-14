@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fmtChips } from '../utils';
 
 interface AnimatedNumberProps {
-  value: number;
+  value: number | string; // string para saldos grandes (se anima en aprox. number, exacto al mostrar)
   className?: string;
   maxDurationMs?: number; // tope superior (default 2000)
   baseStepMs?: number;    // ms ideales por "+1" de cuenta (default ~16.7ms / 60fps)
@@ -19,15 +19,16 @@ const AnimatedNumber = ({
   baseStepMs = 1000 / 60,
   raw = false,
 }: AnimatedNumberProps) => {
-  const [display, setDisplay] = useState(value);
-  const fromRef = useRef(value);
-  const targetRef = useRef(value);
+  const numValue = Number(value); // saldos grandes: aproximado para la animación (el display final es exacto vía fmtChips de la prop)
+  const [display, setDisplay] = useState(numValue);
+  const fromRef = useRef(numValue);
+  const targetRef = useRef(numValue);
   const rafRef = useRef<number | null>(null);
   const startRef = useRef(0);
 
   useEffect(() => {
     const from = fromRef.current;
-    const target = value;
+    const target = numValue;
     targetRef.current = target;
 
     if (from === target) {
