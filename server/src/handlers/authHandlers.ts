@@ -30,7 +30,7 @@ import {
   dbRun,
   resetShopPurchases
 } from '../db';
-import { issueToken, authUser, broadcastPresence, kickOtherSessions } from '../socketHelpers';
+import { issueToken, authUser, broadcastPresence, kickOtherSessions, io } from '../socketHelpers';
 import { getShopCatalog, saveShopCatalog } from '../db';
 import { levelFromXp, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount } from '../../../shared/types';
 import { sanitizeInput } from '../security';
@@ -137,11 +137,10 @@ export const authHandlers = (socket: Socket) => {
   });
 
   socket.on('getLeaderboard', async (_data, callback) => {
-    const { io } = require('../socketHelpers');
     const onlineUserIds = new Set<string>();
     if (io) {
       for (const [, s] of io.sockets.sockets) {
-        if (s.data?.user?.id) onlineUserIds.add(s.data.user.id);
+        if (s.data?.user?.id && s.data.user.name !== 'Jorge' && s.data.user.name !== 'Israel') onlineUserIds.add(s.data.user.id);
       }
     }
     const users = await getAllUsersRanked();
@@ -460,11 +459,10 @@ export const authHandlers = (socket: Socket) => {
   });
 
   socket.on('getOnlinePlayers', async (_data, callback) => {
-    const { io } = require('../socketHelpers');
     const userIds = new Set<string>();
     if (io) {
       for (const [, s] of io.sockets.sockets) {
-        if (s.data.user) userIds.add(s.data.user.id);
+        if (s.data.user && s.data.user.name !== 'Jorge' && s.data.user.name !== 'Israel') userIds.add(s.data.user.id);
       }
     }
     const players = (await Promise.all(Array.from(userIds).map(id => getUser(id))))

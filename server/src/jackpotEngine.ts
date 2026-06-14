@@ -115,13 +115,13 @@ export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0, isB
 
   if (multiplier === 50) {
     spinsSinceAce = 0;
-    if (playerName !== 'Jorge') recentWins.unshift({ type: 'ace', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
+    if (playerName !== 'Jorge' && playerName !== 'Israel') recentWins.unshift({ type: 'ace', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   } else if (multiplier === 20) {
     spinsSinceCrown = 0;
-    if (playerName !== 'Jorge') recentWins.unshift({ type: 'crown', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
+    if (playerName !== 'Jorge' && playerName !== 'Israel') recentWins.unshift({ type: 'crown', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   } else if (multiplier === 10) {
     spinsSinceChip = 0;
-    if (playerName !== 'Jorge') recentWins.unshift({ type: 'chip', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
+    if (playerName !== 'Jorge' && playerName !== 'Israel') recentWins.unshift({ type: 'chip', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   }
 
   if (recentWins.length > 3) {

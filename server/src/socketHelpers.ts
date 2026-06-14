@@ -13,7 +13,7 @@ export const broadcastPresence = () => {
   if (!io) return;
   const ids = new Set<string>();
   for (const [, s] of io.sockets.sockets) {
-    if (s.data?.user && s.data.user.name !== 'Jorge') ids.add(s.data.user.id);
+    if (s.data?.user && s.data.user.name !== 'Jorge' && s.data.user.name !== 'Israel') ids.add(s.data.user.id);
   }
   io.emit('onlineCount', { count: ids.size });
   io.emit('leaderboardUpdated');
