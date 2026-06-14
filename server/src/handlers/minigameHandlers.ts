@@ -59,6 +59,8 @@ export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
+    const dbUser = await getUser(user.id);
+    if (dbUser && dbUser.israel_debt && dbUser.israel_debt > 0) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la paguita' }); return; }
     const result = await claimDailyBonus(user.id);
     if (!result.ok) { callback({ error: result.error }); return; }
     bumpStat(user.id, 'bonus_claims');
@@ -103,6 +105,8 @@ export const minigameHandlers = (socket: Socket) => {
   socket.on('claimHourly', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
+    const dbUser = await getUser(user.id);
+    if (dbUser && dbUser.israel_debt && dbUser.israel_debt > 0) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la dieta' }); return; }
     const result = await claimHourlyBonus(user.id);
     if (!result.ok) { callback({ error: result.error, nextClaimAt: result.nextClaimAt }); return; }
     bumpStat(user.id, 'bonus_claims');
@@ -113,8 +117,14 @@ export const minigameHandlers = (socket: Socket) => {
   socket.on('claimFreeSpinsWheel', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
+    
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+
+    if (dbUser.israel_debt && dbUser.israel_debt > 0) {
+      callback({ error: 'Debes saldar tu deuda con Israel antes de tirar la ruleta' });
+      return;
+    }
     const now = Date.now();
     const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
     const last = dbUser.last_free_spins_claim ?? 0;
@@ -149,6 +159,11 @@ export const minigameHandlers = (socket: Socket) => {
 
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+
+    if (dbUser.israel_debt && dbUser.israel_debt > 0) {
+      callback({ error: 'Debes saldar tu deuda con Israel para poder jugar a la Jackpot' });
+      return;
+    }
 
     // Tirada anterior sin cobrar: si ya pasó su animación la liquidamos ahora;
     // si no, bloqueamos el nuevo spin (anti-spam / anti-acelerado).
@@ -335,6 +350,12 @@ export const minigameHandlers = (socket: Socket) => {
   socket.on('minesStart', async ({ token, bet, numMines }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
+    
+    const dbUserLocal = await getUser(user.id);
+    if (dbUserLocal && dbUserLocal.israel_debt && dbUserLocal.israel_debt > 0) {
+      callback({ error: 'Debes saldar tu deuda con Israel para poder jugar a las Minas' });
+      return;
+    }
 
     const nm = Math.floor(Number(numMines));
     const betAmt = Math.floor(Number(bet));
@@ -485,6 +506,12 @@ export const minigameHandlers = (socket: Socket) => {
   socket.on('roulette_place_bet', async ({ token, bets }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
+    
+    const dbUserLocal = await getUser(user.id);
+    if (dbUserLocal && dbUserLocal.israel_debt && dbUserLocal.israel_debt > 0) {
+      callback({ error: 'Debes saldar tu deuda con Israel para poder apostar en la Ruleta' });
+      return;
+    }
 
     const totalBet = Object.values(bets as Record<string, number>).reduce((a, b) => a + b, 0);
     if (totalBet <= 0) { callback({ error: 'Apuesta inválida' }); return; }
@@ -528,6 +555,12 @@ export const minigameHandlers = (socket: Socket) => {
   socket.on('wordleComplete', async ({ token, won, attempts }, callback) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
+    
+    const dbUserLocal = await getUser(user.id);
+    if (dbUserLocal && dbUserLocal.israel_debt && dbUserLocal.israel_debt > 0) {
+      callback({ error: 'Debes saldar tu deuda con Israel' });
+      return;
+    }
 
     const slot = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
     if (wordleClaimedSlots.get(user.id) === slot) {
