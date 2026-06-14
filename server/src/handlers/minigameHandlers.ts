@@ -251,14 +251,14 @@ export const minigameHandlers = (socket: Socket) => {
     if (taxAmount > 0) bumpStat(dbUser.id, 'jackpot_tax_paid', taxAmount);
     if (eventType === 'fraud') bumpStat(dbUser.id, 'jackpot_frauds');
 
-    let extraXp = 0;
-    if (multiplier >= 50) extraXp = 500;
-    else if (multiplier >= 20) extraXp = 50;
-    else if (multiplier >= 10) extraXp = 20;
-    else if (multiplier > 0) extraXp = XP_PER_JACKPOT_WIN;
+    let addedXp = 0;
+    if (multiplier >= 50) addedXp = 50;
+    else if (multiplier >= 20) addedXp = 20;
+    else if (multiplier >= 10) addedXp = 10;
 
-    const addedXp = XP_PER_JACKPOT_SPIN + extraXp;
-    await addXp(dbUser.id, addedXp);
+    if (addedXp > 0) {
+      await addXp(dbUser.id, addedXp);
+    }
 
     const updatedUser = await getUser(dbUser.id);
 
