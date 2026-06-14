@@ -179,6 +179,10 @@ export const minigameHandlers = (socket: Socket) => {
         callback({ error: 'Nivel de apuesta no desbloqueado' });
         return;
       }
+      // No se permite apostar por encima del saldo (saldo ya no puede ser
+      // negativo). Releemos el saldo por si un settle previo acaba de acreditar.
+      const fresh = await getUser(dbUser.id);
+      if (!fresh || fresh.balance < amount) { callback({ error: 'Saldo insuficiente' }); return; }
     }
 
     const { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount);
@@ -330,6 +334,7 @@ export const minigameHandlers = (socket: Socket) => {
     const betAmt = Math.floor(Number(bet));
     if (nm < 1 || nm > 24) { callback({ error: 'Minas inválidas (1-24)' }); return; }
     if (betAmt <= 0) { callback({ error: 'Apuesta inválida' }); return; }
+    if (user.balance < betAmt) { callback({ error: 'Saldo insuficiente' }); return; }
 
     activeMinesGames.delete(socket.id);
 

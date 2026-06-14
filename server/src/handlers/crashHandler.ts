@@ -52,6 +52,7 @@ export const crashHandlers = (socket: Socket) => {
 
     const betAmt = Math.floor(Number(bet));
     if (betAmt <= 0 || !JACKPOT_TIERS.includes(betAmt)) { callback({ error: 'Apuesta inválida' }); return; }
+    if (user.balance < betAmt) { callback({ error: 'Saldo insuficiente' }); return; }
 
     await applyBalanceDelta(user.id, -betAmt);
     bumpStat(user.id, 'crash_games');

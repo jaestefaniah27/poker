@@ -221,6 +221,8 @@ export const authHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
 
+    if (!['avatar', 'name', 'felt'].includes(type)) { callback({ error: 'Tipo inválido' }); return; }
+
     if (itemId) {
       const dbUser = await getUser(user.id);
       let isUnlocked = false;

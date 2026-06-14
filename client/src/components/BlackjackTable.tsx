@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips, vibrate, STAKE_TIERS } from '../utils';
-import { getAvatarDecorationClasses, getNameDecorationClasses, DecoratedName } from './Decorations';
+import { DecoratedName } from './Decorations';
 import PlayingCard from './PlayingCard';
 import Slider from './Slider';
 import Avatar from './Avatar';

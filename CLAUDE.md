@@ -46,7 +46,7 @@ Client conecta a `http://localhost:3001` via Socket.IO.
 
 ## Patrones clave
 
-- **Saldo solo indicativo**: el balance NUNCA bloquea jugar. Puede ser negativo. No añadir checks de "saldo insuficiente" en ninguna parte (mesas, torneos, buy-ins, recompras). El saldo es un marcador, no una restricción.
+- **Saldo NO puede ser negativo** (desde 2026-06-14, antes era "indicativo/puede ser negativo"): hay suficientes juegos que dan dinero, ya no se permite negativo. `applyBalanceDelta` clampa con `MAX(0, balance + delta)`. Toda apuesta/compra/buy-in debe validar `balance >= coste` ANTES de descontar y rechazar con "Saldo insuficiente". Si te quedas a 0, te fastidias. (Guards en jackpot/mines/crash/ruleta, buy-ins poker/BJ, compras tienda, desbloqueos.)
 - **Mesa = torneo unificado**: NO existe entidad "torneo" aparte. Toda partida es una `Room` creada con la misma UI. La ÚNICA diferencia configurable es `blindLevelDuration` (ms por nivel). Si es 0 → mesa cash (ciegas fijas, recompra permitida, no termina sola). Si >0 → modo torneo (`isTournament=true`): las ciegas suben cada `blindLevelDuration` (helper `nextBlinds`), sin recompra (busted=espectador), termina cuando un solo jugador conserva fichas (`checkTournamentEnd`) → `tournamentEnded=true` + pantalla `TournamentResults` con "Volver a empezar" (admin=`players[0]`, `restartTournament`) o "Salir". Winner-takes-all es automático (cash-out de fichas→saldo). Lógica en `roomManager.ts` (escalado/fin/reinicio) y `gameHandlers.ts` (eventos `nextHand`/`restartTournament`).
 - **Server-authoritative**: toda la lógica del juego vive en el servidor. El cliente solo renderiza estado.
 - **Anti-cheat**: cada socket recibe solo sus propias cartas. Cartas rivales se revelan únicamente en showdown.

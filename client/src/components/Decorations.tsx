@@ -1,17 +1,5 @@
 import React from 'react';
 
-export const getAvatarDecorationClasses = (id?: string) => {
-  switch (id) {
-    case 'avatar_bronze': return 'border-[3px] border-[#cd7f32] shadow-[0_0_10px_#cd7f32]';
-    case 'avatar_silver': return 'border-[3px] border-[#c0c0c0] shadow-[0_0_12px_#c0c0c0]';
-    case 'avatar_gold': return 'border-[3px] border-[#ffd700] shadow-[0_0_15px_#ffd700] ring-1 ring-[#ffd700]';
-    case 'avatar_diamond': return 'border-[3px] border-[#b9f2ff] shadow-[0_0_20px_#b9f2ff] ring-2 ring-[#00e5ff] animate-pulse';
-    case 'avatar_ruby': return 'border-[4px] border-[#e0115f] shadow-[0_0_25px_#e0115f] ring-2 ring-red-500 animate-pulse';
-    case 'avatar_emerald': return 'border-[4px] border-[#50c878] shadow-[0_0_30px_#50c878] ring-4 ring-green-400 animate-bounce';
-    default: return 'border-2 border-transparent';
-  }
-};
-
 export const getNameDecorationClasses = (id?: string) => {
   switch (id) {
     case 'name_silver': return 'text-[#c0c0c0] font-black border-b-2 border-[#c0c0c0]';

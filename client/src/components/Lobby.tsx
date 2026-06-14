@@ -413,15 +413,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
               </span>
             </div>
-            <button onClick={() => setShowProfile(true)} title="Mi perfil" className={`rounded-full transition-all relative ${
-              user.equippedAvatarDecoration === 'avatar_bronze' ? 'ring-4 ring-[#cd7f32] shadow-[0_0_10px_#cd7f32]' :
-              user.equippedAvatarDecoration === 'avatar_silver' ? 'ring-4 ring-gray-300 shadow-[0_0_15px_#d1d5db]' :
-              user.equippedAvatarDecoration === 'avatar_gold' ? 'ring-4 ring-yellow-400 shadow-[0_0_20px_#facc15]' :
-              user.equippedAvatarDecoration === 'avatar_diamond' ? 'ring-4 ring-cyan-300 shadow-[0_0_25px_#67e8f9] animate-pulse' :
-              user.equippedAvatarDecoration === 'avatar_ruby' ? 'ring-4 ring-red-500 shadow-[0_0_30px_#ef4444]' :
-              user.equippedAvatarDecoration === 'avatar_emerald' ? 'ring-4 ring-emerald-400 shadow-[0_0_30px_#34d399] animate-bounce' :
-              'ring-2 ring-transparent hover:ring-gray-500'
-            }`}>
+            {/* El marco lo pinta <Avatar> via AvatarFrame (PNG). No añadir ring CSS
+               aquí o se vería doble marco con los ids base (gold, silver, etc.). */}
+            <button onClick={() => setShowProfile(true)} title="Mi perfil" className="rounded-full transition-all relative ring-2 ring-transparent hover:ring-gray-500">
               <Avatar seed={user.avatar} decorationId={user.equippedAvatarDecoration} />
               {user.hasPassword && (
                 <span className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 rounded-full w-3.5 h-3.5 flex items-center justify-center">
