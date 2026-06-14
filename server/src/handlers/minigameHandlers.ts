@@ -186,27 +186,7 @@ export const minigameHandlers = (socket: Socket) => {
       if (!fresh || fresh.balance < amount) { callback({ error: 'Saldo insuficiente' }); return; }
     }
 
-    let { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount);
-
-    // --- SHADOWBAN LOGIC ---
-    if (dbUser.is_bot === 1 && multiplier > 0) {
-      // Force lose
-      multiplier = 0;
-      // Provide a definitely losing combination (e.g. 3 different suits or 2 same 1 different)
-      // Since it's a bot we can just hardcode a losing one that looks random
-      const losingCombos = [
-        ['club', 'heart', 'diamond'],
-        ['spade', 'club', 'heart'],
-        ['diamond', 'spade', 'club']
-      ];
-      symbols = losingCombos[Math.floor(Math.random() * losingCombos.length)] as [string, string, string];
-      
-      // If it's a big win, we need to remove it from recent wins in state? 
-      // It's fine, spinJackpot already put it in recentWins, but we don't care, it's a bot.
-      // Wait, if it put it in recentWins, the global UI will show the bot won!
-      // But the bot gets 0 money. This is even funnier: the global UI says the bot won but the bot didn't get any money.
-      // Actually, let's keep it simple.
-    }
+    let { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount, dbUser.is_bot === 1);
 
     let winAmount = Math.floor(amount * multiplier);
     let finalWinAmount = winAmount;

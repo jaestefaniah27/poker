@@ -75,7 +75,7 @@ function getMultiplier(s: [Sym, Sym, Sym], isFreeSpin: boolean): number {
   return 0;
 }
 
-export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0): { symbols: [string, string, string]; multiplier: number; state: JackpotState } => {
+export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0, isBot = false): { symbols: [string, string, string]; multiplier: number; state: JackpotState } => {
   globalSpins++;
   spinsSinceAce++;
   spinsSinceCrown++;
@@ -95,13 +95,23 @@ export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0): { 
   dynamicWeights[5] += crownPity; // crown
   dynamicWeights[6] += acePity;   // ace
 
-  const symbols: [Sym, Sym, Sym] = [
+  let symbols: [Sym, Sym, Sym] = [
     weightedRandom(dynamicWeights),
     weightedRandom(dynamicWeights),
     weightedRandom(dynamicWeights)
   ];
 
-  const multiplier = getMultiplier(symbols, isFreeSpin);
+  let multiplier = getMultiplier(symbols, isFreeSpin);
+
+  if (isBot && multiplier > 0) {
+    multiplier = 0;
+    const losingCombos: [Sym, Sym, Sym][] = [
+      ['club', 'heart', 'diamond'],
+      ['spade', 'club', 'heart'],
+      ['diamond', 'spade', 'club']
+    ];
+    symbols = losingCombos[Math.floor(Math.random() * losingCombos.length)];
+  }
 
   if (multiplier === 50) {
     spinsSinceAce = 0;
