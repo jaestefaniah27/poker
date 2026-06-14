@@ -321,6 +321,24 @@ export const authHandlers = (socket: Socket) => {
     callback({ ok: true });
   });
 
+  socket.on('adminSelfDonate', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    
+    // 500Q = 500 quadrillion = 500,000,000,000,000,000
+    const amount = 500_000_000_000_000_000;
+    const { applyBalanceDelta, getUser, toPublicUser } = require('../db');
+    const newBalance = await applyBalanceDelta(user.id, amount);
+    
+    const targetUser = await getUser(user.id);
+    if (targetUser) {
+      const { notifyUser } = require('../socketHelpers');
+      notifyUser(user.id, 'userUpdated', toPublicUser(targetUser));
+      notifyUser(user.id, 'balanceUpdated', { balance: newBalance });
+    }
+    callback({ ok: true, balance: newBalance });
+  });
+
   socket.on('adminSetIsraelDebt', async ({ token, targetId, amount }, callback) => {
     const user = await authUser(token);
     if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }

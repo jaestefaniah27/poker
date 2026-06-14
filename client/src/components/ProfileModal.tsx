@@ -150,6 +150,16 @@ const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModal
     });
   };
 
+  const selfDonate = () => {
+    socket.emit('adminSelfDonate', { token }, (res: any) => {
+      if (res?.error) alert(res.error);
+      else {
+        flash(true, 'Te has inyectado 500Q fichas a ti mismo. ¡A disfrutar!');
+        loadAdminUsers();
+      }
+    });
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -494,12 +504,21 @@ const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModal
         {/* Admin Panel */}
         {user.name === 'Jorge' && (
           <div className="mt-8 border-t border-gray-700 pt-6">
-            <h3 className="text-rose-400 font-bold mb-3 uppercase text-xs tracking-widest flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              Admin Panel
-            </h3>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-rose-400 font-bold uppercase text-xs tracking-widest flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Admin Panel
+              </h3>
+              <button 
+                onClick={selfDonate}
+                className="bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                title="Añadir 500Q (500,000,000,000,000,000) a tu propio saldo"
+              >
+                Donarse 500Q 💰
+              </button>
+            </div>
             <div className="space-y-2">
               {adminUsers.map((u) => (
                 <div key={u.id} className="flex justify-between items-center bg-background p-2.5 rounded-lg border border-gray-800">
