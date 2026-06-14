@@ -712,7 +712,18 @@ export const getHaciendaTotal = async (): Promise<number> => {
 import { SHOP_CATALOG } from '../../shared/types';
 import type { ShopItem } from '../../shared/types';
 
-const customCatalogPath = path.join(__dirname, '..', '..', 'shared', 'custom_shop_catalog.json');
+const getCatalogPath = () => {
+  const p1 = path.join(__dirname, '..', '..', 'shared', 'custom_shop_catalog.json');
+  const p2 = path.join(__dirname, '..', '..', '..', '..', 'shared', 'custom_shop_catalog.json');
+  
+  // Si estamos en la carpeta dist compilada, __dirname incluirá 'dist' o la profundidad requerirá subir más
+  if (__dirname.includes('dist') || __dirname.includes('build')) {
+    return p2;
+  }
+  return p1;
+};
+
+const customCatalogPath = getCatalogPath();
 
 export const getShopCatalog = async (): Promise<ShopItem[]> => {
   try {
