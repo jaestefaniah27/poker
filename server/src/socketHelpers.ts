@@ -19,6 +19,20 @@ export const broadcastPresence = () => {
   io.emit('leaderboardUpdated');
 };
 
+// Sesión única por usuario (estilo Clash of Clans): al loguear/reanudar en un
+// socket nuevo, expulsamos cualquier otra conexión del mismo userId. Usamos
+// disconnect(true) del servidor para que el cliente NO auto-reconecte (reason
+// 'io server disconnect') y no se produzca ping-pong entre pestañas.
+export const kickOtherSessions = (userId: string, keepSocketId: string) => {
+  if (!io) return;
+  for (const [, s] of io.sockets.sockets) {
+    if (s.id !== keepSocketId && s.data?.user?.id === userId) {
+      s.emit('sessionReplaced');
+      s.disconnect(true);
+    }
+  }
+};
+
 export const notifyUser = (userId: string, event: string, payload: any) => {
   if (!io) return;
   for (const [, s] of io.sockets.sockets) {

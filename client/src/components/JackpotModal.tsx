@@ -132,6 +132,14 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
               }
               if (res.multiplier >= 5) vibrate([80, 40, 80, 40, 200]);
               else if (res.multiplier > 0) vibrate([60, 30, 60]);
+
+              // El premio se acredita en el servidor SOLO ahora, al terminar la
+              // animación. Hasta aquí el saldo solo reflejaba el descuento.
+              socket.emit('claimJackpot', { token }, (cr: any) => {
+                if (!cr?.ok) return;
+                if (cr.user) { onUpdateUser(cr.user); setBalance(cr.user.balance); }
+                else if (cr.newBalance != null) { setBalance(cr.newBalance); }
+              });
             }, 250);
             timersRef.current.push(t2);
           }

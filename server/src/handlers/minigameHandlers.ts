@@ -35,6 +35,25 @@ const broadcastJackpotViewers = () => {
   io.emit('jackpot_viewers', viewers);
 };
 
+// --- Premio diferido del jackpot ---
+// El spin descuenta la apuesta al instante pero NO acredita el premio: este
+// queda "pendiente" hasta que el cliente termina la animación y emite
+// 'claimJackpot'. Se rechaza el cobro antes de readyAt (bots no pueden saltar
+// la animación) y se rechaza un nuevo spin mientras haya un pendiente sin
+// cobrar (mata el farmeo en paralelo / acelerado).
+const JACKPOT_ANIM_MS = 800;
+interface PendingJackpot { readyAt: number; finalWinAmount: number; }
+const pendingJackpots = new Map<string, PendingJackpot>(); // userId -> pendiente
+
+const settlePendingJackpot = async (userId: string): Promise<{ balance: number; user: any } | null> => {
+  const p = pendingJackpots.get(userId);
+  if (!p) return null;
+  pendingJackpots.delete(userId);
+  if (p.finalWinAmount > 0) await applyBalanceDelta(userId, p.finalWinAmount);
+  const u = await getUser(userId);
+  return { balance: u?.balance ?? 0, user: u ? toPublicUser(u) : undefined };
+};
+
 export const minigameHandlers = (socket: Socket) => {
   socket.on('claimDaily', async ({ token }, callback) => {
     const user = await authUser(token);
@@ -68,6 +87,11 @@ export const minigameHandlers = (socket: Socket) => {
   });
 
   socket.on('disconnect', () => {
+    if (socket.data?.user?.id) {
+      // Liquidar premio pendiente para no perder una ganancia legítima si el
+      // usuario cierra durante la animación.
+      settlePendingJackpot(socket.data.user.id).catch(err => console.error('[jackpot settle on disconnect]', err));
+    }
     if (socket.data?.user?.id && jackpotViewers.has(socket.data.user.id)) {
       jackpotViewers.delete(socket.data.user.id);
       broadcastJackpotViewers();
@@ -123,6 +147,18 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
 
+    // Tirada anterior sin cobrar: si ya pasó su animación la liquidamos ahora;
+    // si no, bloqueamos el nuevo spin (anti-spam / anti-acelerado).
+    const prevPending = pendingJackpots.get(dbUser.id);
+    if (prevPending) {
+      if (Date.now() >= prevPending.readyAt) {
+        await settlePendingJackpot(dbUser.id);
+      } else {
+        callback({ error: 'Espera a que termine la tirada anterior' });
+        return;
+      }
+    }
+
     const pools = parsePools(dbUser.free_spins_pools ?? null);
     const amount = Math.floor(Number(bet) || 0);
     const doFreeSpin = Boolean(useFreeSpin) && amount > 0 && (pools[String(amount)] || 0) > 0;
@@ -163,12 +199,13 @@ export const minigameHandlers = (socket: Socket) => {
       }
     }
 
+    // Solo descontamos la apuesta ahora; el premio (finalWinAmount) se acredita
+    // al cobrar (claimJackpot) cuando termina la animación en el cliente.
     let delta = 0;
     if (doFreeSpin) {
-      delta = finalWinAmount;
       await consumeFreeSpin(dbUser.id, amount);
     } else {
-      delta = finalWinAmount - amount;
+      delta = -amount;
     }
 
     if (taxAmount > 0) {
@@ -177,6 +214,7 @@ export const minigameHandlers = (socket: Socket) => {
     }
 
     const newBalance = await applyBalanceDelta(dbUser.id, delta);
+    pendingJackpots.set(dbUser.id, { readyAt: Date.now() + JACKPOT_ANIM_MS, finalWinAmount });
     await recordJackpotSpin(dbUser.id, amount, symbols, multiplier, winAmount);
 
     bumpStat(dbUser.id, 'jackpot_spins');
@@ -220,6 +258,17 @@ export const minigameHandlers = (socket: Socket) => {
 
   socket.on('getJackpotState', (callback) => {
     callback(getJackpotState());
+  });
+
+  // Cobro del premio diferido: el cliente lo llama al terminar la animación.
+  socket.on('claimJackpot', async ({ token }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback?.({ error: 'No autenticado' }); return; }
+    const p = pendingJackpots.get(user.id);
+    if (!p) { callback?.({ ok: true, nothing: true }); return; }
+    if (Date.now() < p.readyAt) { callback?.({ error: 'Aún no', waitMs: p.readyAt - Date.now() }); return; }
+    const r = await settlePendingJackpot(user.id);
+    callback?.({ ok: true, newBalance: r?.balance, user: r?.user });
   });
 
   socket.on('spendLevelPoint', async ({ token, track }, callback) => {

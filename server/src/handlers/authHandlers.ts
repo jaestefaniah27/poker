@@ -2,7 +2,7 @@ import { Socket } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { createUser, getUser, getUserByName, isNameTaken, setPasswordHash, updateUserName, updateUserAvatar, toPublicUser, getAllUsersRanked, getAllUsersAdmin, deleteUser, getMatchHistoryForUser, applyBalanceDelta, addXp, resetUserLevels, setJackpotUnlockLevel, updateLastSeen, addHaciendaTotal, getHaciendaTotal, payIsrael, bumpStat } from '../db';
-import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
+import { issueToken, authUser, broadcastPresence, kickOtherSessions } from '../socketHelpers';
 import { levelFromXp } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser, chipsInPlayFor } from '../roomManager';
@@ -32,6 +32,7 @@ export const authHandlers = (socket: Socket) => {
     const activeRoomId = findActiveRoomForUser(user.id);
     const publicUser = toPublicUser(user);
     socket.data.user = publicUser;
+    kickOtherSessions(user.id, socket.id);
     updateLastSeen(user.id).catch(console.error);
     broadcastPresence();
     callback({ user: publicUser, token, activeRoomId });
@@ -43,6 +44,7 @@ export const authHandlers = (socket: Socket) => {
     const activeRoomId = findActiveRoomForUser(user.id);
     const publicUser = toPublicUser(user);
     socket.data.user = publicUser;
+    kickOtherSessions(user.id, socket.id);
     updateLastSeen(user.id).catch(console.error);
     broadcastPresence();
     callback({ user: publicUser, token, activeRoomId });
