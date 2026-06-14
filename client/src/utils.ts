@@ -27,6 +27,9 @@ export const fmtChips = (n: number | null | undefined): string => {
     return match ? match[0] : '0';
   };
 
+  if (abs >= 1e24) return trunc2(n / 1e24) + 'Sp';
+  if (abs >= 1e21) return trunc2(n / 1e21) + 'Sx';
+  if (abs >= 1e18) return trunc2(n / 1e18) + 'Qi';
   if (abs >= 1_000_000_000_000_000) return trunc2(n / 1_000_000_000_000_000) + 'Q';
   if (abs >= 1_000_000_000_000) return trunc2(n / 1_000_000_000_000) + 'T';
   if (abs >= 1_000_000_000) return trunc2(n / 1_000_000_000) + 'B';

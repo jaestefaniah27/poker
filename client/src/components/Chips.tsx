@@ -26,7 +26,7 @@ export const chipMultiplierFor = (balance: number): number => {
 // nº de escalones de 1000 que representa el multiplicador (1->0, 1000->1, 1e6->2...).
 const multSteps = (mult: number): number => Math.round(Math.log(mult) / Math.log(1000));
 
-const SUFFIXES = ['', 'k', 'M', 'B', 'T', 'Q'];
+const SUFFIXES = ['', 'k', 'M', 'B', 'T', 'Q', 'Qi', 'Sx', 'Sp'];
 const shiftSuffix = (label: string, steps: number): string => {
   const m = label.match(/^([\d.]+)([a-zA-Z]?)$/);
   if (!m) return label;
@@ -254,7 +254,7 @@ const KeypadModal = ({ initialValue, maxBet, mult = 1, onSave, onClose }: { init
     onSave(finalNum);
   };
 
-  const scaleLabel = scale === 1_000_000_000_000_000 ? 'Q' : scale === 1_000_000_000_000 ? 'T' : scale === 1_000_000_000 ? 'B' : 'M';
+  const scaleLabel = scale === 1e24 ? 'Sp' : scale === 1e21 ? 'Sx' : scale === 1e18 ? 'Qi' : scale === 1_000_000_000_000_000 ? 'Q' : scale === 1_000_000_000_000 ? 'T' : scale === 1_000_000_000 ? 'B' : 'M';
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -279,7 +279,7 @@ const KeypadModal = ({ initialValue, maxBet, mult = 1, onSave, onClose }: { init
         </div>
 
         <div className="grid grid-cols-4 gap-2">
-          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Q', v:1_000_000_000_000_000}].filter(s => s.v >= minScale).map(s => (
+          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Q', v:1_000_000_000_000_000}, {l:'Qi', v:1e18}, {l:'Sx', v:1e21}, {l:'Sp', v:1e24}].filter(s => s.v >= minScale).map(s => (
             <button 
               key={s.l} 
               onClick={() => setScale(s.v)}

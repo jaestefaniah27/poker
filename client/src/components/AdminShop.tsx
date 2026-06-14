@@ -4,7 +4,7 @@ import type { ShopItem } from '../../../shared/types';
 import { SHOP_CATALOG as DEFAULT_CATALOG } from '../../../shared/types'; // Fallback just in case
 
 // Precio en formato corto: 10M, 2.5B, 750B, 1.5T...
-const UNITS: [number, string][] = [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
+const UNITS: [number, string][] = [[1e24, 'Sp'], [1e21, 'Sx'], [1e18, 'Qi'], [1e15, 'Q'], [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
 
 const abbrevPrice = (n: number): string => {
   if (!n || n === 0) return '0';
@@ -19,12 +19,14 @@ const abbrevPrice = (n: number): string => {
 };
 
 const parsePrice = (str: string): number | null => {
-  const m = str.trim().replace(/\s/g, '').replace(/,/g, '.').match(/^([\d.]+)([kKmMbBtT]?)$/);
+  const m = str.trim().replace(/\s/g, '').replace(/,/g, '.').match(/^([\d.]+)([a-zA-Z]{0,2})$/);
   if (!m) return null;
   const num = parseFloat(m[1]);
   if (isNaN(num)) return null;
-  const mult: Record<string, number> = { '': 1, k: 1e3, m: 1e6, b: 1e9, t: 1e12 };
-  return Math.round(num * (mult[m[2].toLowerCase()] ?? 1));
+  const mult: Record<string, number> = { '': 1, k: 1e3, m: 1e6, b: 1e9, t: 1e12, q: 1e15, qi: 1e18, sx: 1e21, sp: 1e24 };
+  const factor = mult[m[2].toLowerCase()];
+  if (factor === undefined) return null;
+  return Math.round(num * factor);
 };
 
 const PriceField = ({ value, onChange }: { value: number; onChange: (n: number) => void }) => {
