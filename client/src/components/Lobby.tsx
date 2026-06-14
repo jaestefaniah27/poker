@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage, playCheckSound, toBig } from '../utils';
 import { sfx, isMuted, toggleMute } from '../sounds';
-import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor, boostMultiplier, type TrackBoosts } from '../../../shared/types';
+import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor, boostMultiplier, type PublicUser } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
 import TriviaModal from './TriviaModal';
 import MinesModal from './MinesModal';
@@ -22,38 +22,10 @@ import { ShopModal } from './ShopModal';
 import { DecoratedName } from './Decorations';
 
 interface LobbyProps {
-  user: { 
-    id: string; 
-    name: string; 
-    balance: number; 
-    avatar: string; 
-    hasPassword: boolean; 
-    lastDailyClaim: string | null; 
-    lastHourlyClaim: number | null;
-    freeSpinsLeft?: number;
-    freeSpinValue?: number;
-    lastFreeSpinsClaim?: number | null;
-    level?: number;
-    xp?: number;
-    levelPoints?: number;
-    paguitaLevel?: number;
-    dietaLevel?: number;
-    ruletaLevel?: number;
-    triviaLevel?: number;
-    jackpotUnlockLevel?: number;
-    equippedAvatarDecoration?: string;
-    equippedNameDecoration?: string;
-    equippedBjFelt?: string;
-    unlockedAvatarDecorations?: string[];
-    unlockedNameDecorations?: string[];
-    unlockedBjFelts?: string[];
-    unlockedBoosts?: TrackBoosts;
-    israelPool?: number;
-    movedToAndorra?: boolean;
-  };
+  user: PublicUser;
   token: string | null;
   rooms: any[];
-  onJoinRoom: (roomId: string, buyInAmount?: number) => void;
+  onJoinRoom: (roomId: string, buyInAmount?: number | string) => void;
   onLogout: () => void;
   onUpdateUser: (u: any) => void;
   onlineCount?: number;
@@ -371,7 +343,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       )}
         {showProfile && (
           <ProfileModal
-            user={user}
+            user={user as any}
             token={token}
             onClose={() => setShowProfile(false)}
             onUpdate={(u) => onUpdateUser(u)}
@@ -382,7 +354,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       )}
       <AnimatePresence>
         {showJackpot && (
-          <JackpotModal user={user} token={token} onClose={() => setShowJackpot(false)} onUpdateUser={onUpdateUser} />
+          <JackpotModal user={user as any} token={token} onClose={() => setShowJackpot(false)} onUpdateUser={onUpdateUser} />
         )}
       </AnimatePresence>
       <AnimatePresence>
@@ -391,13 +363,13 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
         )}
       </AnimatePresence>
       {showMines && (
-        <MinesModal user={user} token={token} onClose={() => setShowMines(false)} onUpdateUser={onUpdateUser} />
+        <MinesModal user={user as any} token={token} onClose={() => setShowMines(false)} onUpdateUser={onUpdateUser} />
       )}
       {showCrash && (
-        <CrashModal user={user} token={token} onClose={() => setShowCrash(false)} onUpdateUser={onUpdateUser} />
+        <CrashModal user={user as any} token={token} onClose={() => setShowCrash(false)} onUpdateUser={onUpdateUser} />
       )}
       {showWordle && (
-        <WordleModal user={user} token={token} onClose={() => setShowWordle(false)} onUpdateUser={onUpdateUser} />
+        <WordleModal user={user as any} token={token} onClose={() => setShowWordle(false)} onUpdateUser={onUpdateUser} />
       )}
       {showOnlinePlayers && (
         <OnlinePlayersModal onClose={() => setShowOnlinePlayers(false)} />
@@ -433,8 +405,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 <span className="text-xs text-gray-400 font-medium relative flex items-center gap-1">
                   <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} andorra={user.movedToAndorra} />
                 </span>
-                <span className={`font-mono text-sm inline-block ${user.balance < 0 ? 'text-red-400' : 'text-emerald-400'} ${balanceFlash === 'up' ? 'balance-flash-up' : balanceFlash === 'down' ? 'balance-flash-down' : ''}`}>
-                  {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
+                <span className={`font-mono text-sm inline-block ${toBig(user.balance) < 0n ? 'text-red-400' : 'text-emerald-400'} ${balanceFlash === 'up' ? 'balance-flash-up' : balanceFlash === 'down' ? 'balance-flash-down' : ''}`}>
+                  {toBig(user.balance) < 0n ? `-$${fmtChips(-toBig(user.balance))}` : `$${fmtChips(toBig(user.balance))}`}
                 </span>
               </div>
               <button onClick={() => setShowProfile(true)} title="Mi perfil" className="rounded-full transition-all relative ring-2 ring-transparent hover:ring-gray-500">
@@ -1056,7 +1028,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
           targetName={giftTarget.name}
           targetAvatar={parseInt(giftTarget.avatar, 10) || 1}
           targetLevel={giftTarget.level}
-          balance={user.balance}
+          balance={Number(user.balance)}
           onClose={() => setGiftTarget(null)}
           onSend={handleSendGift}
         />

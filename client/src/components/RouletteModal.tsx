@@ -56,11 +56,11 @@ export default function RouletteModal({
   onClose: () => void; balance: string; updateBalance: (newBalance: string) => void; token: string; userId: string;
 }) {
   // Multiplicador automático de fichas, fijado por el saldo al entrar a la mesa.
-  const [chipMult] = useState(() => chipMultiplierFor(balance));
+  const [chipMult] = useState(() => chipMultiplierFor(Number(balance)));
   const [bets, setBets] = useState<Record<string, number>>({});
   const [previousBets, setPreviousBets] = useState<Record<string, number>>({});
   const [payouts, setPayouts] = useState<Record<string, number>>({});
-  const [activeChipPage, setActiveChipPage] = useState(() => pageForAmount(balance, chipMult));
+  const [activeChipPage, setActiveChipPage] = useState(() => pageForAmount(Number(balance), chipMult));
   const [activeChip, setActiveChip] = useState<ChipDenom | null>(null);
 
   const updateBalanceRef = useRef(updateBalance);
@@ -259,7 +259,7 @@ export default function RouletteModal({
 
   // Auto-ajustar la página de fichas cuando termina un giro (basado en el nuevo saldo)
   useEffect(() => {
-    if (!spinning) setActiveChipPage(pageForAmount(balance, chipMult));
+    if (!spinning) setActiveChipPage(pageForAmount(Number(balance), chipMult));
   }, [spinning, balance]);
 
   const totalBet = Object.values(bets || {}).reduce((a, b) => a + b, 0);
@@ -668,7 +668,7 @@ export default function RouletteModal({
               page={activeChipPage} 
               setPage={setActiveChipPage} 
               onAdd={(d) => setActiveChip(d)} 
-              maxBet={Math.max(0, balance)}
+              maxBet={Math.max(0, Number(balance))}
               pendingTotal={0}
               canBet={!spinning}
               mult={chipMult}

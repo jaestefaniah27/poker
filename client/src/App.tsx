@@ -18,7 +18,7 @@ import Slider from './components/Slider';
 import BlackjackTable from './components/BlackjackTable';
 import { AvatarAdjuster } from './components/AvatarAdjuster';
 import AdminShop from './components/AdminShop';
-import type { Room, Player, PublicUser } from '../../shared/types';
+import { toBig, type Room, type Player, type PublicUser } from '../../shared/types';
 
 const AppSkeleton = ({ hasToken }: { hasToken: boolean }) => (
   <div className="min-h-screen bg-background font-sans">
@@ -528,7 +528,7 @@ function App() {
     setToken(null);
   };
 
-  const joinRoom = (roomId: string, buyInAmount?: number, explicitToken?: string) => {
+  const joinRoom = (roomId: string, buyInAmount?: number | string, explicitToken?: string) => {
     getStorage().setItem('pokerRoomId', roomId);
     socket.emit('joinRoom', { roomId, token: explicitToken || token, buyInAmount });
   };
@@ -601,7 +601,7 @@ function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  if (user.israelDebt && user.israelDebt > 0) {
+  if (user.israelDebt && toBig(user.israelDebt) > 0n) {
     return (
       <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-6 text-center text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <h1 className="text-5xl font-black text-rose-500 mb-6 uppercase tracking-widest drop-shadow-[0_0_15px_rgba(225,29,72,0.5)]">Aviso Importante</h1>
@@ -793,10 +793,10 @@ function App() {
               <div className="flex flex-col items-center gap-1">
                 <span className="text-gray-400 text-xs uppercase tracking-wider">Saldo</span>
                 {(() => {
-                  const net = (viewPlayer.balance || 0) + (viewPlayer.chips || 0);
+                  const net = toBig(viewPlayer.balance) + toBig(viewPlayer.chips);
                   return (
-                    <span className={`font-mono text-2xl font-bold ${net < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {net < 0 ? `-$${fmtChips(Math.abs(net))}` : `$${fmtChips(net)}`}
+                    <span className={`font-mono text-2xl font-bold ${net < 0n ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {net < 0n ? `-$${fmtChips(-net)}` : `$${fmtChips(net)}`}
                     </span>
                   );
                 })()}
@@ -1075,7 +1075,7 @@ function App() {
                      {amBusted && !isTournament && !currentRoom?.isProportional && (
                        <button
                          onClick={handleRebuy}
-                         disabled={!user || user.balance < (currentRoom?.buyIn ?? 0)}
+                         disabled={!user || toBig(user.balance) < toBig(currentRoom?.buyIn ?? 0)}
                          className="bg-emerald-600 hover:bg-emerald-500 text-white flex-1 max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg disabled:opacity-30 disabled:pointer-events-none"
                        >
                          Recomprar
@@ -1106,7 +1106,7 @@ function App() {
                     ) : (
                       <button
                         onClick={handleRebuy}
-                        disabled={!user || user.balance < (currentRoom?.buyIn ?? 0)}
+                        disabled={!user || toBig(user.balance) < toBig(currentRoom?.buyIn ?? 0)}
                         className="bg-emerald-600 hover:bg-emerald-500 text-white w-full max-w-[160px] py-2.5 rounded-full text-sm font-semibold shadow-lg disabled:opacity-30 disabled:pointer-events-none"
                       >
                         Recomprar

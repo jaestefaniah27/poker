@@ -6,7 +6,7 @@ import PlayingCard from './PlayingCard';
 import Slider from './Slider';
 import Avatar from './Avatar';
 import AnimatedNumber from './AnimatedNumber';
-import type { Room, Player, Card, SidebetType, BjSidebetResult } from '../../../shared/types';
+import type { Room, Player, Card, SidebetType, BjSidebetResult, PublicUser } from '../../../shared/types';
 import { SIDEBET_ORDER, SIDEBET_SHORT, SIDEBET_TOP_PAYOUT } from '../../../shared/types';
 import { type ChipDenom, chipsFromAmount, pageForAmount, ChipStack, ChipRail, Chip, chipMultiplierFor } from './Chips';
 import { FeltSurface, getFeltTheme } from './FeltSurface';
@@ -20,7 +20,7 @@ const emptySidebetChips = (): Record<Sidebet, ChipDenom[]> =>
 
 interface Props {
   room: Room;
-  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean; level?: number; equippedAvatarDecoration?: string; equippedNameDecoration?: string; movedToAndorra?: boolean };
+  user: PublicUser;
   onLeave: () => void;
 }
 
@@ -1321,7 +1321,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                 </button>
                 <button
                   onClick={confirmRebuy}
-                  disabled={user.balance < STAKE_TIERS[rebuyTierIndex]}
+                  disabled={toBig(user.balance) < toBig(STAKE_TIERS[rebuyTierIndex])}
                   className="flex-1 py-3 rounded-2xl bg-gradient-to-b from-rose-400 to-rose-600 text-white font-extrabold text-sm shadow-lg active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
                 >
                   RECOMPRAR

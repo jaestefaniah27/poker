@@ -21,7 +21,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
   const [israelLoading, setIsraelLoading] = useState(false);
 
   const israelParsed = parseInt(israelDonation.replace(/\D/g, ''), 10) || 0;
-  const israelValid = israelParsed > 0 && israelParsed <= user.balance;
+  const israelValid = israelParsed > 0 && israelParsed <= Number(user.balance);
 
   const quickAmounts = (balance: number): number[] => {
     const n = Math.floor(Math.log10(Math.max(balance, 10)));
@@ -30,7 +30,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
   };
 
   const israelAddAmount = (val: number) => {
-    setIsraelDonation(String(Math.min(user.balance, israelParsed + val)));
+    setIsraelDonation(String(Math.min(Number(user.balance), israelParsed + val)));
   };
 
   const [items, setItems] = useState<any[]>(SHOP_CATALOG);
@@ -407,7 +407,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
                 </div>
 
                 <div className="grid grid-cols-5 gap-2">
-                  {quickAmounts(user.balance).map(amt => (
+                  {quickAmounts(Number(user.balance)).map(amt => (
                     <button
                       key={amt}
                       onClick={() => israelAddAmount(amt)}
