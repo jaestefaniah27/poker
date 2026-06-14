@@ -81,6 +81,7 @@ export interface Player {
   equippedAvatarDecoration?: string; // Marco de avatar equipado
   equippedNameDecoration?: string; // Placa de nombre equipada
   equippedBjFelt?: string; // Tapete de blackjack equipado
+  movedToAndorra?: boolean; // Empadronado en Andorra
   // --- BlackJack ---
   bet?: number; // Apuesta de la mano actual de blackjack (legacy para retrocompatibilidad rápida de monto total apostado/etc)
   bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'surrender'; // legacy

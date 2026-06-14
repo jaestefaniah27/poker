@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Avatar from './Avatar';
+import { DecoratedName } from './Decorations';
 import { socket, fmtChips } from '../utils';
 
 interface PublicUser {
@@ -8,6 +9,9 @@ interface PublicUser {
   avatar: string;
   balance: number;
   level?: number;
+  equippedAvatarDecoration?: string;
+  equippedNameDecoration?: string;
+  movedToAndorra?: boolean;
 }
 
 interface OnlinePlayersModalProps {
@@ -56,9 +60,9 @@ const OnlinePlayersModal = ({ onClose }: OnlinePlayersModalProps) => {
                     {p.level ?? 1}
                   </span>
                 </div>
-                <span className="text-sm font-medium truncate flex-1 text-gray-300">
-                  {p.name}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <DecoratedName name={p.name} decorationId={p.equippedNameDecoration} andorra={p.movedToAndorra} className="text-sm font-medium truncate text-gray-300" />
+                </div>
                 <span className={`font-mono text-sm font-semibold shrink-0 ${p.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                   {p.balance < 0 ? `-$${fmtChips(Math.abs(p.balance))}` : `$${fmtChips(p.balance)}`}
                 </span>

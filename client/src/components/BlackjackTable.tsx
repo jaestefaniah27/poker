@@ -20,7 +20,7 @@ const emptySidebetChips = (): Record<Sidebet, ChipDenom[]> =>
 
 interface Props {
   room: Room;
-  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean; level?: number };
+  user: { id: string; name: string; balance: number; avatar: string; hasPassword: boolean; level?: number; equippedAvatarDecoration?: string; equippedNameDecoration?: string; movedToAndorra?: boolean };
   onLeave: () => void;
 }
 
@@ -760,8 +760,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] text-white/50 leading-none">
-            <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} />
+          <div className="text-[10px] text-white/50 leading-none flex items-center justify-end">
+            <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} andorra={user.movedToAndorra} />
           </div>
           <div className={`font-mono text-xs font-bold ${myNetWorth < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
             {myNetWorth < 0 ? `-$${fmtChips(Math.abs(myNetWorth))}` : `$${fmtChips(myNetWorth)}`}
@@ -834,8 +834,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[9px] font-bold truncate leading-tight">
-                        <DecoratedName name={p.name} decorationId={p.equippedNameDecoration} />
+                      <div className="text-[9px] font-bold truncate leading-tight flex items-center">
+                        <DecoratedName name={p.name} decorationId={p.equippedNameDecoration} andorra={p.movedToAndorra} />
                       </div>
                       <div className="text-[8px] text-white/50 font-mono leading-none">{fmtChips(p.chips)}</div>
                     </div>
@@ -1071,8 +1071,8 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold truncate">
-              <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} />
+            <div className="text-xs font-bold truncate flex items-center">
+              <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} andorra={user.movedToAndorra} />
             </div>
             <div ref={countRef} className="text-[11px] text-amber-200 font-mono font-bold inline-flex items-center gap-1">
               <AnimatedNumber value={frozenChips ?? displayedChips} maxDurationMs={650} baseStepMs={6} /> fichas

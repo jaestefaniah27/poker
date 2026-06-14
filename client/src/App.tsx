@@ -781,7 +781,7 @@ function App() {
                   {(viewPlayer as any).level ?? 1}
                 </span>
               </div>
-              <p className="text-white font-semibold text-base">{viewPlayer.name}</p>
+              <DecoratedName name={viewPlayer.name} decorationId={viewPlayer.equippedNameDecoration} andorra={viewPlayer.movedToAndorra} className="text-white font-semibold text-base" />
               <div className="flex flex-col items-center gap-1">
                 <span className="text-gray-400 text-xs uppercase tracking-wider">Saldo</span>
                 {(() => {

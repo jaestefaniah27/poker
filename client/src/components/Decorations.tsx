@@ -17,7 +17,7 @@ export const DecoratedName: React.FC<{ name: string; decorationId?: string; clas
   return (
     <span className={`inline-flex items-center justify-center gap-0.5 ${className}`}>
       <span className={`${getNameDecorationClasses(decorationId)} truncate`}>{name}</span>
-      {andorra && <span className="text-[0.8em] flex-shrink-0" title="Empadronado en Andorra">🇦🇩</span>}
+      {andorra && <img src="https://flagcdn.com/ad.svg" alt="Andorra" className="h-[0.85em] w-auto inline-block flex-shrink-0" title="Empadronado en Andorra" />}
     </span>
   );
 };

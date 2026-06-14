@@ -153,7 +153,8 @@ export const authHandlers = (socket: Socket) => {
       lastSeen: u.last_seen,
       isOnline: onlineUserIds.has(u.id),
       equippedAvatarDecoration: u.equipped_avatar_decoration || undefined,
-      equippedNameDecoration: u.equipped_name_decoration || undefined
+      equippedNameDecoration: u.equipped_name_decoration || undefined,
+      movedToAndorra: !!u.moved_to_andorra
     })));
   });
 

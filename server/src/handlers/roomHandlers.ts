@@ -66,7 +66,8 @@ export const roomHandlers = (socket: Socket) => {
       lastBuyIn: isBJ ? buyIn : undefined,
       equippedBjFelt: dbUser.equipped_bj_felt || undefined,
       equippedAvatarDecoration: dbUser.equipped_avatar_decoration || undefined,
-      equippedNameDecoration: dbUser.equipped_name_decoration || undefined
+      equippedNameDecoration: dbUser.equipped_name_decoration || undefined,
+      movedToAndorra: !!dbUser.moved_to_andorra
     });
 
     if (!result) return;

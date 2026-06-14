@@ -112,8 +112,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [jackpotState, setJackpotState] = useState<{ globalSpins: number, recentWins: Array<{type: string, playerName: string, spinNumber: number, winAmount: number}> } | null>(null);
 
   // Presence State
-  const [jackpotViewers, setJackpotViewers] = useState<{id: string, name: string, avatar: string}[]>([]);
-  const [roulettePlayers, setRoulettePlayers] = useState<{id: string, name: string, avatar: string}[]>([]);
+  const [jackpotViewers, setJackpotViewers] = useState<{id: string, name: string, avatar: string, equippedAvatarDecoration?: string, equippedNameDecoration?: string, movedToAndorra?: boolean}[]>([]);
+  const [roulettePlayers, setRoulettePlayers] = useState<{id: string, name: string, avatar: string, equippedAvatarDecoration?: string, equippedNameDecoration?: string, movedToAndorra?: boolean}[]>([]);
 
   // Gifts
   const [giftTarget, setGiftTarget] = useState<LeaderboardEntry | null>(null);
@@ -376,52 +376,58 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
       <div className="w-full max-w-md">
         {/* Header */}
-        <header className="flex justify-between items-center mb-8 pt-4">
-          <div 
-            className="flex flex-col gap-0.5 cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
-            onClick={() => setShowOnlinePlayers(true)}
-            title="Ver jugadores en línea"
-          >
-            <h1 className="text-3xl font-bold tracking-tight">Lobby</h1>
-            {onlineCount > 0 && (
-              <span className="flex items-center gap-1 text-[11px] text-gray-500">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
-                {onlineCount} {onlineCount === 1 ? 'persona' : 'personas'} online
-              </span>
-            )}
+             <div className="flex flex-col gap-3 bg-black p-4 shrink-0 shadow-xl border-b border-white/5 relative z-20">
+          
+          {/* Top Row: Title, Presence, User Name/Balance, Avatar */}
+          <div className="flex justify-between items-center">
+            <div 
+              className="flex flex-col gap-0.5 cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
+              onClick={() => setShowOnlinePlayers(true)}
+              title="Ver jugadores en línea"
+            >
+              <h1 className="text-3xl font-bold tracking-tight">Lobby</h1>
+              {onlineCount > 0 && (
+                <span className="flex items-center gap-1 text-[11px] text-gray-500">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                  {onlineCount} {onlineCount === 1 ? 'persona' : 'personas'} online
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col items-end leading-tight">
+                <span className="text-xs text-gray-400 font-medium relative flex items-center gap-1">
+                  <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} andorra={user.movedToAndorra} />
+                </span>
+                <span className={`font-mono text-sm inline-block ${user.balance < 0 ? 'text-red-400' : 'text-emerald-400'} ${balanceFlash === 'up' ? 'balance-flash-up' : balanceFlash === 'down' ? 'balance-flash-down' : ''}`}>
+                  {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
+                </span>
+              </div>
+              <button onClick={() => setShowProfile(true)} title="Mi perfil" className="rounded-full transition-all relative ring-2 ring-transparent hover:ring-gray-500">
+                <Avatar seed={user.avatar} decorationId={user.equippedAvatarDecoration} />
+                {user.hasPassword && (
+                  <span className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                    <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Bottom Row: Level, Volume, Refresh, Shop */}
+          <div className="flex items-center justify-end gap-4">
             <button
               onClick={() => setShowLevels(true)}
               title="Niveles"
-              className="relative flex flex-col items-center justify-center px-2.5 py-1 rounded-xl border border-amber-500/30 bg-amber-500/10 active:scale-95 transition-all"
+              className="relative flex items-center gap-2 px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 active:scale-95 transition-all mr-auto"
             >
-              <span className="text-[8px] text-amber-300/80 uppercase tracking-wider font-bold leading-none">Nv</span>
-              <span className="text-sm font-black text-amber-300 leading-none">{user.level ?? 1}</span>
+              <span className="text-xs text-amber-300/80 uppercase tracking-widest font-bold">Nivel</span>
+              <span className="text-base font-black text-amber-300">{user.level ?? 1}</span>
               {(user.levelPoints ?? 0) > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-black text-white animate-pulse">
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black text-white animate-pulse shadow-md">
                   {user.levelPoints}
-                </span>
-              )}
-            </button>
-            <div className="flex flex-col items-end leading-tight">
-              <span className="text-xs text-gray-400 font-medium relative">
-                <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} />
-                {user.movedToAndorra && <span className="ml-1 text-[10px]" title="Empadronado en Andorra">🇦🇩</span>}
-              </span>
-              <span className={`font-mono text-sm inline-block ${user.balance < 0 ? 'text-red-400' : 'text-emerald-400'} ${balanceFlash === 'up' ? 'balance-flash-up' : balanceFlash === 'down' ? 'balance-flash-down' : ''}`}>
-                {user.balance < 0 ? `-$${fmtChips(Math.abs(user.balance))}` : `$${fmtChips(user.balance)}`}
-              </span>
-            </div>
-            {/* El marco lo pinta <Avatar> via AvatarFrame (PNG). No añadir ring CSS
-               aquí o se vería doble marco con los ids base (gold, silver, etc.). */}
-            <button onClick={() => setShowProfile(true)} title="Mi perfil" className="rounded-full transition-all relative ring-2 ring-transparent hover:ring-gray-500">
-              <Avatar seed={user.avatar} decorationId={user.equippedAvatarDecoration} />
-              {user.hasPassword && (
-                <span className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 rounded-full w-3.5 h-3.5 flex items-center justify-center">
-                  <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
                 </span>
               )}
             </button>
@@ -431,28 +437,27 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               className={`transition-colors active:scale-95 ${muted ? 'text-gray-600 hover:text-gray-400' : 'text-gray-400 hover:text-white'}`}
             >
               {muted ? (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 9l4 6m0-6l-4 6" />
                 </svg>
               ) : (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728" />
                 </svg>
               )}
             </button>
             <button onClick={() => window.location.reload()} title="Recargar" className="text-gray-500 hover:text-white transition-colors">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
             <button onClick={() => setShowShop(true)} title="Tienda" className="text-yellow-500 hover:text-yellow-400 transition-colors drop-shadow-[0_0_5px_rgba(234,179,8,0.5)] active:scale-95">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
             </button>
-
           </div>
-        </header>
+        </div>
 
         <div className="space-y-5">
           {/* ---- MINISTERIO DE DERECHOS SOCIALES ---- */}
@@ -595,9 +600,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                       ))}
                     </div>
                     <span className="text-[9px] text-gray-400 ml-1 truncate max-w-[120px]">
-                      {jackpotViewers.length === 1 && jackpotViewers[0].name}
-                      {jackpotViewers.length === 2 && `${jackpotViewers[0].name}, ${jackpotViewers[1].name}`}
-                      {jackpotViewers.length > 2 && `${jackpotViewers[0].name}, ${jackpotViewers[1].name} y ${jackpotViewers.length - 2} más`}
+                      {jackpotViewers.length === 1 && <DecoratedName name={jackpotViewers[0].name} decorationId={jackpotViewers[0].equippedNameDecoration} andorra={jackpotViewers[0].movedToAndorra} className="text-[9px]" />}
+                      {jackpotViewers.length === 2 && <><DecoratedName name={jackpotViewers[0].name} decorationId={jackpotViewers[0].equippedNameDecoration} andorra={jackpotViewers[0].movedToAndorra} className="text-[9px]" />, <DecoratedName name={jackpotViewers[1].name} decorationId={jackpotViewers[1].equippedNameDecoration} andorra={jackpotViewers[1].movedToAndorra} className="text-[9px]" /></>}
+                      {jackpotViewers.length > 2 && <><DecoratedName name={jackpotViewers[0].name} decorationId={jackpotViewers[0].equippedNameDecoration} andorra={jackpotViewers[0].movedToAndorra} className="text-[9px]" />, <DecoratedName name={jackpotViewers[1].name} decorationId={jackpotViewers[1].equippedNameDecoration} andorra={jackpotViewers[1].movedToAndorra} className="text-[9px]" /> y {jackpotViewers.length - 2} más</>}
                     </span>
                   </div>
                 )}
@@ -626,9 +631,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                       ))}
                     </div>
                     <span className="text-[9px] text-gray-400 ml-1 truncate max-w-[120px]">
-                      {roulettePlayers.length === 1 && roulettePlayers[0].name}
-                      {roulettePlayers.length === 2 && `${roulettePlayers[0].name}, ${roulettePlayers[1].name}`}
-                      {roulettePlayers.length > 2 && `${roulettePlayers[0].name}, ${roulettePlayers[1].name} y ${roulettePlayers.length - 2} más`}
+                      {roulettePlayers.length === 1 && <DecoratedName name={roulettePlayers[0].name} decorationId={roulettePlayers[0].equippedNameDecoration} andorra={roulettePlayers[0].movedToAndorra} className="text-[9px]" />}
+                      {roulettePlayers.length === 2 && <><DecoratedName name={roulettePlayers[0].name} decorationId={roulettePlayers[0].equippedNameDecoration} andorra={roulettePlayers[0].movedToAndorra} className="text-[9px]" />, <DecoratedName name={roulettePlayers[1].name} decorationId={roulettePlayers[1].equippedNameDecoration} andorra={roulettePlayers[1].movedToAndorra} className="text-[9px]" /></>}
+                      {roulettePlayers.length > 2 && <><DecoratedName name={roulettePlayers[0].name} decorationId={roulettePlayers[0].equippedNameDecoration} andorra={roulettePlayers[0].movedToAndorra} className="text-[9px]" />, <DecoratedName name={roulettePlayers[1].name} decorationId={roulettePlayers[1].equippedNameDecoration} andorra={roulettePlayers[1].movedToAndorra} className="text-[9px]" /> y {roulettePlayers.length - 2} más</>}
                     </span>
                   </div>
                 )}
@@ -843,8 +848,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className={`text-sm font-medium truncate flex-1 ${isMe ? 'text-emerald-300' : 'text-gray-300'}`}>
-                          {entry.name}
+                        <div className={`text-sm font-medium truncate flex-1`}>
+                          <DecoratedName name={entry.name} decorationId={entry.equippedNameDecoration} andorra={entry.movedToAndorra} className={`text-sm ${isMe ? 'text-emerald-300' : 'text-gray-300'}`} />
                         </div>
                         <div className="text-[10px] text-gray-500 font-medium">
                           {entry.isOnline ? <span className="text-emerald-400">En línea</span> : formatLastSeen(entry.lastSeen)}

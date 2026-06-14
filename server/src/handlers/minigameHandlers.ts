@@ -28,7 +28,7 @@ function minesMultiplier(numMines: number, revealed: number): number {
 
 const wordleClaimedSlots = new Map<string, string>(); // userId → YYYY-MM-DDTHH
 
-const jackpotViewers = new Map<string, { id: string; name: string; avatar: string }>();
+const jackpotViewers = new Map<string, { id: string; name: string; avatar: string; equippedAvatarDecoration?: string; equippedNameDecoration?: string; movedToAndorra?: boolean }>();
 
 const broadcastJackpotViewers = () => {
   if (!io) return;
@@ -76,7 +76,8 @@ export const minigameHandlers = (socket: Socket) => {
   socket.on('jackpot_join', async ({ token }) => {
     const user = await authUser(token);
     if (!user) return;
-    jackpotViewers.set(user.id, { id: user.id, name: user.name, avatar: user.avatar || user.id });
+    const dbUser = await getUser(user.id);
+    jackpotViewers.set(user.id, { id: user.id, name: user.name, avatar: dbUser?.avatar || user.id, equippedAvatarDecoration: dbUser?.equipped_avatar_decoration || undefined, equippedNameDecoration: dbUser?.equipped_name_decoration || undefined, movedToAndorra: !!dbUser?.moved_to_andorra });
     broadcastJackpotViewers();
   });
 

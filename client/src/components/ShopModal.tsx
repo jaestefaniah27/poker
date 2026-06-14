@@ -179,7 +179,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
           )}
           {item.type === 'social' && (
             <div className="text-5xl drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
-              {item.id === 'social_andorra' ? '🇦🇩' : '🌟'}
+              {item.id === 'social_andorra' ? <img src="https://flagcdn.com/ad.svg" alt="Andorra" className="h-[1em] w-auto inline-block drop-shadow-md" /> : '🌟'}
             </div>
           )}
         </div>
