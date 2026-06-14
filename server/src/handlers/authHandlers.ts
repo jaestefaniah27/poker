@@ -30,7 +30,7 @@ import {
   dbRun,
   resetShopPurchases
 } from '../db';
-import { issueToken, authUser, broadcastPresence } from '../socketHelpers';
+import { issueToken, authUser, broadcastPresence, kickOtherSessions } from '../socketHelpers';
 import { getShopCatalog, saveShopCatalog } from '../db';
 import { levelFromXp, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount } from '../../../shared/types';
 import { sanitizeInput } from '../security';
@@ -61,6 +61,7 @@ export const authHandlers = (socket: Socket) => {
     const activeRoomId = findActiveRoomForUser(user.id);
     const publicUser = toPublicUser(user);
     socket.data.user = publicUser;
+    kickOtherSessions(user.id, socket.id);
     updateLastSeen(user.id).catch(console.error);
     broadcastPresence();
     callback({ user: publicUser, token, activeRoomId, shopCatalog: await getShopCatalog() });
@@ -72,6 +73,7 @@ export const authHandlers = (socket: Socket) => {
     const activeRoomId = findActiveRoomForUser(user.id);
     const publicUser = toPublicUser(user);
     socket.data.user = publicUser;
+    kickOtherSessions(user.id, socket.id);
     updateLastSeen(user.id).catch(console.error);
     broadcastPresence();
     callback({ user: publicUser, token, activeRoomId, shopCatalog: await getShopCatalog() });

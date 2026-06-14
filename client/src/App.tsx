@@ -79,6 +79,7 @@ function App() {
   const [showSkeleton, setShowSkeleton] = useState(needsSkeleton);
   const [skeletonFading, setSkeletonFading] = useState(false);
   const [restartCountdown, setRestartCountdown] = useState<number | null>(null);
+  const [sessionTaken, setSessionTaken] = useState(false);
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(() => !!getStorage().getItem('pokerToken'));
@@ -406,6 +407,14 @@ function App() {
       setRestartCountdown(null);
     });
 
+    // Sesión única: el servidor nos expulsa al abrirse la cuenta en otra
+    // ventana/dispositivo. Mostramos overlay y dejamos de reconectar.
+    // NO borramos el token: al recargar, resumeSession retoma la sesión y
+    // reclama la cuenta (expulsa al otro dispositivo). Solo mostramos el cartel.
+    socket.on('sessionReplaced', () => {
+      setSessionTaken(true);
+    });
+
     socket.on('emote', ({ userId, emote }: { userId: string; emote: string }) => {
       const key = Date.now() + Math.random();
       setEmotes(prev => ({ ...prev, [userId]: { emote, key } }));
@@ -426,6 +435,7 @@ function App() {
       socket.off('balanceUpdated');
       socket.off('userUpdated');
       socket.off('emote');
+      socket.off('sessionReplaced');
     };
   }, []);
 
@@ -557,6 +567,22 @@ function App() {
 
   if (showAdmin) {
     return <AdminShop />;
+  }
+
+  if (sessionTaken) {
+    return (
+      <div className="fixed inset-0 z-[500] flex flex-col items-center justify-center bg-black/95 px-8 text-center" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="text-4xl mb-4">📱</div>
+        <h2 className="text-xl font-extrabold text-white mb-2">Otro dispositivo se conectó</h2>
+        <p className="text-sm text-gray-400 mb-6 max-w-xs">Tu cuenta se abrió en otro dispositivo. Solo se permite una sesión activa a la vez.</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-6 py-3 rounded-2xl font-extrabold tracking-wider bg-amber-500 text-black active:scale-95 transition-transform"
+        >
+          Usar aquí
+        </button>
+      </div>
+    );
   }
 
   if (showSkeleton) {
