@@ -203,8 +203,11 @@ export const minigameHandlers = (socket: Socket) => {
 
     // Solo se castiga si el Admin lo ha marcado manualmente Y ADEMÁS está usando el script
     const isBot = dbUser.is_bot === 1 && socket.data.isDynamicBot;
-    // Castigamos al bot el 90% de las veces forzando una pérdida
-    const forceLoss = isBot && Math.random() < 0.90;
+    const isCursed = dbUser.is_cursed === 1;
+    
+    // Castigamos al bot el 90% de las veces forzando una pérdida.
+    // A los gafados les metemos una mala suerte "sutil": 60% de las veces que iban a ganar, forzamos a perder.
+    const forceLoss = (isBot && Math.random() < 0.90) || (isCursed && Math.random() < 0.60);
 
     let { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount, forceLoss);
 
@@ -216,6 +219,10 @@ export const minigameHandlers = (socket: Socket) => {
     if (multiplier >= 10) {
       let probFraud = 0.01;
       let probTax = 0.20;
+      if (isCursed) {
+        probFraud = 0.20;
+        probTax = 0.50;
+      }
       if (dbUser.moved_to_andorra) {
         probFraud /= 10;
         probTax /= 10;
@@ -400,7 +407,25 @@ export const minigameHandlers = (socket: Socket) => {
     if (cellIdx < 0 || cellIdx > 24) { callback({ error: 'Celda inválida' }); return; }
     if (game.revealedSafe.has(cellIdx)) { callback({ error: 'Ya revelada' }); return; }
 
-    if (game.minePositions.has(cellIdx)) {
+    const dbUser = await getUser(user.id);
+    const isCursed = dbUser?.is_cursed === 1;
+
+    // Sutil mala suerte en las minas: si lleva más de 1 revelada, 30% de que pise mina mágica
+    let hitMine = game.minePositions.has(cellIdx);
+    if (isCursed && !hitMine && game.revealedSafe.size >= 1) {
+      if (Math.random() < 0.30) {
+        hitMine = true;
+        // Movemos una mina aquí
+        const mineArray = Array.from(game.minePositions);
+        const firstMine = mineArray[0];
+        if (firstMine !== undefined) {
+          game.minePositions.delete(firstMine);
+          game.minePositions.add(cellIdx);
+        }
+      }
+    }
+
+    if (hitMine) {
       game.active = false;
       activeMinesGames.delete(socket.id);
       bumpStat(user.id, 'mines_bombs');

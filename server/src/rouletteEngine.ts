@@ -134,7 +134,48 @@ export class RouletteEngine {
   }
 
   private async resolveSpin() {
-    const resultNum = Math.floor(Math.random() * 37); // 0-36
+    let resultNum = Math.floor(Math.random() * 37); // 0-36
+
+    // Sutil mala suerte en la Ruleta:
+    // Miramos si algún jugador gafado está jugando. Si es así, elegimos un número donde él pierda dinero.
+    for (const [userId, ub] of this.userBets.entries()) {
+      const dbUser = await getUser(userId);
+      if (dbUser?.is_cursed === 1) {
+        // Buscamos los peores números para él
+        const payouts = new Array(37).fill(0);
+        for (let n = 0; n <= 36; n++) {
+          for (const [zone, amt] of Object.entries(ub.bets)) {
+            if (zone === n.toString()) payouts[n] += amt * 36;
+            else if (zone === 'red' && RED_NUMS.has(n)) payouts[n] += amt * 2;
+            else if (zone === 'black' && n !== 0 && !RED_NUMS.has(n)) payouts[n] += amt * 2;
+            else if (zone === 'even' && n !== 0 && n % 2 === 0) payouts[n] += amt * 2;
+            else if (zone === 'odd' && n % 2 !== 0) payouts[n] += amt * 2;
+            else if (zone === 'low' && n >= 1 && n <= 18) payouts[n] += amt * 2;
+            else if (zone === 'high' && n >= 19 && n <= 36) payouts[n] += amt * 2;
+            else if (zone.startsWith('dozen')) {
+              const d = parseInt(zone.split('_')[1]);
+              if (Math.ceil(n / 12) === d && n !== 0) payouts[n] += amt * 3;
+            }
+            else if (zone.startsWith('col')) {
+              const c = parseInt(zone.split('_')[1]); // 1, 2, 3
+              if ((n - c) % 3 === 0 && n !== 0) payouts[n] += amt * 3;
+            }
+          }
+        }
+        
+        // Encontrar los números donde su premio es menor que su apuesta (pierde plata)
+        const badNumbers = [];
+        for (let n = 0; n <= 36; n++) {
+          if (payouts[n] < ub.total) badNumbers.push(n);
+        }
+        // Si hay números perdedores, forzamos uno de ellos el 80% de las veces (para no ser súper obvio)
+        if (badNumbers.length > 0 && Math.random() < 0.8) {
+          resultNum = badNumbers[Math.floor(Math.random() * badNumbers.length)];
+        }
+        break; // Solo calculamos esto para un gafado a la vez
+      }
+    }
+
     this.history = [resultNum, ...this.history].slice(0, 9);
 
     const resultsByUserId = new Map<string, any>();

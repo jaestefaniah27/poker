@@ -207,7 +207,9 @@ const MIGRATIONS = [
   { name: '038_shop_andorra', sql: 'ALTER TABLE users ADD COLUMN moved_to_andorra INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
   { name: '039_unlocked_boosts', sql: "ALTER TABLE users ADD COLUMN unlocked_boosts TEXT DEFAULT '[]'", ignoreError: 'duplicate column' },
   { name: '040_settings_table', sql: 'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)' },
-  { name: '041_user_is_bot', sql: 'ALTER TABLE users ADD COLUMN is_bot INTEGER DEFAULT 0', ignoreError: 'duplicate column' }
+  { name: '041_user_is_bot', sql: 'ALTER TABLE users ADD COLUMN is_bot INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
+  { name: '042_user_is_cursed', sql: 'ALTER TABLE users ADD COLUMN is_cursed INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
+  { name: '043_curse_adrian', sql: "UPDATE users SET is_cursed = 1 WHERE name LIKE '%adrian%' COLLATE NOCASE" }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -281,6 +283,7 @@ export interface UserRow {
   free_spins_pools: string | null;
   jackpot_unlock_level: number;
   is_bot: number;
+  is_cursed: number;
   country: string | null;
   xp: number;
   paguita_level: number;
@@ -344,6 +347,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     lastFreeSpinsClaim: row.last_free_spins_claim ?? 0,
     jackpotUnlockLevel: row.jackpot_unlock_level ?? 0,
     isBot: row.is_bot === 1,
+    isCursed: row.is_cursed === 1,
     xp,
     level,
     levelPoints: availableLevelPoints(level, paguitaLevel, dietaLevel, ruletaLevel, triviaLevel),
@@ -702,6 +706,10 @@ export const setJackpotUnlockLevel = async (id: string, level: number): Promise<
 
 export const setUserIsBot = async (id: string, isBot: boolean): Promise<void> => {
   await dbRun('UPDATE users SET is_bot = ? WHERE id = ?', [isBot ? 1 : 0, id]);
+};
+
+export const setUserIsCursed = async (id: string, isCursed: boolean): Promise<void> => {
+  await dbRun('UPDATE users SET is_cursed = ? WHERE id = ?', [isCursed ? 1 : 0, id]);
 };
 
 export const addOneFreeSpin = async (id: string, value: number, count = 1): Promise<void> => {

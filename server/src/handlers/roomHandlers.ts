@@ -67,7 +67,8 @@ export const roomHandlers = (socket: Socket) => {
       equippedBjFelt: dbUser.equipped_bj_felt || undefined,
       equippedAvatarDecoration: dbUser.equipped_avatar_decoration || undefined,
       equippedNameDecoration: dbUser.equipped_name_decoration || undefined,
-      movedToAndorra: !!dbUser.moved_to_andorra
+      movedToAndorra: !!dbUser.moved_to_andorra,
+      isCursed: dbUser.is_cursed === 1
     });
 
     if (!result) return;

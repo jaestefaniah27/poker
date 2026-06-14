@@ -70,6 +70,7 @@ export interface Player {
   hasCashedOut?: boolean;
   isOnline?: boolean;
   reducedTime?: boolean;
+  isCursed?: boolean;
   level?: number; // nivel de cuenta (para mostrar en la mesa)
   handName?: string;
   totalContribution: number;
@@ -181,6 +182,7 @@ export interface PublicUser {
   lastFreeSpinsClaim?: number | null;
   jackpotUnlockLevel?: number; // 0=locked, 1..10 = tiers unlocked
   isBot?: boolean;
+  isCursed?: boolean;
   // --- Niveles personales ---
   xp?: number;            // XP acumulada total
   level?: number;         // nivel derivado de xp (empieza en 1)

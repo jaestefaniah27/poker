@@ -1060,8 +1060,20 @@ export const blackjackPlayerAction = (
 
     if (action === 'Hit') {
       if (room.deck.length === 0) initShoe(room);
-      hand.cards.push(room.deck.pop()!);
-      const v = bjHandValue(hand.cards);
+      let drawn = room.deck.pop()!;
+      hand.cards.push(drawn);
+      let v = bjHandValue(hand.cards);
+
+      if (player.isCursed && v.total <= 21 && Math.random() < 0.60) {
+        const bustIdx = room.deck.findIndex(c => bjHandValue([...hand.cards.slice(0, -1), c]).total > 21);
+        if (bustIdx !== -1) {
+           const badCard = room.deck[bustIdx];
+           room.deck[bustIdx] = drawn;
+           hand.cards[hand.cards.length - 1] = badCard;
+           v = bjHandValue(hand.cards);
+        }
+      }
+
       if (v.total > 21) hand.status = 'bust';
       else if (v.total === 21) hand.status = 'stand';
     } else if (action === 'Stand') {
@@ -1073,8 +1085,20 @@ export const blackjackPlayerAction = (
       hand.doubled = true;
       hand.bet *= 2;
       if (room.deck.length === 0) initShoe(room);
-      hand.cards.push(room.deck.pop()!);
-      const v = bjHandValue(hand.cards);
+      let drawn = room.deck.pop()!;
+      hand.cards.push(drawn);
+      let v = bjHandValue(hand.cards);
+
+      if (player.isCursed && v.total <= 21 && Math.random() < 0.60) {
+        const bustIdx = room.deck.findIndex(c => bjHandValue([...hand.cards.slice(0, -1), c]).total > 21);
+        if (bustIdx !== -1) {
+           const badCard = room.deck[bustIdx];
+           room.deck[bustIdx] = drawn;
+           hand.cards[hand.cards.length - 1] = badCard;
+           v = bjHandValue(hand.cards);
+        }
+      }
+
       hand.status = v.total > 21 ? 'bust' : 'stand';
     } else if (action === 'Surrender') {
       if (hand.cards.length !== 2) return null;
@@ -1149,8 +1173,20 @@ export const blackjackPlayerAction = (
     if (player.bjStatus !== 'playing') return null;
     if (action === 'Hit') {
       if (room.deck.length === 0) initShoe(room);
-      player.cards.push(room.deck.pop()!);
-      const v = bjHandValue(player.cards);
+      let drawn = room.deck.pop()!;
+      player.cards.push(drawn);
+      let v = bjHandValue(player.cards);
+
+      if (player.isCursed && v.total <= 21 && Math.random() < 0.60) {
+        const bustIdx = room.deck.findIndex(c => bjHandValue([...player.cards.slice(0, -1), c]).total > 21);
+        if (bustIdx !== -1) {
+           const badCard = room.deck[bustIdx];
+           room.deck[bustIdx] = drawn;
+           player.cards[player.cards.length - 1] = badCard;
+           v = bjHandValue(player.cards);
+        }
+      }
+
       if (v.total > 21) player.bjStatus = 'bust';
       else if (v.total === 21) player.bjStatus = 'stand';
     } else if (action === 'Stand') {
@@ -1161,8 +1197,20 @@ export const blackjackPlayerAction = (
       player.bjDoubled = true;
       player.bet = (player.bet || 0) * 2;
       if (room.deck.length === 0) initShoe(room);
-      player.cards.push(room.deck.pop()!);
-      const v = bjHandValue(player.cards);
+      let drawn = room.deck.pop()!;
+      player.cards.push(drawn);
+      let v = bjHandValue(player.cards);
+
+      if (player.isCursed && v.total <= 21 && Math.random() < 0.60) {
+        const bustIdx = room.deck.findIndex(c => bjHandValue([...player.cards.slice(0, -1), c]).total > 21);
+        if (bustIdx !== -1) {
+           const badCard = room.deck[bustIdx];
+           room.deck[bustIdx] = drawn;
+           player.cards[player.cards.length - 1] = badCard;
+           v = bjHandValue(player.cards);
+        }
+      }
+
       player.bjStatus = v.total > 21 ? 'bust' : 'stand';
     } else if (action === 'Surrender') {
       if (player.cards.length !== 2) return null;

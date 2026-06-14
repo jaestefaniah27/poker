@@ -306,6 +306,20 @@ export const authHandlers = (socket: Socket) => {
     callback({ ok: true });
   });
 
+  socket.on('adminToggleCursed', async ({ token, targetId, isCursed }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    
+    const { setUserIsCursed } = require('../db');
+    await setUserIsCursed(targetId, !!isCursed);
+    
+    const targetUser = await getUser(targetId);
+    if (targetUser) {
+      const { notifyUser } = require('../socketHelpers');
+      notifyUser(targetId, 'userUpdated', toPublicUser(targetUser));
+    }
+    callback({ ok: true });
+  });
 
   socket.on('adminSetIsraelDebt', async ({ token, targetId, amount }, callback) => {
     const user = await authUser(token);

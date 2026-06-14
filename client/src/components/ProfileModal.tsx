@@ -143,6 +143,13 @@ const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModal
     });
   };
 
+  const toggleCursed = (targetId: string, isCursed: boolean) => {
+    socket.emit('adminToggleCursed', { token, targetId, isCursed }, (res: any) => {
+      if (res?.error) alert(res.error);
+      else { flash(true, isCursed ? 'Maldición activada' : 'Maldición desactivada'); loadAdminUsers(); }
+    });
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -508,6 +515,13 @@ const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModal
                         title={u.isBot ? 'Quitar shadowban' : 'Aplicar shadowban (100% perder jackpot)'}
                       >
                         {u.isBot ? 'Bot ✅' : 'Bot ❌'}
+                      </button>
+                      <button 
+                        onClick={() => toggleCursed(u.id, !u.isCursed)}
+                        className={`${u.isCursed ? 'bg-rose-600 text-white' : 'bg-rose-500/20 text-rose-400'} hover:bg-rose-600 hover:text-white px-3 py-1.5 rounded text-[10px] font-bold transition-colors`}
+                        title={u.isCursed ? 'Desgafar' : 'Gafar (Forzar mala suerte sigilosa)'}
+                      >
+                        Gafar 🧿
                       </button>
                       <button 
                         onClick={() => forceIsrael(u.id)}
