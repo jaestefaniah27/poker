@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { socket, fmtChips, playCheckSound, vibrate, getStorage, HAND_NAMES_ES, fmtDuration } from './utils';
 import { sfx } from './sounds';
-import EmoteBubble, { EMOTES, type ActiveEmote } from './components/EmoteBubble';
+import { EMOTES, type ActiveEmote } from './components/EmoteBubble';
 import LoginScreen from './components/LoginScreen';
 import Lobby from './components/Lobby';
 import PlayingCard from './components/PlayingCard';
@@ -109,7 +109,7 @@ function App() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [viewPlayer, setViewPlayer] = useState<Player | null>(null);
   const [viewStats, setViewStats] = useState<any>(null);
-  const [emotes, setEmotes] = useState<Record<string, ActiveEmote>>({});
+  const [, setEmotes] = useState<Record<string, ActiveEmote>>({});
   const [showEmotePicker, setShowEmotePicker] = useState(false);
   const [newCommunityIdx, setNewCommunityIdx] = useState<number[]>([]);
   const [displayCommCount, setDisplayCommCount] = useState(0);

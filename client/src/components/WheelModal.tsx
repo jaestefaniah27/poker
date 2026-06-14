@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
 import { sfx } from '../sounds';
-import { ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions } from '../../../shared/types';
+import { ruletaSpinsFor, ruletaBoostedOptions } from '../../../shared/types';
 import type { TrackBoosts } from '../../../shared/types';
 
 interface WheelModalProps {

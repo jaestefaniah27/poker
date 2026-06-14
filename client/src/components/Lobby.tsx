@@ -67,6 +67,9 @@ interface LeaderboardEntry {
   level?: number;
   lastSeen?: number;
   isOnline?: boolean;
+  equippedAvatarDecoration?: string;
+  equippedNameDecoration?: string;
+  movedToAndorra?: boolean;
 }
 
 const formatLastSeen = (ts?: number) => {
