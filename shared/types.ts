@@ -180,6 +180,7 @@ export interface PublicUser {
   freeSpinValue?: number;
   lastFreeSpinsClaim?: number | null;
   jackpotUnlockLevel?: number; // 0=locked, 1..10 = tiers unlocked
+  isBot?: boolean;
   // --- Niveles personales ---
   xp?: number;            // XP acumulada total
   level?: number;         // nivel derivado de xp (empieza en 1)

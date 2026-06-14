@@ -136,6 +136,13 @@ const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModal
     });
   };
 
+  const toggleBot = (targetId: string, isBot: boolean) => {
+    socket.emit('adminToggleBot', { token, targetId, isBot }, (res: any) => {
+      if (res?.error) alert(res.error);
+      else { flash(true, isBot ? 'Shadowban activado' : 'Shadowban desactivado'); loadAdminUsers(); }
+    });
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -496,10 +503,17 @@ const ProfileModal = ({ user, token, onClose, onUpdate, onLogout }: ProfileModal
                   {u.id !== user.id && (
                     <div className="flex gap-2">
                       <button 
+                        onClick={() => toggleBot(u.id, !u.isBot)}
+                        className={`${u.isBot ? 'bg-purple-500 text-white' : 'bg-purple-500/20 text-purple-300'} hover:bg-purple-500 hover:text-white px-3 py-1.5 rounded text-[10px] font-bold transition-colors`}
+                        title={u.isBot ? 'Quitar shadowban' : 'Aplicar shadowban (100% perder jackpot)'}
+                      >
+                        {u.isBot ? 'Bot ✅' : 'Bot ❌'}
+                      </button>
+                      <button 
                         onClick={() => forceIsrael(u.id)}
                         className="bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white px-3 py-1.5 rounded text-[10px] font-bold transition-colors"
                       >
-                        Expropiar Israel
+                        Expropiar
                       </button>
                       <button 
                         onClick={() => deleteUser(u.id)}

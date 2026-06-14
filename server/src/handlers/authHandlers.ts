@@ -290,6 +290,24 @@ export const authHandlers = (socket: Socket) => {
     callback({ ok: true, user: updatedUser ? toPublicUser(updatedUser) : undefined });
   });
 
+  socket.on('adminToggleBot', async ({ token, targetId, isBot }, callback) => {
+    const user = await authUser(token);
+    if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
+    
+    const { setUserIsBot } = require('../db');
+    await setUserIsBot(targetId, !!isBot);
+    
+    const targetUser = await getUser(targetId);
+    if (targetUser) {
+      const { notifyUser } = require('../socketHelpers');
+      // No le notificamos explícitamente para que no se dé cuenta, 
+      // pero actualizamos su estado para que el frontend del admin lo vea
+      notifyUser(targetId, 'userUpdated', toPublicUser(targetUser));
+    }
+    callback({ ok: true });
+  });
+
+
   socket.on('adminSetIsraelDebt', async ({ token, targetId, amount }, callback) => {
     const user = await authUser(token);
     if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
