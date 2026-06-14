@@ -741,10 +741,18 @@ function App() {
               <p className="text-gray-400 text-center text-sm">Perderás tu apuesta si hay una mano en curso.</p>
               {myPlayer && (() => {
                 const totalEnMesa = myPlayer.chips + myPlayer.currentBet;
-                const diff = totalEnMesa - currentRoom.buyIn;
+                let diff = totalEnMesa - currentRoom.buyIn;
+                let startAmount = currentRoom.buyIn;
+                let endAmount = totalEnMesa;
+                if (currentRoom.isProportional) {
+                  const sessionBuyIn = myPlayer.sessionBuyIn || 1000;
+                  startAmount = sessionBuyIn;
+                  endAmount = Math.floor((totalEnMesa / 1000) * sessionBuyIn);
+                  diff = endAmount - startAmount;
+                }
                 return (
                   <p className={`text-center text-sm font-bold ${diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                    {diff > 0 ? '+' : ''}{fmtChips(diff)} ({fmtChips(currentRoom.buyIn)} → {fmtChips(totalEnMesa)})
+                    {diff > 0 ? '+' : ''}{fmtChips(diff)} ({fmtChips(startAmount)} → {fmtChips(endAmount)})
                   </p>
                 );
               })()}
@@ -900,11 +908,11 @@ function App() {
                   onClick={(e) => { e.stopPropagation(); setViewPlayer(p); }}
                 >
                   {indexInRoom === currentRoom.currentTurnIndex && turnTimer && (
-                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-20">
+                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-40">
                       <TurnPie fraction={turnTimer.fraction} danger={turnTimer.danger} />
                     </div>
                   )}
-                  <Avatar seed={p.avatar || p.userId} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} decorationId={p.equippedAvatarDecoration} />
+                  <Avatar seed={p.avatar || p.userId} size={40} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} decorationId={p.equippedAvatarDecoration} />
                   <EmoteBubble emote={emotes[p.userId]} />
                   {isDealer(indexInRoom) && <DealerBadge />}
                   <span className="absolute -top-1 -left-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
@@ -928,10 +936,15 @@ function App() {
                   <span className="text-[9px] bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wide mb-0.5">Offline</span>
                 )}
                 <span
-                  className="text-[12px] text-gray-500 font-medium mb-1"
+                  className="text-[12px] text-gray-500 font-medium mb-1 flex flex-col items-center leading-none"
                   ref={(el) => { if (el) playerAnchorRefs.current.set(p.id, el); }}
                 >
                   <AnimatedNumber value={p.chips} />
+                  {currentRoom.isProportional && p.sessionBuyIn != null && (
+                    <span className="text-[9px] text-purple-400 opacity-70 mt-0.5">
+                      (Real: {fmtChips(Math.floor((p.chips / 1000) * p.sessionBuyIn))})
+                    </span>
+                  )}
                 </span>
                 <div className="h-5 flex items-center justify-center">
                   {p.currentBet > 0 && (
@@ -1059,7 +1072,7 @@ function App() {
               <>
                 {currentRoom.phase === 'showdown' ? (
                    <div className="flex justify-center w-full gap-2">
-                     {amBusted && !isTournament && (
+                     {amBusted && !isTournament && !currentRoom?.isProportional && (
                        <button
                          onClick={handleRebuy}
                          disabled={!user || user.balance < (currentRoom?.buyIn ?? 0)}
@@ -1088,7 +1101,7 @@ function App() {
                    </div>
                 ) : amBusted ? (
                   <div className="flex flex-col items-center gap-1">
-                    {isTournament ? (
+                    {isTournament || currentRoom?.isProportional ? (
                       <span className="text-red-400 text-sm font-semibold">Eliminado · espectador</span>
                     ) : (
                       <button
@@ -1099,7 +1112,7 @@ function App() {
                         Recomprar
                       </button>
                     )}
-                    <span className="text-gray-500 text-[10px] italic">{isTournament ? 'Sigues hasta el final del torneo' : 'Te quedaste sin fichas'}</span>
+                    <span className="text-gray-500 text-[10px] italic">{isTournament ? 'Sigues hasta el final del torneo' : currentRoom?.isProportional ? 'Mesa proporcional: sin recompra' : 'Te quedaste sin fichas'}</span>
                   </div>
                 ) : amSpectating ? (
                   <div className="flex justify-center h-10 items-center text-gray-400 text-xs italic">
@@ -1268,11 +1281,11 @@ function App() {
                 onClick={() => setViewPlayer(myPlayer || { id: 'preview', userId: user.id, name: user.name, balance: user.balance, chips: 0, currentBet: 0, hasFolded: false, hasActed: false, isActive: true, totalContribution: 0, cards: [] } as any)}
               >
                  {isMyTurn && turnTimer && (
-                   <div className="absolute -right-6 top-1/2 -translate-y-1/2 z-20">
+                   <div className="absolute -right-6 top-1/2 -translate-y-1/2 z-40">
                      <TurnPie fraction={turnTimer.fraction} danger={turnTimer.danger} />
                    </div>
                  )}
-                 <Avatar seed={user.avatar} decorationId={user.equippedAvatarDecoration} />
+                 <Avatar seed={user.avatar} size={40} decorationId={user.equippedAvatarDecoration} />
                  <EmoteBubble emote={emotes[user.id]} />
                  <span className="absolute -top-1 -left-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                    {myPlayer?.level ?? user.level ?? 1}
@@ -1282,8 +1295,13 @@ function App() {
               <div className="mt-1 flex justify-center w-full">
                 <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} andorra={user.movedToAndorra} className="text-[10px] max-w-[80px] truncate" />
               </div>
-              <div className="text-white font-medium text-base" ref={myChipsRef}>
+              <div className="text-white font-medium text-base flex flex-col items-center leading-none" ref={myChipsRef}>
                 <AnimatedNumber value={myPlayer ? (myPlayer?.chips || 0) : user.balance} />
+                {currentRoom.isProportional && myPlayer?.sessionBuyIn != null && (
+                  <span className="text-[10px] text-purple-400 opacity-70 mt-1">
+                    (Real: {fmtChips(Math.floor(((myPlayer?.chips || 0) / 1000) * myPlayer.sessionBuyIn))})
+                  </span>
+                )}
               </div>
             </div>
           </div>

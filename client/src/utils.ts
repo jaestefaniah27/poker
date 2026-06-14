@@ -21,7 +21,7 @@ export const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Norma
 // Escala de unidades (de mayor a menor). Se formatea con BigInt para ser EXACTO
 // a cualquier tamaño (los saldos pueden superar 2^53, donde el number falla).
 const UNIT_TIERS: [bigint, string][] = [
-  [10n ** 24n, 'Sp'], [10n ** 21n, 'Sx'], [10n ** 18n, 'Qi'],
+  [10n ** 30n, 'No'], [10n ** 27n, 'Oc'], [10n ** 24n, 'Sp'], [10n ** 21n, 'Sx'], [10n ** 18n, 'Qi'],
   [10n ** 15n, 'Q'], [10n ** 12n, 'T'], [10n ** 9n, 'B'], [10n ** 6n, 'M'], [10n ** 3n, 'k'],
 ];
 

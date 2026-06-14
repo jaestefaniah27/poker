@@ -96,16 +96,18 @@ export const getRooms = () => {
       blindLevelDuration: r.blindLevelDuration || 0,
       gameType: r.gameType || 'poker',
       minBet: r.minBet,
-      maxBet: r.maxBet
+      maxBet: r.maxBet,
+      isProportional: !!r.isProportional
     }));
 };
 
 export const createRoom = (
   id: string, name: string, persistent = false, tierIndex = 0,
   blindDivisor = DEFAULT_BLIND_DIVISOR, blindLevelDuration = 0,
-  gameType: GameType = 'poker', minBet?: number, maxBet?: number
+  gameType: GameType = 'poker', minBet?: number, maxBet?: number,
+  isProportional = false
 ): Room => {
-  const buyIn = STAKE_TIERS[tierIndex] ?? STAKE_TIERS[0];
+  const buyIn = isProportional ? 1000 : (STAKE_TIERS[tierIndex] ?? STAKE_TIERS[0]);
   const { smallBlind, bigBlind } = blindsFor(buyIn, blindDivisor);
   const newRoom: Room = {
     id,
@@ -134,7 +136,8 @@ export const createRoom = (
     bjPhase: gameType === 'blackjack' ? 'waiting' : undefined,
     dealerCards: gameType === 'blackjack' ? [] : undefined,
     minBet: gameType === 'blackjack' ? Math.max(1, minBet || 1) : undefined,
-    maxBet: gameType === 'blackjack' ? Math.max(1, maxBet || Math.floor(buyIn / 4)) : undefined
+    maxBet: gameType === 'blackjack' ? Math.max(1, maxBet || Math.floor(buyIn / 4)) : undefined,
+    isProportional
   };
   rooms.set(id, newRoom);
   return newRoom;
@@ -161,7 +164,13 @@ export const evictAll = (roomId: string): { userId: string; chips: number }[] =>
     .forEach(p => closePlayerSession(room, p, p.chips));
   const cashOuts = room.players
     .filter(p => p.isActive && !p.hasCashedOut && p.chips > 0)
-    .map(p => ({ userId: p.userId, chips: p.chips }));
+    .map(p => {
+      let chipsToReturn = p.chips;
+      if (room.isProportional) {
+        chipsToReturn = Math.floor((p.chips / 1000) * (p.sessionBuyIn || 1000));
+      }
+      return { userId: p.userId, chips: chipsToReturn };
+    });
 
   if (!room.persistent) {
     clearBlindTimer(roomId);
@@ -259,7 +268,7 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     existing.isOnline = true;
     existing.offlineSince = undefined;
     existing.reducedTime = false;
-    existing.sessionBuyIn = player.chips;
+    existing.sessionBuyIn = player.sessionBuyIn ?? player.chips;
     existing.sessionMaxChips = player.chips;
     existing.sessionStartedAt = Date.now();
     return 'joined';
@@ -277,7 +286,7 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     isOnline: true,
     reducedTime: false,
     isSpectating: isGameActive, // Wait for next hand if joining mid-game
-    sessionBuyIn: player.chips,
+    sessionBuyIn: player.sessionBuyIn ?? player.chips,
     sessionMaxChips: player.chips,
     sessionStartedAt: Date.now(),
     bet: room.gameType === 'blackjack' ? 0 : undefined,
@@ -304,7 +313,11 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
     ? (room.bjPhase != null && room.bjPhase !== 'waiting' && room.bjPhase !== 'betting' && room.bjPhase !== 'resolve')
     : (room.phase !== 'waiting' && room.phase !== 'showdown' && !player.isSpectating);
 
-  const cashOut = { userId: player.userId, chips: player.chips };
+  let chipsToReturn = player.chips;
+  if (room.isProportional) {
+    chipsToReturn = Math.floor((player.chips / 1000) * (player.sessionBuyIn || 1000));
+  }
+  const cashOut = { userId: player.userId, chips: chipsToReturn };
 
   // Blackjack: si el jugador se va a mitad de mano (isInHand), pierde su apuesta total de esa mano.
   if (isInHand && room.gameType === 'blackjack' && (player.bet || 0) > 0) {

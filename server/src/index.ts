@@ -102,22 +102,15 @@ const bootServer = async () => {
 
   // Salas fijas siempre disponibles, crearlas si no fueron restauradas
   if (!getRoom('sala-taberna')) createRoom('sala-taberna', 'La Taberna', true, 0);
-  if (!getRoom('sala-casino')) createRoom('sala-casino', 'Casino Real', true, 4);
-  if (!getRoom('sala-presidencial')) createRoom('sala-presidencial', 'Sala Presidencial', true, 7);
-  if (!getRoom('sala-satan')) createRoom('sala-satan', 'Sinagoga de Satán', true, 10);
+  if (!getRoom('sala-casino')) createRoom('sala-casino', 'Casino Real', true, 18);
+  if (!getRoom('sala-satan')) createRoom('sala-satan', 'Sinagoga de Satán', true, 36);
+  if (!getRoom('sala-el-juicio-final')) createRoom('sala-el-juicio-final', 'El Juicio Final', true, 0, 10, 0, 'poker', undefined, undefined, true);
   // Mesa de blackjack permanente: buy-in libre por jugador. Apuesta mín 25, sin tope (cap = tu stack).
   const BJ_NO_CAP = Number.MAX_SAFE_INTEGER;
   if (!getRoom('sala-blackjack')) createRoom('sala-blackjack', 'BlackJack', true, 0, undefined, undefined, 'blackjack', 25, BJ_NO_CAP);
   // Forzar límites actuales aunque la sala venga restaurada de la BD con valores antiguos
   const bjRoom = getRoom('sala-blackjack');
   if (bjRoom) { bjRoom.minBet = 25; bjRoom.maxBet = BJ_NO_CAP; }
-
-  const presRoom = getRoom('sala-presidencial');
-  if (presRoom) {
-    presRoom.buyIn = 500000;
-    presRoom.smallBlind = 5000;
-    presRoom.bigBlind = 10000;
-  }
 
   server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);

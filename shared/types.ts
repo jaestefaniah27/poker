@@ -12,7 +12,21 @@
 export const toBig = (v: string | number | bigint | null | undefined): bigint => {
   if (v == null) return 0n;
   if (typeof v === 'bigint') return v;
-  if (typeof v === 'number') return Number.isFinite(v) ? BigInt(Math.round(v)) : 0n;
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) return 0n;
+    const s = String(v);
+    if (s.includes('e')) {
+      const [base, exp] = s.split('e');
+      const exponent = parseInt(exp, 10);
+      const [whole, frac] = base.split('.');
+      let resultStr = whole + (frac || '');
+      const shift = exponent - (frac ? frac.length : 0);
+      if (shift > 0) resultStr += '0'.repeat(shift);
+      else if (shift < 0) resultStr = resultStr.slice(0, shift);
+      return BigInt(resultStr);
+    }
+    return BigInt(Math.round(v));
+  }
   const s = String(v).trim();
   const m = s.match(/^-?\d+/);
   return m ? BigInt(m[0]) : 0n;
@@ -176,6 +190,7 @@ export interface Room {
   minBet?: number;
   maxBet?: number;
   bjTurnUserId?: string;           // Quién está actuando en playerAction (en lugar de currentTurnIndex)
+  isProportional?: boolean;        // --- NUEVO: Mesa donde todos juegan con 1000 fichas, independientemente de la entrada real ---
 }
 
 export interface HandHistoryPlayer {
@@ -243,7 +258,21 @@ export interface PublicUser {
   unlockedBoosts?: Partial<Record<LevelTrack, number>>; // count per track
 }
 
-export const STAKE_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];
+export const STAKE_TIERS: number[] = [
+  1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000,
+  10000000, 25000000, 50000000, 100000000, 250000000, 500000000, 1000000000, 2500000000, 5000000000,
+  10000000000, 25000000000, 50000000000, 100000000000, 250000000000, 500000000000, 1000000000000,
+  2500000000000, 5000000000000, 10000000000000, 25000000000000, 50000000000000, 100000000000000,
+  250000000000000, 500000000000000, 1000000000000000, 2500000000000000, 5000000000000000,
+  1e16, 2.5e16, 5e16, 1e17, 2.5e17, 5e17, // 10Q, 25Q, 50Q, 100Q, 250Q, 500Q
+  1e18, 2.5e18, 5e18, 1e19, 2.5e19, 5e19, // 1Qi, 2.5Qi, 5Qi, 10Qi, 25Qi, 50Qi
+  1e20, 2.5e20, 5e20, 1e21, 2.5e21, 5e21, // 100Qi, 250Qi, 500Qi, 1Sx, 2.5Sx, 5Sx
+  1e22, 2.5e22, 5e22, 1e23, 2.5e23, 5e23, // 10Sx, 25Sx, 50Sx, 100Sx, 250Sx, 500Sx
+  1e24, 2.5e24, 5e24, 1e25, 2.5e25, 5e25, // 1Sp, 2.5Sp, 5Sp, 10Sp, 25Sp, 50Sp
+  1e26, 2.5e26, 5e26, 1e27, 2.5e27, 5e27, // 100Sp, 250Sp, 500Sp, 1Oc, 2.5Oc, 5Oc
+  1e28, 2.5e28, 5e28, 1e29, 2.5e29, 5e29, // 10Oc, 25Oc, 50Oc, 100Oc, 250Oc, 500Oc
+  1e30, 2.5e30, 5e30 // 1No, 2.5No, 5No
+];
 
 // Jackpot-specific tiers and unlock costs (cost = 10x bet)
 export const JACKPOT_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000, 25000000, 50000000, 100000000, 250000000, 500000000, 1000000000, 5000000000, 10000000000, 25000000000, 50000000000, 100000000000, 250000000000, 500000000000, 1000000000000, 5000000000000, 10000000000000, 25000000000000, 50000000000000, 100000000000000];
