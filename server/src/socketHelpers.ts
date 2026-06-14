@@ -230,9 +230,24 @@ export const turnWatchdog = () => {
     if (!room) continue;
     if (!isBettingPhase(room)) continue;
     if (room.currentTurnIndex < 0) continue;
-    const p = room.players[room.currentTurnIndex];
-    if (!p || !p.isActive || p.hasFolded || p.isSpectating || p.chips <= 0) continue;
     if (!hasOnlinePlayers(room)) continue;
+
+    const p = room.players[room.currentTurnIndex];
+
+    // If the current turn player is invalid (left, folded, busted, etc.),
+    // force a default action to unstick the game.
+    if (!p || !p.isActive || p.hasFolded || p.isSpectating || p.chips <= 0) {
+      console.warn(`[Watchdog] sala ${r.id} turno de jugador inválido (active=${p?.isActive}, folded=${p?.hasFolded}, chips=${p?.chips}), forzando avance.`);
+      if (p && p.isActive && !p.hasFolded) {
+        applyDefaultAction(r.id, p.userId);
+      } else {
+        // Player is already gone/folded, just re-arm to find next valid player
+        clearTurnTimer(r.id);
+        armTurnTimer(r.id, true);
+      }
+      broadcastRoom(r.id);
+      continue;
+    }
 
     const timer = turnTimers.get(r.id);
     const total = (room.turnDuration || 0) + (room.graceDuration || 0);

@@ -40,7 +40,7 @@ export const gameHandlers = (socket: Socket) => {
   socket.on('rebuy', async ({ roomId }) => {
     const room = getRoom(roomId);
     if (!room) return;
-    if (room.isTournament) return; // En torneo no hay recompra: busted = espectador
+    if (room.isTournament || room.isProportional) return; // En torneo o mesa proporcional no hay recompra
     const player = room.players.find(p => p.id === socket.id);
     if (!player) return;
 

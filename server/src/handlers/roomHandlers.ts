@@ -9,7 +9,7 @@ import { sanitizeInput } from '../security';
 import { maybeStartBlackjack, handleBlackjackLeave, clearBlackjackTimers } from './blackjackHandlers';
 
 export const roomHandlers = (socket: Socket) => {
-  socket.on('createRoom', ({ roomName, tierIndex, blindDivisor, blindLevelDuration, gameType, minBet, maxBet }, callback) => {
+  socket.on('createRoom', ({ roomName, tierIndex, blindDivisor, blindLevelDuration, gameType, minBet, maxBet, isProportional }, callback) => {
     const cleanRoomName = sanitizeInput(roomName?.trim() || 'Sala sin nombre');
     const idx = Number.isInteger(tierIndex) && tierIndex >= 0 && tierIndex < STAKE_TIERS.length ? tierIndex : 0;
     const div = BLIND_DIVISORS.includes(blindDivisor) ? blindDivisor : DEFAULT_BLIND_DIVISOR;
@@ -17,8 +17,9 @@ export const roomHandlers = (socket: Socket) => {
     const gt = gameType === 'blackjack' ? 'blackjack' : 'poker';
     const safeMin = Number.isFinite(minBet) && minBet > 0 ? Math.floor(minBet) : undefined;
     const safeMax = Number.isFinite(maxBet) && maxBet > 0 ? Math.floor(maxBet) : undefined;
+    const isProp = !!isProportional;
     const roomId = uuidv4();
-    createRoom(roomId, cleanRoomName, false, idx, div, dur, gt, safeMin, safeMax);
+    createRoom(roomId, cleanRoomName, false, idx, div, dur, gt, safeMin, safeMax, isProp);
     callback({ roomId });
     io.emit('roomsUpdated', getRooms());
   });
@@ -31,23 +32,31 @@ export const roomHandlers = (socket: Socket) => {
     if (!dbUser) return;
 
     // BlackJack: buy-in elegido por el jugador (saldo solo indicativo, puede quedar negativo).
-    // Poker: buy-in fijo de la mesa.
+    // Poker Proporcional: buy-in elegido por el jugador.
+    // Poker Normal: buy-in fijo de la mesa.
     const isBJ = room.gameType === 'blackjack';
-    const reqBuyIn = Math.floor(Number(buyInAmount));
-    const buyIn = isBJ
+    const isProp = !!room.isProportional;
+    const reqBuyIn = buyInAmount === 'ALL' ? Math.floor(Number(dbUser.balance)) : Math.floor(Number(buyInAmount));
+    const buyIn = isBJ || isProp
       ? (Number.isFinite(reqBuyIn) && reqBuyIn > 0 ? reqBuyIn : 1000)
       : (Number.isFinite(reqBuyIn) && reqBuyIn > 0
           ? Math.min(Math.max(reqBuyIn, room.buyIn), room.buyIn * 10)
           : room.buyIn);
 
-    // Check balance BEFORE joining room (prevents entering with phantom chips)
+    // Para evitar problemas de redondeo con números gigantes, si pidió ALL u over-requested por rounding:
+    let finalBuyIn = toBig(buyIn);
     const isReconnect = room.players.some(p => p.userId === dbUser.id && p.isActive);
-    if (!isReconnect && toBig(dbUser.balance) < toBig(buyIn)) {
-      socket.emit('error', 'Saldo insuficiente para entrar a esta mesa.');
-      return;
+    if (!isReconnect && finalBuyIn > toBig(dbUser.balance)) {
+      if (finalBuyIn <= toBig(dbUser.balance) + toBig(dbUser.balance)/1000n) {
+        finalBuyIn = toBig(dbUser.balance);
+      } else {
+        socket.emit('error', 'Saldo insuficiente para entrar a esta mesa.');
+        return;
+      }
     }
 
-    const offTableBalance = (toBig(dbUser.balance) - toBig(buyIn)).toString();
+    const offTableBalance = (toBig(dbUser.balance) - finalBuyIn).toString();
+    const finalBuyInNum = Number(finalBuyIn);
 
     const result = joinRoom(roomId, {
       id: socket.id,
@@ -55,7 +64,8 @@ export const roomHandlers = (socket: Socket) => {
       name: dbUser.name,
       avatar: dbUser.avatar || dbUser.id,
       cards: [],
-      chips: buyIn,
+      chips: isProp ? 1000 : finalBuyInNum,
+      sessionBuyIn: finalBuyInNum,
       balance: offTableBalance,
       currentBet: 0,
       hasFolded: false,
@@ -81,7 +91,7 @@ export const roomHandlers = (socket: Socket) => {
     socket.join(roomId);
 
     if (result === 'joined') {
-      const newBalance = await applyBalanceDelta(dbUser.id, -buyIn);
+      const newBalance = await applyBalanceDelta(dbUser.id, -finalBuyInNum);
       socket.emit('balanceUpdated', { balance: newBalance });
     } else {
       socket.emit('balanceUpdated', { balance: dbUser.balance });
@@ -118,6 +128,22 @@ export const roomHandlers = (socket: Socket) => {
       if (after) handleBlackjackLeave(roomId);
       else clearBlackjackTimers(roomId);
     } else {
+      // After a player leaves, check if the room is stuck on an invalid turn
+      const after = getRoom(roomId);
+      if (after && ['preflop', 'flop', 'turn', 'river'].includes(after.phase)) {
+        const idx = after.currentTurnIndex;
+        const current = idx >= 0 ? after.players[idx] : undefined;
+        if (!current || !current.isActive || current.hasFolded || current.isSpectating || current.chips <= 0) {
+          // Current turn player is invalid — force-advance via armTurnTimer which will
+          // trigger the watchdog path. We need to immediately resolve this.
+          clearTurnTimer(roomId);
+          // Import processAction indirectly: emit a synthetic default action
+          const { applyDefaultAction } = require('../socketHelpers');
+          if (current && current.isActive && !current.hasFolded) {
+            applyDefaultAction(roomId, current.userId);
+          }
+        }
+      }
       armTurnTimer(roomId, true);
     }
     broadcastRoom(roomId);

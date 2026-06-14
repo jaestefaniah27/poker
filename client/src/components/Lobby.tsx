@@ -103,10 +103,37 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [createTierIndex, setCreateTierIndex] = useState(STAKE_TIERS.length - 1);
   const [createBlindDivisor, setCreateBlindDivisor] = useState(DEFAULT_BLIND_DIVISOR);
   const [createBlindDuration, setCreateBlindDuration] = useState(0); // ms; 0 = mesa cash
+  const [createIsProportional, setCreateIsProportional] = useState(false);
 
   // BlackJack buy-in modal: el jugador elige con cuánto entra
-  const [buyInRoom, setBuyInRoom] = useState<{ id: string; name: string } | null>(null);
+  const [buyInRoom, setBuyInRoom] = useState<{ id: string; name: string, isProportional?: boolean } | null>(null);
   const [buyInTierIndex, setBuyInTierIndex] = useState(1); // default 5000
+
+  // Calculate max tier available for the user
+  const userBalBig = toBig(user.balance);
+  let maxTierIdx = 0;
+  for (let i = STAKE_TIERS.length - 1; i >= 0; i--) {
+    if (toBig(STAKE_TIERS[i]) <= userBalBig) {
+      maxTierIdx = i;
+      break;
+    }
+  }
+
+  const numSteps = 10;
+  let rawSliderTiers: number[] = [];
+  if (maxTierIdx <= numSteps - 1) {
+    for (let i = 0; i <= maxTierIdx; i++) rawSliderTiers.push(STAKE_TIERS[i]);
+  } else {
+    for (let i = 0; i < numSteps; i++) {
+      if (i === 0) rawSliderTiers.push(STAKE_TIERS[0]);
+      else if (i === numSteps - 1) rawSliderTiers.push(STAKE_TIERS[maxTierIdx]);
+      else {
+        const idx = Math.floor((i / (numSteps - 1)) * maxTierIdx);
+        rawSliderTiers.push(STAKE_TIERS[idx]);
+      }
+    }
+  }
+  const sliderTiers = Array.from(new Set(rawSliderTiers));
 
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -273,41 +300,45 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
   const openStakeSlider = () => {
     if (!newRoomName.trim()) return;
-    setCreateTierIndex(STAKE_TIERS.length - 1);
+    setCreateTierIndex(sliderTiers.length - 1);
     setCreateBlindDivisor(DEFAULT_BLIND_DIVISOR);
     setCreateBlindDuration(0);
+    setCreateIsProportional(false);
     setShowStakeSlider(true);
   };
 
-  const confirmCreateRoom = () => {
+  const confirmCreateRoom = (overrideAmount?: number | 'ALL') => {
     if (!newRoomName.trim()) return;
+    const actualTierIndex = STAKE_TIERS.indexOf(sliderTiers[createTierIndex]);
     socket.emit('createRoom', {
       roomName: newRoomName,
-      tierIndex: createTierIndex,
+      tierIndex: actualTierIndex >= 0 ? actualTierIndex : 0,
       blindDivisor: createBlindDivisor,
       blindLevelDuration: createBlindDuration,
       gameType: 'poker',
+      isProportional: createIsProportional,
     }, (res: any) => {
       if (!res?.roomId) return;
       setShowStakeSlider(false);
       getStorage().setItem('pokerRoomId', res.roomId);
-      socket.emit('joinRoom', { roomId: res.roomId, token });
+      const amount = overrideAmount ?? sliderTiers[createTierIndex];
+      socket.emit('joinRoom', { roomId: res.roomId, token, buyInAmount: amount });
     });
   };
 
-  // Click en una sala: BJ abre modal de buy-in; poker entra directo.
+  // Click en una sala: BJ o Proporcional abre modal de buy-in; poker normal entra directo.
   const handleRoomClick = (room: any) => {
-    if (room.gameType === 'blackjack') {
-      setBuyInTierIndex(1);
-      setBuyInRoom({ id: room.id, name: room.name });
+    if (room.gameType === 'blackjack' || room.isProportional) {
+      setBuyInTierIndex(Math.min(sliderTiers.length - 1, 1));
+      setBuyInRoom({ id: room.id, name: room.name, isProportional: room.isProportional });
     } else {
       onJoinRoom(room.id);
     }
   };
 
-  const confirmBuyIn = (overrideAmount?: number) => {
+  const confirmBuyIn = (overrideAmount?: number | 'ALL') => {
     if (!buyInRoom) return;
-    const amount = overrideAmount ?? STAKE_TIERS[buyInTierIndex];
+    const amount = overrideAmount ?? sliderTiers[buyInTierIndex];
     onJoinRoom(buyInRoom.id, amount);
     setBuyInRoom(null);
   };
@@ -763,6 +794,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isBJ ? 'bg-sky-500/20 text-sky-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
                           {isBJ ? 'BJ' : 'PK'}
                         </span>
+                        {room.isProportional && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300">
+                            IGUALADORA
+                          </span>
+                        )}
                         <h3 className="font-semibold text-base">{room.name}</h3>
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">{room.playerCount}/8 jugadores • {isBJ ? (room.phase || 'waiting') : room.phase}</p>
@@ -776,7 +812,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                         <p className="text-xs mt-0.5">
                           <span className="text-emerald-300/80 font-semibold">{fmtChips(room.smallBlind)}/{fmtChips(room.bigBlind)}</span>
                           <span className="text-gray-600"> • </span>
-                          <span className="text-rose-300/80 font-semibold">Entrada {fmtChips(room.buyIn)}</span>
+                          <span className="text-rose-300/80 font-semibold">{room.isProportional ? 'Buy-in libre' : `Entrada ${fmtChips(room.buyIn)}`}</span>
                           {room.isTournament && (
                             <>
                               <span className="text-gray-600"> • </span>
@@ -884,7 +920,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
       {/* Stake + blind-speed modal (poker) */}
       {showStakeSlider && (() => {
-        const buyIn = STAKE_TIERS[createTierIndex];
+        const buyIn = sliderTiers[createTierIndex] || sliderTiers[0];
         const { smallBlind, bigBlind } = blindsFor(buyIn, createBlindDivisor);
         return (
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setShowStakeSlider(false)}>
@@ -892,21 +928,32 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               <h2 className="text-center text-lg font-bold mb-1 truncate">{newRoomName}</h2>
               <p className="text-center text-xs text-gray-500 mb-4 uppercase tracking-wider">Configura la partida</p>
 
+              <div className="mb-4 flex items-center justify-between bg-background border border-gray-700 p-3 rounded-xl">
+                <div>
+                  <p className="text-sm font-bold text-white">Mesa Proporcional</p>
+                  <p className="text-[10px] text-gray-500">Buy-in libre, juegas con 1K.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={createIsProportional} onChange={e => setCreateIsProportional(e.target.checked)} />
+                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                </label>
+              </div>
+
               <div className="text-center mb-4">
                 <p className="text-sm text-emerald-300/80 font-semibold">Ciegas iniciales</p>
                 <p className="text-4xl font-extrabold text-emerald-200">{fmtChips(smallBlind)} / {fmtChips(bigBlind)}</p>
               </div>
+
               <div className="text-center mb-6">
-                <p className="text-sm text-rose-300/80 font-semibold">Entrada</p>
+                <p className="text-sm text-rose-300/80 font-semibold">{createIsProportional ? 'Tu Buy-in' : 'Entrada'}</p>
                 <p className="text-4xl font-extrabold text-rose-300">{fmtChips(buyIn)}</p>
               </div>
 
-              <p className="text-[11px] text-gray-500 mb-1 px-1">Entrada</p>
-              <Slider min={0} max={STAKE_TIERS.length - 1} step={1} value={createTierIndex} onChange={v => setCreateTierIndex(v)} accent="rose" formatLabel={v => fmtChips(STAKE_TIERS[v])} />
+              <p className="text-[11px] text-gray-500 mb-1 px-1">{createIsProportional ? 'Tu Buy-in' : 'Entrada'}</p>
+              <Slider min={0} max={sliderTiers.length - 1} step={1} value={createTierIndex} onChange={v => setCreateTierIndex(v)} accent="rose" formatLabel={v => fmtChips(sliderTiers[v])} />
               <div className="flex justify-between px-1 mb-5 mt-1">
-                {STAKE_TIERS.map((b, i) => (
-                  <button key={i} onClick={() => setCreateTierIndex(i)} className={`text-[9px] ${i === createTierIndex ? 'text-white font-bold' : 'text-gray-600'}`}>{fmtChips(b)}</button>
-                ))}
+                <button onClick={() => setCreateTierIndex(0)} className="text-[9px] text-gray-500">{fmtChips(sliderTiers[0])}</button>
+                <button onClick={() => setCreateTierIndex(sliderTiers.length - 1)} className="text-[9px] text-gray-500">{fmtChips(sliderTiers[sliderTiers.length - 1])}</button>
               </div>
 
               <p className="text-[11px] text-gray-500 mb-1 px-1">Ciegas iniciales</p>
@@ -929,16 +976,25 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                   </button>
                 ))}
               </div>
+
               <p className="text-[10px] text-gray-600 mb-6 px-1">
                 {createBlindDuration === 0
                   ? 'Mesa cash: las ciegas no suben y puedes recomprar al quedarte sin fichas.'
                   : 'Torneo: las ciegas suben con el tiempo, sin recompra. Gana quien se quede con todas las fichas.'}
               </p>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-2 mt-4">
                 <button onClick={() => setShowStakeSlider(false)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
-                <button onClick={confirmCreateRoom} className="flex-1 bg-white text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Crear</button>
+                <button onClick={() => confirmCreateRoom()} className={`flex-1 ${createIsProportional ? 'bg-purple-500 text-white' : 'bg-rose-500 text-black'} py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform`}>
+                  Crear Partida
+                </button>
               </div>
+              
+              {createIsProportional && toBig(user.balance) > 0n && (
+                <button onClick={() => confirmCreateRoom('ALL')} className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform mt-2">
+                  💰 Todo mi saldo — {fmtChips(user.balance)}
+                </button>
+              )}
             </div>
           </div>
         );
@@ -946,12 +1002,16 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
       {/* BlackJack buy-in modal */}
       {buyInRoom && (() => {
-        const amount = STAKE_TIERS[buyInTierIndex];
+        const amount = sliderTiers[buyInTierIndex] || sliderTiers[0];
         return (
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setBuyInRoom(null)}>
             <div className="w-full max-w-md bg-surface rounded-3xl p-6 border border-surfaceLight" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-center gap-2 mb-1">
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300">BJ</span>
+                {buyInRoom.isProportional ? (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300">IGUALADORA</span>
+                ) : (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300">BJ</span>
+                )}
                 <h2 className="text-lg font-bold truncate">{buyInRoom.name}</h2>
               </div>
               <p className="text-center text-xs text-gray-500 mb-6 uppercase tracking-wider">¿Con cuánto quieres entrar?</p>
@@ -961,11 +1021,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 <p className="text-5xl font-extrabold text-emerald-200">{fmtChips(amount)}</p>
               </div>
 
-              <Slider min={0} max={STAKE_TIERS.length - 1} step={1} value={buyInTierIndex} onChange={v => setBuyInTierIndex(v)} accent="emerald" formatLabel={v => fmtChips(STAKE_TIERS[v])} />
+              <Slider min={0} max={sliderTiers.length - 1} step={1} value={buyInTierIndex} onChange={v => setBuyInTierIndex(v)} accent="emerald" formatLabel={v => fmtChips(sliderTiers[v])} />
               <div className="flex justify-between px-1 mb-5 mt-1">
-                {STAKE_TIERS.map((b, i) => (
-                  <button key={i} onClick={() => setBuyInTierIndex(i)} className={`text-[9px] ${i === buyInTierIndex ? 'text-white font-bold' : 'text-gray-600'}`}>{fmtChips(b)}</button>
-                ))}
+                <button onClick={() => setBuyInTierIndex(0)} className="text-[9px] text-gray-500">{fmtChips(sliderTiers[0])}</button>
+                <button onClick={() => setBuyInTierIndex(sliderTiers.length - 1)} className="text-[9px] text-gray-500">{fmtChips(sliderTiers[sliderTiers.length - 1])}</button>
               </div>
 
               <p className="text-[10px] text-gray-600 mb-6 px-1">
@@ -974,10 +1033,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
               <div className="flex gap-2 mb-2">
                 <button onClick={() => setBuyInRoom(null)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
-                <button onClick={() => confirmBuyIn()} className="flex-1 bg-sky-500 text-black py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform">Entrar con {fmtChips(amount)}</button>
+                <button onClick={() => confirmBuyIn()} className={`flex-1 ${buyInRoom.isProportional ? 'bg-purple-500 text-white' : 'bg-sky-500 text-black'} py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform`}>Entrar con {fmtChips(amount)}</button>
               </div>
-              {user.balance > 0 && (
-                <button onClick={() => confirmBuyIn(Number(user.balance))} className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform">
+              {toBig(user.balance) > 0n && (
+                <button onClick={() => confirmBuyIn('ALL')} className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform">
                   💰 Todo mi saldo — {fmtChips(user.balance)}
                 </button>
               )}
