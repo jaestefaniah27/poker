@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { socket, fmtChips, playCheckSound, vibrate, getStorage, HAND_NAMES_ES, fmtDuration } from './utils';
 import { sfx } from './sounds';
-import { EMOTES, type ActiveEmote } from './components/EmoteBubble';
+import EmoteBubble, { EMOTES, type ActiveEmote } from './components/EmoteBubble';
 import LoginScreen from './components/LoginScreen';
 import Lobby from './components/Lobby';
 import PlayingCard from './components/PlayingCard';
@@ -109,7 +109,7 @@ function App() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [viewPlayer, setViewPlayer] = useState<Player | null>(null);
   const [viewStats, setViewStats] = useState<any>(null);
-  const [, setEmotes] = useState<Record<string, ActiveEmote>>({});
+  const [emotes, setEmotes] = useState<Record<string, ActiveEmote>>({});
   const [showEmotePicker, setShowEmotePicker] = useState(false);
   const [newCommunityIdx, setNewCommunityIdx] = useState<number[]>([]);
   const [displayCommCount, setDisplayCommCount] = useState(0);
@@ -905,6 +905,7 @@ function App() {
                     </div>
                   )}
                   <Avatar seed={p.avatar || p.userId} opacity={hasFolded || isSpectating || p.isOnline === false ? 0.3 : 1} decorationId={p.equippedAvatarDecoration} />
+                  <EmoteBubble emote={emotes[p.userId]} />
                   {isDealer(indexInRoom) && <DealerBadge />}
                   <span className="absolute -top-1 -left-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                     {p.level ?? 1}
@@ -1272,6 +1273,7 @@ function App() {
                    </div>
                  )}
                  <Avatar seed={user.avatar} decorationId={user.equippedAvatarDecoration} />
+                 <EmoteBubble emote={emotes[user.id]} />
                  <span className="absolute -top-1 -left-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 border border-black/40 flex items-center justify-center text-[9px] font-black text-black leading-none">
                    {myPlayer?.level ?? user.level ?? 1}
                  </span>
