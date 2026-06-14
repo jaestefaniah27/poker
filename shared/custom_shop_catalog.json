@@ -1,0 +1,152 @@
+[
+  {
+    "id": "avatar_silver",
+    "name": "Marco de Plata Simple",
+    "price": 50000000,
+    "type": "avatar",
+    "minLevel": 5
+  },
+  {
+    "id": "avatar_silver_2",
+    "name": "Marco de Plata Brillante",
+    "price": 100000000,
+    "type": "avatar",
+    "minLevel": 7
+  },
+  {
+    "id": "avatar_silver_3",
+    "name": "Marco de Plata Estelar",
+    "price": 250000000,
+    "type": "avatar",
+    "minLevel": 10
+  },
+  {
+    "id": "avatar_gold",
+    "name": "Marco de Oro",
+    "price": 500000000,
+    "type": "avatar",
+    "minLevel": 15
+  },
+  {
+    "id": "avatar_gold_2",
+    "name": "Marco de Oro Radiante",
+    "price": 1000000000,
+    "type": "avatar",
+    "minLevel": 18
+  },
+  {
+    "id": "avatar_gold_3",
+    "name": "Marco de Oro Imperial",
+    "price": 2500000000,
+    "type": "avatar",
+    "minLevel": 22
+  },
+  {
+    "id": "avatar_diamond",
+    "name": "Aura de Amatista",
+    "price": 5000000000,
+    "type": "avatar",
+    "minLevel": 30
+  },
+  {
+    "id": "avatar_diamond_2",
+    "name": "Cristal de Amatista",
+    "price": 10000000000,
+    "type": "avatar",
+    "minLevel": 35
+  },
+  {
+    "id": "avatar_diamond_3",
+    "name": "Corona de Amatista",
+    "price": 25000000000,
+    "type": "avatar",
+    "minLevel": 40
+  },
+  {
+    "id": "name_silver",
+    "name": "Placa de Plata",
+    "price": 200000000,
+    "type": "name",
+    "minLevel": 5
+  },
+  {
+    "id": "name_diamond",
+    "name": "Placa de Diamante",
+    "price": 10000000000,
+    "type": "name",
+    "minLevel": 30
+  },
+  {
+    "id": "name_emerald",
+    "name": "Placa de Esmeralda",
+    "price": 150000000000,
+    "type": "name",
+    "minLevel": 50
+  },
+  {
+    "id": "name_rainbow",
+    "name": "Brillo Arcoíris Animado",
+    "price": 300000000000,
+    "type": "name",
+    "minLevel": 60
+  },
+  {
+    "id": "name_fire",
+    "name": "Nombre en Llamas",
+    "price": 750000000000,
+    "type": "name",
+    "description": "Tu nombre arde con fuego vivo. Que tiemble la mesa.",
+    "minLevel": 70
+  },
+  {
+    "id": "name_royal",
+    "name": "Sello Real",
+    "price": 2000000000000,
+    "type": "name",
+    "description": "Oro líquido animado digno de la realeza. El cosmético más exclusivo de la casa.",
+    "minLevel": 80
+  },
+  {
+    "id": "felt_red",
+    "name": "Tapete Rojo Casino",
+    "price": 100000000,
+    "type": "felt",
+    "minLevel": 5
+  },
+  {
+    "id": "felt_blue",
+    "name": "Tapete Azul Noche",
+    "price": 500000000,
+    "type": "felt",
+    "minLevel": 15
+  },
+  {
+    "id": "felt_purple",
+    "name": "Tapete Morado Neón",
+    "price": 2000000000,
+    "type": "felt",
+    "minLevel": 30
+  },
+  {
+    "id": "felt_vip",
+    "name": "Tapete VIP Negro y Oro",
+    "price": 10000000000,
+    "type": "felt",
+    "minLevel": 40
+  },
+  {
+    "id": "felt_galaxy",
+    "name": "Tapete Galaxia",
+    "price": 50000000000000000,
+    "type": "felt",
+    "description": "Juega entre estrellas. Fondo cósmico con destellos animados.",
+    "minLevel": 50
+  },
+  {
+    "id": "social_andorra",
+    "name": "Mudanza a Andorra",
+    "price": 500000000000,
+    "type": "social",
+    "description": "Otorga una exención fiscal que reduce la posibilidad de que Hacienda te incaute dinero a 1/10. Además, añade el sello de Andorra a tu nombre de forma permanente."
+  }
+]

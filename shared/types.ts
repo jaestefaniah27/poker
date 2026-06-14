@@ -285,30 +285,65 @@ export const availableLevelPoints = (
 
 // --- Paguita (bono diario): nv.0 base 10k → nv.10 máx 10M.
 //     Sube ~x3 al principio, luego lineal para no dispararse. ---
-export const PAGUITA_MAX_LEVEL = 50;
-export const dailyAmountFor = (paguitaLevel: number): number => {
-  const lvl = Math.max(0, Math.min(paguitaLevel, PAGUITA_MAX_LEVEL));
-  return Math.floor(10_000 * Math.pow(1.58489, lvl));
-};
+export const PAGUITA_AMOUNTS = [
+  10_000,    // 0
+  30_000,    // 1
+  90_000,    // 2
+  250_000,   // 3
+  500_000,   // 4
+  1_000_000, // 5
+  2_000_000, // 6
+  4_000_000, // 7
+  6_000_000, // 8
+  8_000_000, // 9
+  10_000_000,// 10 (máx)
+];
+export const PAGUITA_MAX_LEVEL = PAGUITA_AMOUNTS.length - 1; // 10
+export const dailyAmountFor = (paguitaLevel: number): number =>
+  PAGUITA_AMOUNTS[Math.max(0, Math.min(paguitaLevel, PAGUITA_MAX_LEVEL))];
 
-// --- Dietas (bono cada 30 min): nv.0 base 1k → nv.50 máx 10T. ---
-export const DIETA_MAX_LEVEL = 50;
-export const hourlyAmountFor = (dietaLevel: number): number => {
-  const lvl = Math.max(0, Math.min(dietaLevel, DIETA_MAX_LEVEL));
-  return Math.floor(1_000 * Math.pow(1.58489, lvl));
-};
+// --- Dietas (bono cada 30 min): nv.0 base 1k → nv.10 máx 1M.
+//     Sube x2 al principio, luego lineal. ---
+export const DIETA_AMOUNTS = [
+  1_000,     // 0
+  2_000,     // 1
+  4_000,     // 2
+  8_000,     // 3
+  16_000,    // 4
+  50_000,    // 5
+  100_000,   // 6
+  250_000,   // 7
+  500_000,   // 8
+  750_000,   // 9
+  1_000_000, // 10 (máx)
+];
+export const DIETA_MAX_LEVEL = DIETA_AMOUNTS.length - 1; // 10
+export const hourlyAmountFor = (dietaLevel: number): number =>
+  DIETA_AMOUNTS[Math.max(0, Math.min(dietaLevel, DIETA_MAX_LEVEL))];
 
-// --- Ruleta: cada nivel mejora el set de premios ---
-export const RULETA_MAX_LEVEL = 50;
-export const ruletaOptionsFor = (ruletaLevel: number): number[] => {
-  const lvl = Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL));
-  const mult = Math.pow(1.4649, lvl);
-  return [1_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000].map(v => Math.floor(v * mult));
-};
+// --- Ruleta: cada nivel mejora un valor del set de 8 premios ---
+const K = 1_000, M = 1_000_000;
+export const RULETA_LEVELS: number[][] = [
+  [1*K, 5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K], // 0
+  [5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K, 1*M], // 1
+  [10*K, 25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M], // 2
+  [25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M],  // 3
+  [25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M],  // 4
+  [50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M],  // 5
+  [100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M],  // 6
+  [250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M],   // 7
+  [500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M],    // 8
+  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 9
+  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 10
+];
+export const RULETA_MAX_LEVEL = RULETA_LEVELS.length - 1; // 10
+export const ruletaOptionsFor = (ruletaLevel: number): number[] =>
+  RULETA_LEVELS[Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL))];
+
 export const ruletaSpinsFor = (ruletaLevel: number): number => {
   const lvl = Math.max(0, Math.min(ruletaLevel, RULETA_MAX_LEVEL));
-  if (lvl >= 30) return 50;
-  if (lvl >= 10) return 25;
+  if (lvl >= 10) return 50;
+  if (lvl >= 4) return 25;
   return 10;
 };
 
@@ -385,6 +420,10 @@ export interface ShopItem {
 
 export type TrackBoosts = Partial<Record<LevelTrack, number>>;
 
+// Premio base de los boosts de tienda. El máximo conseguible pagando es
+// base × 100^TRACK_BOOST_MAX:
+//   paguita 100M × 100^3 = 100T · dieta 100k × 100^4 = 10T
+//   ruleta  100M × 100^3 = 100T · trivia 100M × 100^3 = 100T
 export const TRACK_BASE_PRIZE: Record<LevelTrack, number> = {
   paguita: 10_000_000,
   dieta: 1_000_000,
@@ -393,20 +432,20 @@ export const TRACK_BASE_PRIZE: Record<LevelTrack, number> = {
 };
 
 export const TRACK_BOOST_MAX: Record<LevelTrack, number> = {
-  paguita: 3,
-  dieta: 4,
-  ruleta: 3,
-  trivia: 3,
+  paguita: 7,
+  dieta: 7,
+  ruleta: 7,
+  trivia: 7,
 };
 
 export const trackBoostCount = (track: LevelTrack, boosts: TrackBoosts | undefined): number =>
   boosts?.[track] ?? 0;
 
 export const boostMultiplier = (track: LevelTrack, boosts: TrackBoosts | undefined): number =>
-  Math.pow(100, trackBoostCount(track, boosts));
+  Math.pow(10, trackBoostCount(track, boosts));
 
 export const boostCost = (track: LevelTrack, currentCount: number): number =>
-  Math.round(TRACK_BASE_PRIZE[track] * Math.pow(100, currentCount) * 1000);
+  Math.round(TRACK_BASE_PRIZE[track] * Math.pow(10, currentCount) * 200);
 
 export const SHOP_CATALOG: ShopItem[] = [
   // --- Avatar Decorations ---
@@ -437,7 +476,6 @@ export const SHOP_CATALOG: ShopItem[] = [
   { id: 'felt_purple', name: 'Tapete Morado Neón', price: 2_000_000_000, type: 'felt', minLevel: 30 },
   { id: 'felt_vip', name: 'Tapete VIP Negro y Oro', price: 10_000_000_000, type: 'felt', minLevel: 40 },
   { id: 'felt_galaxy', name: 'Tapete Galaxia', price: 50_000_000_000, type: 'felt', description: 'Juega entre estrellas. Fondo cósmico con destellos animados.', minLevel: 50 },
-  { id: 'felt_royal', name: 'Tapete Esmeralda Real', price: 250_000_000_000, type: 'felt', description: 'Esmeralda profunda con ribete dorado. Solo para alta sociedad.', minLevel: 60 },
 
   // --- Social Benefits ---
   { id: 'social_andorra', name: 'Mudanza a Andorra', price: 500_000_000_000, type: 'social', description: 'Otorga una exención fiscal que reduce la posibilidad de que Hacienda te incaute dinero a 1/10. Además, añade el sello de Andorra a tu nombre de forma permanente.' },

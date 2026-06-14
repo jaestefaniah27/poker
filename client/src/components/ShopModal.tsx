@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { PublicUser } from '../../../shared/types';
-import { SHOP_CATALOG, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, TRACK_BASE_PRIZE, boostCost, trackBoostCount } from '../../../shared/types';
+import { SHOP_CATALOG, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, TRACK_BASE_PRIZE, boostCost, trackBoostCount, boostMultiplier } from '../../../shared/types';
 import type { LevelTrack } from '../../../shared/types';
 import { fmtChips, socket, getStorage } from '../utils';
 import Avatar from './Avatar';
@@ -331,7 +331,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
         {tab === 'social' ? (
           <div>
             <div className="mb-8">
-              <h3 className="text-2xl font-black text-white mb-4 flex items-center gap-3">Mejoras x100<span className="flex-1 h-px bg-gradient-to-r from-amber-500/40 to-transparent" /></h3>
+              <h3 className="text-2xl font-black text-white mb-4 flex items-center gap-3">Mejoras x10<span className="flex-1 h-px bg-gradient-to-r from-amber-500/40 to-transparent" /></h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {([
                   { label: 'Paguita', emoji: '💸', track: 'paguita' as LevelTrack, maxLevel: PAGUITA_MAX_LEVEL, basePrize: TRACK_BASE_PRIZE.paguita, userLevel: user.paguitaLevel ?? 0 },
@@ -344,8 +344,8 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
                   const maxBoosts = TRACK_BOOST_MAX[b.track];
                   const atMax = b.userLevel >= b.maxLevel;
                   const atBoostMax = count >= maxBoosts;
-                  const currentPrize = b.basePrize * Math.pow(100, count);
-                  const nextPrize = currentPrize * 100;
+                  const currentPrize = b.basePrize * boostMultiplier(b.track, boosts);
+                  const nextPrize = currentPrize * 10;
                   const cost = boostCost(b.track, count);
                   return (
                     <div key={b.track} className={`p-5 rounded-2xl border transition-all ${count > 0 ? 'bg-amber-500/10 border-amber-500/40' : atMax ? 'bg-white/5 border-white/10' : 'bg-white/3 border-white/5 opacity-60'}`}>

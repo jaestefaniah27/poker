@@ -1,5 +1,6 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
+import fs from 'fs';
 import { promisify } from 'util';
 
 const dbPath = path.join(__dirname, '..', 'poker.sqlite');
@@ -711,21 +712,26 @@ export const getHaciendaTotal = async (): Promise<number> => {
 import { SHOP_CATALOG } from '../../shared/types';
 import type { ShopItem } from '../../shared/types';
 
+const customCatalogPath = path.join(__dirname, '..', '..', 'shared', 'custom_shop_catalog.json');
+
 export const getShopCatalog = async (): Promise<ShopItem[]> => {
-  const row = await dbGet<{value: string}>('SELECT value FROM settings WHERE key = "shop_catalog"');
-  if (row) {
-    try {
-      return JSON.parse(row.value);
-    } catch (e) {
-      console.error('Error parsing shop_catalog setting:', e);
+  try {
+    if (fs.existsSync(customCatalogPath)) {
+      const data = fs.readFileSync(customCatalogPath, 'utf8');
+      return JSON.parse(data);
     }
+  } catch (e) {
+    console.error('Error parsing custom_shop_catalog.json:', e);
   }
-  return SHOP_CATALOG; // fallback al default si no hay en DB
+  return SHOP_CATALOG; // fallback al default si no hay fichero
 };
 
 export const saveShopCatalog = async (catalog: ShopItem[]): Promise<void> => {
-  const value = JSON.stringify(catalog);
-  await dbRun('INSERT INTO settings (key, value) VALUES ("shop_catalog", ?) ON CONFLICT(key) DO UPDATE SET value = ?', [value, value]);
+  try {
+    fs.writeFileSync(customCatalogPath, JSON.stringify(catalog, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Error writing custom_shop_catalog.json:', e);
+  }
 };
 
 export const addHaciendaTotal = async (amount: number): Promise<number> => {
