@@ -147,6 +147,11 @@ export const restoreRoom = (room: Room) => {
   rooms.set(room.id, room);
 };
 
+export const deleteRoom = (id: string) => {
+  rooms.delete(id);
+  deleteRoomFromDB(id);
+};
+
 // Marca actividad real en la sala (acción de jugador, join, nueva mano). Resetea el contador de inactividad.
 export const touchRoom = (roomId: string) => {
   const room = rooms.get(roomId);

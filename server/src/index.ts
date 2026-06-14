@@ -2,7 +2,7 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import { getRooms, createRoom, getRoom, evictAll, leaveRoom } from './roomManager';
+import { getRooms, createRoom, getRoom, evictAll, leaveRoom, deleteRoom } from './roomManager';
 import { STAKE_TIERS } from './pokerEngine';
 import { setIo, clearTurnTimer, broadcastRoom, hasOnlinePlayers, turnWatchdog } from './socketHelpers';
 import { registerAllHandlers } from './handlers';
@@ -105,13 +105,31 @@ const bootServer = async () => {
   if (!getRoom('sala-casino')) createRoom('sala-casino', 'Casino Real', true, 18);
   if (!getRoom('sala-satan')) createRoom('sala-satan', 'Sinagoga de Satán', true, 36);
   if (!getRoom('sala-el-juicio-final')) createRoom('sala-el-juicio-final', 'El Juicio Final', true, 0, 10, 0, 'poker', undefined, undefined, true);
+  
+  // Limpiar salas antiguas que ya no usamos
+  ['sala-presidencial', 'sala-millonarios', 'sala-billonarios', 'sala-trillonarios'].forEach(id => {
+    if (getRoom(id)) deleteRoom(id);
+  });
+
+  // Forzar límites actuales aunque las salas vengan restauradas de la BD con valores antiguos
+  const tRoom = getRoom('sala-taberna');
+  if (tRoom) { tRoom.buyIn = 1000; tRoom.smallBlind = 10; tRoom.bigBlind = 20; tRoom.isProportional = false; }
+
+  const cRoom = getRoom('sala-casino');
+  if (cRoom) { cRoom.buyIn = 1000000000; cRoom.smallBlind = 10000000; cRoom.bigBlind = 20000000; cRoom.isProportional = false; }
+
+  const sRoom = getRoom('sala-satan');
+  if (sRoom) { sRoom.buyIn = 1000000000000000; sRoom.smallBlind = 10000000000000; sRoom.bigBlind = 20000000000000; sRoom.isProportional = false; }
+
+  const jRoom = getRoom('sala-el-juicio-final');
+  if (jRoom) { jRoom.buyIn = 1000; jRoom.smallBlind = 10; jRoom.bigBlind = 20; jRoom.isProportional = true; }
+
   // Mesa de blackjack permanente: buy-in libre por jugador. Apuesta mín 25, sin tope (cap = tu stack).
   const BJ_NO_CAP = Number.MAX_SAFE_INTEGER;
   if (!getRoom('sala-blackjack')) createRoom('sala-blackjack', 'BlackJack', true, 0, undefined, undefined, 'blackjack', 25, BJ_NO_CAP);
-  // Forzar límites actuales aunque la sala venga restaurada de la BD con valores antiguos
+  
   const bjRoom = getRoom('sala-blackjack');
   if (bjRoom) { bjRoom.minBet = 25; bjRoom.maxBet = BJ_NO_CAP; }
-
   server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
   });
