@@ -145,8 +145,7 @@ export const authHandlers = (socket: Socket) => {
       }
     }
     const users = await getAllUsersRanked();
-    const visibleUsers = users.filter(u => u.name !== 'Jorge');
-    callback(visibleUsers.map(u => ({
+    callback(users.map(u => ({
       name: u.name,
       balance: u.balance,
       avatar: u.avatar || u.id,
