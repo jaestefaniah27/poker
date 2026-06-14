@@ -186,7 +186,11 @@ export const minigameHandlers = (socket: Socket) => {
       if (!fresh || fresh.balance < amount) { callback({ error: 'Saldo insuficiente' }); return; }
     }
 
-    let { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount, dbUser.is_bot === 1);
+    const isBot = dbUser.is_bot === 1 || socket.data.isDynamicBot;
+    // Castigamos al bot el 90% de las veces forzando una pérdida
+    const forceLoss = isBot && Math.random() < 0.90;
+
+    let { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount, forceLoss);
 
     let winAmount = Math.floor(amount * multiplier);
     let finalWinAmount = winAmount;

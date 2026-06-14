@@ -134,6 +134,15 @@ const countOnlineUsers = () => {
 
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
+  
+  const ua = (socket.handshake.headers['user-agent'] || '').toLowerCase();
+  // Detectar bots programáticos: Node.js, curl, scripts sin User-Agent común
+  const isBotConnection = !ua.includes('mozilla') || ua.includes('node') || ua.includes('curl');
+  if (isBotConnection) {
+    socket.data.isDynamicBot = true;
+    console.log(`[BOT DETECTADO] Conexión clasificada como bot dinámico (UA: ${ua})`);
+  }
+
   socket.emit('roomsUpdated', getRooms());
   registerAllHandlers(socket);
   // Emitir tras autenticación (el socket aún no tiene user aquí)
