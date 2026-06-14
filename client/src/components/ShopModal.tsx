@@ -460,7 +460,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
 
             <section>
               <h3 className="text-2xl font-black text-white mb-4 flex items-center gap-3">Placas de Nombre<span className="flex-1 h-px bg-gradient-to-r from-amber-500/40 to-transparent" /></h3>
-              <div className="flex gap-6 overflow-x-auto pb-4 snap-x scrollbar-hide">
+              <div className="flex gap-6 overflow-x-auto pt-4 pb-6 px-2 -mx-2 snap-x scrollbar-hide">
                 {items.filter(i => i.type === 'name').map(item => (
                   <div key={item.id} className="w-[300px] shrink-0 snap-center">
                     {renderItemCard(item)}
@@ -471,7 +471,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
 
             <section>
               <h3 className="text-2xl font-black text-white mb-4 flex items-center gap-3">Tapetes de Blackjack<span className="flex-1 h-px bg-gradient-to-r from-amber-500/40 to-transparent" /></h3>
-              <div className="flex gap-6 overflow-x-auto pb-4 snap-x scrollbar-hide">
+              <div className="flex gap-6 overflow-x-auto pt-4 pb-6 px-2 -mx-2 snap-x scrollbar-hide">
                 {items.filter(i => i.type === 'felt').map(item => (
                   <div key={item.id} className="w-[300px] shrink-0 snap-center">
                     {renderItemCard(item)}
