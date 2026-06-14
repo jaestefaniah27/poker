@@ -718,7 +718,18 @@ export const getShopCatalog = async (): Promise<ShopItem[]> => {
   try {
     if (fs.existsSync(customCatalogPath)) {
       const data = fs.readFileSync(customCatalogPath, 'utf8');
-      return JSON.parse(data);
+      const customCat = JSON.parse(data) as ShopItem[];
+      
+      // Mapeamos el catálogo base del código (types.ts)
+      // para que siempre aparezcan los nuevos items y se borren los eliminados,
+      // aplicando encima las ediciones personalizadas (precio, nivel, etc)
+      return SHOP_CATALOG.map(baseItem => {
+        const customItem = customCat.find(c => c.id === baseItem.id);
+        if (customItem) {
+          return { ...baseItem, ...customItem };
+        }
+        return baseItem;
+      });
     }
   } catch (e) {
     console.error('Error parsing custom_shop_catalog.json:', e);
