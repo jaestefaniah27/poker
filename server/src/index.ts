@@ -127,7 +127,7 @@ const bootServer = async () => {
 const countOnlineUsers = () => {
   const ids = new Set<string>();
   for (const [, s] of io.sockets.sockets) {
-    if (s.data.user) ids.add(s.data.user.id);
+    if (s.data.user && s.data.user.name !== 'Jorge') ids.add(s.data.user.id);
   }
   return ids.size;
 };
