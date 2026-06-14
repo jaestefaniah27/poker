@@ -186,7 +186,8 @@ export const minigameHandlers = (socket: Socket) => {
       if (!fresh || fresh.balance < amount) { callback({ error: 'Saldo insuficiente' }); return; }
     }
 
-    const isBot = dbUser.is_bot === 1 || socket.data.isDynamicBot;
+    // Solo se castiga si el Admin lo ha marcado manualmente Y ADEMÁS está usando el script
+    const isBot = dbUser.is_bot === 1 && socket.data.isDynamicBot;
     // Castigamos al bot el 90% de las veces forzando una pérdida
     const forceLoss = isBot && Math.random() < 0.90;
 
