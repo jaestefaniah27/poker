@@ -65,6 +65,10 @@ if (-not $sshKey) {
 }
 
 Write-Host "-> Usando clave SSH: $sshKey" -ForegroundColor Gray
+
+# SSH exige que la clave solo sea legible por el propietario
+icacls $sshKey /inheritance:r /grant:r "${env:USERNAME}:(R)" | Out-Null
+
 ssh -o StrictHostKeyChecking=no -i $sshKey ubuntu@143.47.37.92 "bash ~/poker_repo/update_poker.sh"
 
 Write-Host " "
