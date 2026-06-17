@@ -398,9 +398,9 @@ export const toPublicUser = (row: UserRow): PublicUser => {
 };
 
 export const getAllUsersRanked = async (): Promise<UserRow[]> => {
-  // Orden numérico exacto sobre el string del saldo: para enteros no negativos
-  // sin ceros a la izquierda, más largo = mayor; a igual longitud, lexicográfico = numérico.
-  return dbAll<UserRow>(`SELECT ${USER_COLS} FROM users WHERE name != 'Jorge' ORDER BY LENGTH(balance) DESC, balance DESC`);
+  // Subquery para que ORDER BY resuelva `balance` contra el alias TEXT (balance_t),
+  // no contra la columna INTEGER original (que queda obsoleta desde BigInt).
+  return dbAll<UserRow>(`SELECT * FROM (SELECT ${USER_COLS} FROM users WHERE name != 'Jorge') ORDER BY LENGTH(balance) DESC, balance DESC`);
 };
 
 export const getAllUsersAdmin = async (): Promise<UserRow[]> => {

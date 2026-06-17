@@ -34,7 +34,7 @@ interface LobbyProps {
 interface LeaderboardEntry {
   userId: string;
   name: string;
-  balance: number;
+  balance: string;
   avatar: string;
   level?: number;
   lastSeen?: number;
@@ -866,8 +866,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                           {entry.isOnline ? <span className="text-emerald-400">En línea</span> : formatLastSeen(entry.lastSeen)}
                         </div>
                       </div>
-                      <span className={`font-mono text-sm font-semibold shrink-0 ${entry.balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {entry.balance < 0 ? `-$${fmtChips(Math.abs(entry.balance))}` : `$${fmtChips(entry.balance)}`}
+                      <span className="font-mono text-sm font-semibold shrink-0 text-emerald-400">
+                        ${fmtChips(entry.balance)}
                       </span>
                     </div>
                   );
