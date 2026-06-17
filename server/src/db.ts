@@ -398,9 +398,10 @@ export const toPublicUser = (row: UserRow): PublicUser => {
 };
 
 export const getAllUsersRanked = async (): Promise<UserRow[]> => {
-  // Subquery para que ORDER BY resuelva `balance` contra el alias TEXT (balance_t),
-  // no contra la columna INTEGER original (que queda obsoleta desde BigInt).
-  return dbAll<UserRow>(`SELECT * FROM (SELECT ${USER_COLS} FROM users WHERE name != 'Jorge') ORDER BY LENGTH(balance) DESC, balance DESC`);
+  // ORDER BY sobre la expresión directa de balance_t para evitar ambigüedad con
+  // la columna INTEGER `balance` del SELECT * (que ya no se actualiza desde BigInt).
+  const bal = "COALESCE(balance_t, CAST(balance AS TEXT), '0')";
+  return dbAll<UserRow>(`SELECT ${USER_COLS} FROM users WHERE name != 'Jorge' ORDER BY LENGTH(${bal}) DESC, ${bal} DESC`);
 };
 
 export const getAllUsersAdmin = async (): Promise<UserRow[]> => {

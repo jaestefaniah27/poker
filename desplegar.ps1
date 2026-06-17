@@ -73,5 +73,5 @@ ssh -o StrictHostKeyChecking=no -i $sshKey ubuntu@143.47.37.92 "bash ~/poker_rep
 
 Write-Host " "
 Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host "       !DESPLIEGUE COMPLETADO!           " -ForegroundColor Cyan
+Write-Host "       ¡DESPLIEGUE COMPLETADO!           " -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
