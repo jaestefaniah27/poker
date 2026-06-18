@@ -15,6 +15,8 @@ import MinesModal from './MinesModal';
 import CrashModal from './CrashModal';
 import WordleModal from './WordleModal';
 import RouletteModal from './RouletteModal';
+import FoosballModal from './FoosballModal';
+import FoosballSimPanel from './FoosballSimPanel';
 import OnlinePlayersModal from './OnlinePlayersModal';
 import LevelsModal from './LevelsModal';
 import GiftModal from './GiftModal';
@@ -67,6 +69,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
   const [showLevels, setShowLevels] = useState(false);
   const [showRoulette, setShowRoulette] = useState(false);
+  const [showFoosball, setShowFoosball] = useState(false);
+  const [showFoosballSim, setShowFoosballSim] = useState(false);
+  const [foosballMatchActive, setFoosballMatchActive] = useState(false);
   const [showShop, setShowShop] = useState(false);
 
   // Create section (poker only)
@@ -144,6 +149,17 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Brillo en botón futbolín cuando hay partido activo
+  useEffect(() => {
+    socket.emit('foosball_sync', {}, (res: any) => {
+      const m = res?.state?.match;
+      setFoosballMatchActive(!!m && m.status !== 'finished');
+    });
+    const handler = (s: any) => setFoosballMatchActive(!!s.match && s.match.status !== 'finished');
+    socket.on('foosball_updated', handler);
+    return () => { socket.off('foosball_updated', handler); };
   }, []);
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -380,6 +396,24 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
         )}
       </AnimatePresence>
 
+      {showFoosball && (
+        <FoosballModal
+          socket={socket}
+          token={token || ''}
+          userId={user.id}
+          balance={user.balance}
+          onClose={() => setShowFoosball(false)}
+          onBalanceChange={(b) => onUpdateUser({ ...user, balance: b })}
+        />
+      )}
+
+      {showFoosballSim && (
+        <FoosballSimPanel
+          socket={socket}
+          onClose={() => setShowFoosballSim(false)}
+        />
+      )}
+
       <div className="w-full max-w-md">
         {/* Header */}
              <div className="flex flex-col gap-3 bg-black p-4 shrink-0 shadow-xl border-b border-white/5 relative z-20">
@@ -550,6 +584,12 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                     🔄 Nivel Jackpot (Admin)
                   </button>
                 </div>
+                <button
+                  onClick={() => setShowFoosballSim(true)}
+                  className="w-full py-2 rounded-2xl text-xs font-bold text-amber-400 border border-amber-900/40 bg-amber-500/8 active:scale-95 transition-all"
+                >
+                  🎮 Simulador Futbolín (Admin)
+                </button>
               </div>
             )}
           </div>
@@ -643,6 +683,30 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                     </span>
                   </div>
                 )}
+              </button>
+
+              {/* Foosball Betting */}
+              <button
+                onClick={() => setShowFoosball(true)}
+                className={`w-full flex flex-col items-center gap-1 py-3 px-3 rounded-2xl border active:scale-[0.98] transition-all relative overflow-hidden ${
+                  foosballMatchActive
+                    ? 'border-emerald-500/70 bg-emerald-500/10 shadow-[0_0_18px_2px_rgba(52,211,153,0.35)] animate-pulse'
+                    : 'border-amber-900/40 hover:border-amber-600/60 bg-amber-500/8'
+                }`}
+              >
+                {foosballMatchActive && (
+                  <span className="absolute top-1.5 right-2 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping absolute" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 relative" />
+                  </span>
+                )}
+                <span className="text-3xl">⚽</span>
+                <span className={`text-xs font-bold mt-0.5 ${foosballMatchActive ? 'text-emerald-300' : 'text-amber-400'}`}>
+                  Apuestas Futbolín
+                </span>
+                <span className="text-[10px] text-gray-500 mb-1">
+                  {foosballMatchActive ? '¡Partido en curso!' : 'Apuesta al partido del lab'}
+                </span>
               </button>
 
               <div className="flex gap-2">

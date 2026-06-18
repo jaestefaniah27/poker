@@ -55,10 +55,12 @@ import { initDB, loadRoomsFromDB, setOnBalanceChanged, resetJorgeCooldowns } fro
 import { restoreRoom, resumeBlindTimers } from './roomManager';
 import { loadJackpotState } from './jackpotEngine';
 import { rouletteEngine } from './rouletteEngine';
+import { foosballEngine } from './foosballEngine';
 
 // Initialize io in helpers
 setIo(io);
 rouletteEngine.init(io);
+foosballEngine.init(io);
 
 setOnBalanceChanged(() => {
   io.emit('leaderboardUpdated');

@@ -212,6 +212,76 @@ export interface HandHistory {
   wonByFold: boolean;
 }
 
+// ─── Foosball ─────────────────────────────────────────────────────────────────
+
+export interface FoosballPlayer {
+  name: string;
+  elo: number;
+}
+
+export interface FoosballMatch {
+  id: string;
+  team1_p1: string;
+  team1_p2: string;
+  team2_p1: string;
+  team2_p2: string;
+  team1_elo: number;
+  team2_elo: number;
+  score1: number;
+  score2: number;
+  status: 'active' | 'betting_closed' | 'finished';
+  started_at: number;
+  ended_at: number | null;
+  winner: 1 | 2 | null;
+}
+
+export interface FoosballOdds {
+  winner: { team1: number; team2: number };
+  totalGoals: { threshold: number; over: number; under: number };
+  // Claves: "7-0", "7-1", ... "7-6", "0-7", "1-7" ...
+  exact: Record<string, number>;
+  handicap: { team1: number; team2: number; gap: number };
+}
+
+export interface FoosballBet {
+  id: string;
+  match_id: string;
+  user_id: string;
+  user_name: string;
+  bet_type: string;
+  selection: string; // JSON
+  amount: number;
+  odds: number;
+  status: 'pending' | 'won' | 'lost' | 'void';
+  payout: number;
+  placed_at: number;
+  // Enriquecido en historial:
+  team1_p1?: string;
+  team1_p2?: string;
+  team2_p1?: string;
+  team2_p2?: string;
+  score1?: number;
+  score2?: number;
+  winner?: 1 | 2 | null;
+}
+
+export interface FoosballState {
+  match: FoosballMatch | null;
+  odds: FoosballOdds | null;
+  bettingOpen: boolean;
+}
+
+export interface FoosballPlayerStats {
+  name: string;
+  elo: number;
+  wins: number;
+  losses: number;
+  goals_scored: number;
+  goals_conceded: number;
+}
+
+// ─── Ruleta historial ─────────────────────────────────────────────────────────
+
 export interface RouletteHistoryEntry {
   id: string;
   timestamp: number;

@@ -214,7 +214,60 @@ const MIGRATIONS = [
   // >2^53 al leerse en JS, y >2^63 se corrompen a REAL al escribirse). balance_t
   // es la fuente de verdad; se opera con BigInt. Backfill desde la INTEGER vieja.
   { name: '044_balance_text', sql: 'ALTER TABLE users ADD COLUMN balance_t TEXT', ignoreError: 'duplicate column' },
-  { name: '045_balance_text_fill', sql: "UPDATE users SET balance_t = CAST(balance AS TEXT) WHERE balance_t IS NULL OR balance_t = ''" }
+  { name: '045_balance_text_fill', sql: "UPDATE users SET balance_t = CAST(balance AS TEXT) WHERE balance_t IS NULL OR balance_t = ''" },
+  { name: '046_foosball_matches', sql: `CREATE TABLE IF NOT EXISTS foosball_matches (
+    id TEXT PRIMARY KEY,
+    team1_p1 TEXT NOT NULL,
+    team1_p2 TEXT NOT NULL,
+    team2_p1 TEXT NOT NULL,
+    team2_p2 TEXT NOT NULL,
+    team1_elo INTEGER NOT NULL DEFAULT 1200,
+    team2_elo INTEGER NOT NULL DEFAULT 1200,
+    score1 INTEGER DEFAULT 0,
+    score2 INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    winner INTEGER
+  )` },
+  { name: '047_foosball_bets', sql: `CREATE TABLE IF NOT EXISTS foosball_bets (
+    id TEXT PRIMARY KEY,
+    match_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    bet_type TEXT NOT NULL,
+    selection TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    odds REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    payout INTEGER DEFAULT 0,
+    placed_at INTEGER NOT NULL
+  )` },
+  { name: '048_foosball_players', sql: `CREATE TABLE IF NOT EXISTS foosball_players (
+    name TEXT PRIMARY KEY,
+    elo INTEGER NOT NULL DEFAULT 1200,
+    wins INTEGER NOT NULL DEFAULT 0,
+    losses INTEGER NOT NULL DEFAULT 0,
+    goals_scored INTEGER NOT NULL DEFAULT 0,
+    goals_conceded INTEGER NOT NULL DEFAULT 0
+  )` },
+  // 046 se creó con el esquema viejo (player1/player2). Estas dos lo corrigen.
+  { name: '049_foosball_matches_drop', sql: 'DROP TABLE IF EXISTS foosball_matches' },
+  { name: '050_foosball_matches_v2', sql: `CREATE TABLE IF NOT EXISTS foosball_matches (
+    id TEXT PRIMARY KEY,
+    team1_p1 TEXT NOT NULL,
+    team1_p2 TEXT NOT NULL,
+    team2_p1 TEXT NOT NULL,
+    team2_p2 TEXT NOT NULL,
+    team1_elo INTEGER NOT NULL DEFAULT 1200,
+    team2_elo INTEGER NOT NULL DEFAULT 1200,
+    score1 INTEGER DEFAULT 0,
+    score2 INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    winner INTEGER
+  )` }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -884,5 +937,136 @@ export const resetShopPurchases = async (id: string): Promise<void> => {
       moved_to_andorra = 0
     WHERE id = ?
   `, [id]);
+};
+
+// ─── Foosball ────────────────────────────────────────────────────────────────
+
+export interface FoosballMatchRow {
+  id: string;
+  team1_p1: string;
+  team1_p2: string;
+  team2_p1: string;
+  team2_p2: string;
+  team1_elo: number;
+  team2_elo: number;
+  score1: number;
+  score2: number;
+  status: 'active' | 'betting_closed' | 'finished';
+  started_at: number;
+  ended_at: number | null;
+  winner: 1 | 2 | null;
+}
+
+export interface FoosballBetRow {
+  id: string;
+  match_id: string;
+  user_id: string;
+  user_name: string;
+  bet_type: string;
+  selection: string;
+  amount: number;
+  odds: number;
+  status: 'pending' | 'won' | 'lost' | 'void';
+  payout: number;
+  placed_at: number;
+}
+
+export interface FoosballPlayerRow {
+  name: string;
+  elo: number;
+  wins: number;
+  losses: number;
+  goals_scored: number;
+  goals_conceded: number;
+}
+
+export const createFoosballMatch = async (match: FoosballMatchRow): Promise<void> => {
+  await dbRun(
+    `INSERT INTO foosball_matches (id, team1_p1, team1_p2, team2_p1, team2_p2, team1_elo, team2_elo, score1, score2, status, started_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 'active', ?)`,
+    [match.id, match.team1_p1, match.team1_p2, match.team2_p1, match.team2_p2, match.team1_elo, match.team2_elo, match.started_at]
+  );
+};
+
+export const updateFoosballMatch = async (id: string, fields: Partial<FoosballMatchRow>): Promise<void> => {
+  const sets: string[] = [];
+  const vals: any[] = [];
+  for (const [k, v] of Object.entries(fields)) {
+    sets.push(`${k} = ?`);
+    vals.push(v);
+  }
+  vals.push(id);
+  await dbRun(`UPDATE foosball_matches SET ${sets.join(', ')} WHERE id = ?`, vals);
+};
+
+export const getFoosballMatch = async (id: string): Promise<FoosballMatchRow | undefined> =>
+  dbGet<FoosballMatchRow>('SELECT * FROM foosball_matches WHERE id = ?', [id]);
+
+export const getRecentFoosballMatches = async (limit = 20): Promise<FoosballMatchRow[]> =>
+  dbAll<FoosballMatchRow>('SELECT * FROM foosball_matches ORDER BY started_at DESC LIMIT ?', [limit]);
+
+export const placeFoosballBet = async (bet: FoosballBetRow): Promise<void> => {
+  await dbRun(
+    `INSERT INTO foosball_bets (id, match_id, user_id, user_name, bet_type, selection, amount, odds, status, payout, placed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)`,
+    [bet.id, bet.match_id, bet.user_id, bet.user_name, bet.bet_type, bet.selection, bet.amount, bet.odds, bet.placed_at]
+  );
+};
+
+export const getBetsForMatch = async (matchId: string): Promise<FoosballBetRow[]> =>
+  dbAll<FoosballBetRow>('SELECT * FROM foosball_bets WHERE match_id = ?', [matchId]);
+
+export const getBetsForUserOnMatch = async (userId: string, matchId: string): Promise<FoosballBetRow[]> =>
+  dbAll<FoosballBetRow>('SELECT * FROM foosball_bets WHERE user_id = ? AND match_id = ?', [userId, matchId]);
+
+export const settleFoosballBet = async (betId: string, status: 'won' | 'lost', payout: number): Promise<void> => {
+  await dbRun('UPDATE foosball_bets SET status = ?, payout = ? WHERE id = ?', [status, payout, betId]);
+};
+
+export const getFoosballBet = (betId: string): Promise<FoosballBetRow | undefined> =>
+  dbGet<FoosballBetRow>('SELECT * FROM foosball_bets WHERE id = ?', [betId]);
+
+export const deleteFoosballBet = async (betId: string): Promise<void> => {
+  await dbRun('DELETE FROM foosball_bets WHERE id = ?', [betId]);
+};
+
+export const getRecentBetsForUser = async (userId: string, limit = 30): Promise<(FoosballBetRow & FoosballMatchRow)[]> =>
+  dbAll(
+    `SELECT b.*, m.team1_p1, m.team1_p2, m.team2_p1, m.team2_p2, m.team1_elo, m.team2_elo, m.score1, m.score2, m.winner
+     FROM foosball_bets b
+     JOIN foosball_matches m ON b.match_id = m.id
+     WHERE b.user_id = ?
+     ORDER BY b.placed_at DESC LIMIT ?`,
+    [userId, limit]
+  );
+
+export const getFoosballPlayer = async (name: string): Promise<FoosballPlayerRow | undefined> =>
+  dbGet<FoosballPlayerRow>('SELECT * FROM foosball_players WHERE name = ?', [name]);
+
+export const getAllFoosballPlayers = async (): Promise<FoosballPlayerRow[]> =>
+  dbAll<FoosballPlayerRow>('SELECT * FROM foosball_players ORDER BY elo DESC');
+
+export const upsertFoosballPlayer = async (name: string, elo: number): Promise<void> => {
+  await dbRun(
+    `INSERT INTO foosball_players (name, elo) VALUES (?, ?)
+     ON CONFLICT(name) DO UPDATE SET elo = excluded.elo`,
+    [name, elo]
+  );
+};
+
+export const updateFoosballPlayerStats = async (
+  name: string, won: boolean, goalsScored: number, goalsConceded: number, newElo: number
+): Promise<void> => {
+  await dbRun(
+    `INSERT INTO foosball_players (name, elo, wins, losses, goals_scored, goals_conceded)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(name) DO UPDATE SET
+       elo = excluded.elo,
+       wins = wins + excluded.wins,
+       losses = losses + excluded.losses,
+       goals_scored = goals_scored + excluded.goals_scored,
+       goals_conceded = goals_conceded + excluded.goals_conceded`,
+    [name, newElo, won ? 1 : 0, won ? 0 : 1, goalsScored, goalsConceded]
+  );
 };
 
