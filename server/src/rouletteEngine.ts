@@ -78,10 +78,7 @@ export class RouletteEngine {
 
   public leaveTable(userId: string) {
     this.viewers.delete(userId);
-    // Keep playerInfo around until end of round in case they have active bets
-    if (!this.userBets.has(userId)) {
-      this.playerInfo.delete(userId);
-    }
+    this.playerInfo.delete(userId);
     this.broadcastPlayers();
   }
 
