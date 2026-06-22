@@ -18,7 +18,7 @@ import Slider from './components/Slider';
 import BlackjackTable from './components/BlackjackTable';
 import { AvatarAdjuster } from './components/AvatarAdjuster';
 import AdminShop from './components/AdminShop';
-import { toBig, type Room, type Player, type PublicUser } from '../../shared/types';
+import { toBig, type Room, type Player, type PublicUser, type RouletteHistoryEntry } from '../../shared/types';
 
 const AppSkeleton = ({ hasToken }: { hasToken: boolean }) => (
   <div className="min-h-screen bg-background font-sans">
@@ -103,6 +103,7 @@ function App() {
   const [betAmount, setBetAmount] = useState(2);
   const [showRankingsModal, setShowRankingsModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [rouletteHistory, setRouletteHistory] = useState<RouletteHistoryEntry[]>([]);
   const [isPressingShowdown, setIsPressingShowdown] = useState(false);
   const [flyingChips, setFlyingChips] = useState<{id: number, x: number, y: number, tx: number, ty: number, amount: number, delay: number}[]>([]);
   const [animateBetIn, setAnimateBetIn] = useState(false);
@@ -414,6 +415,12 @@ function App() {
     // reclama la cuenta (expulsa al otro dispositivo). Solo mostramos el cartel.
     socket.on('sessionReplaced', () => {
       setSessionTaken(true);
+    });
+
+    socket.on('roulette_history_entries', (entries: Record<string, RouletteHistoryEntry>) => {
+      if (!user) return;
+      const mine = entries[user.id];
+      if (mine) setRouletteHistory(prev => [mine, ...prev].slice(0, 50));
     });
 
     socket.on('emote', ({ userId, emote }: { userId: string; emote: string }) => {
@@ -1327,6 +1334,7 @@ function App() {
       {showHistoryModal && (
         <HandHistoryModal
           history={currentRoom.history || []}
+          rouletteHistory={rouletteHistory}
           onClose={() => setShowHistoryModal(false)}
         />
       )}

@@ -223,15 +223,46 @@ export class RouletteEngine {
       this.io.emit('roulette_spin', { resultNum });
       // Broadcast payouts with player names
       const userUpdates: Record<string, any> = {};
+      const historyEntries: Record<string, any> = {};
+      const now = Date.now();
       for (const [userId, data] of resultsByUserId) {
         const info = this.playerInfo.get(userId);
-        userUpdates[userId] = {
-          ...data,
-          name: info?.name || '???',
-          avatar: info?.avatar || userId
-        };
+        userUpdates[userId] = { ...data, name: info?.name || '???', avatar: info?.avatar || userId };
+
+        const ub = this.userBets.get(userId);
+        if (ub) {
+          let maximo = 0;
+          for (let n = 0; n <= 36; n++) {
+            let p = 0;
+            for (const [zone, amt] of Object.entries(ub.bets)) {
+              if (zone === n.toString()) p += amt * 36;
+              else if (zone === 'red' && RED_NUMS.has(n)) p += amt * 2;
+              else if (zone === 'black' && n !== 0 && !RED_NUMS.has(n)) p += amt * 2;
+              else if (zone === 'even' && n !== 0 && n % 2 === 0) p += amt * 2;
+              else if (zone === 'odd' && n % 2 !== 0) p += amt * 2;
+              else if (zone === 'low' && n >= 1 && n <= 18) p += amt * 2;
+              else if (zone === 'high' && n >= 19 && n <= 36) p += amt * 2;
+              else if (zone.startsWith('dozen')) { const d = parseInt(zone.split('_')[1]); if (Math.ceil(n / 12) === d && n !== 0) p += amt * 3; }
+              else if (zone.startsWith('col')) { const c = parseInt(zone.split('_')[1]); if ((n - c) % 3 === 0 && n !== 0) p += amt * 3; }
+            }
+            if (p > maximo) maximo = p;
+          }
+          historyEntries[userId] = {
+            id: `roulette-${now}-${userId}`,
+            timestamp: now,
+            type: 'roulette',
+            entrada: ub.total,
+            maximo,
+            salida: data.win,
+            dif: data.net,
+            resultNum,
+          };
+        }
       }
       this.io.emit('roulette_results', { results: userUpdates });
+      if (Object.keys(historyEntries).length > 0) {
+        this.io.emit('roulette_history_entries', historyEntries);
+      }
     }
   }
 }

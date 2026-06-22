@@ -212,6 +212,17 @@ export interface HandHistory {
   wonByFold: boolean;
 }
 
+export interface RouletteHistoryEntry {
+  id: string;
+  timestamp: number;
+  type: 'roulette';
+  entrada: number;
+  maximo: number;
+  salida: number;
+  dif: number;
+  resultNum: number;
+}
+
 export interface PublicUser {
   id: string;
   name: string;
