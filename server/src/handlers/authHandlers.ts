@@ -543,7 +543,7 @@ export const authHandlers = (socket: Socket) => {
     bumpStat(target.id, 'gifts_received', Number(finalAmount));
 
     if (tax > 0n) {
-      const newTotal = await addHaciendaTotal(Number(tax));
+      const newTotal = await addHaciendaTotal(tax);
       const { io } = require('../socketHelpers');
       if (io) io.emit('haciendaUpdated', { total: newTotal });
     }

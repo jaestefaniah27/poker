@@ -28,6 +28,7 @@ export const toBig = (v: string | number | bigint | null | undefined): bigint =>
     return BigInt(Math.round(v));
   }
   const s = String(v).trim();
+  if (s.includes('e') || s.includes('E')) return toBig(parseFloat(s));
   const m = s.match(/^-?\d+/);
   return m ? BigInt(m[0]) : 0n;
 };
@@ -597,7 +598,7 @@ export const SHOP_CATALOG: ShopItem[] = [
   { id: 'social_andorra', name: 'Mudanza a Andorra', price: 500_000_000_000, type: 'social', description: 'Otorga una exención fiscal que reduce la posibilidad de que Hacienda te incaute dinero a 1/10. Además, añade el sello de Andorra a tu nombre de forma permanente.' },
 
   // --- Gadgets ---
-  { id: 'gadget_artilugio', name: 'Artilugio Cuántico', price: 500_000_000_000_000_000, type: 'gadget', description: 'Desbloquea el Artilugio en el Jackpot. Permite tirar todas tus tiradas gratis de golpe y conjurar grupos de tiradas en una tirada de mayor valor.' },
+  { id: 'gadget_artilugio', name: 'Artilugio Cuántico', price: 200_000_000_000_000_000, type: 'gadget', description: 'Desbloquea el Artilugio en el Jackpot. Permite tirar todas tus tiradas gratis de golpe y conjurar grupos de tiradas en una tirada de mayor valor.' },
 
 ];
 

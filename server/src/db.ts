@@ -848,9 +848,11 @@ export const saveShopCatalog = async (catalog: ShopItem[]): Promise<void> => {
   }
 };
 
-export const addHaciendaTotal = async (amount: number): Promise<string> => {
+export const addHaciendaTotal = async (amount: bigint | number): Promise<string> => {
+  const amtStr = (typeof amount === 'bigint' ? amount : BigInt(Math.round(amount))).toString();
   await dbRun('INSERT OR IGNORE INTO hacienda_state (id, total) VALUES (1, 0)');
-  await dbRun('UPDATE hacienda_state SET total = total + ? WHERE id = 1', [amount]);
+  // Bind as string so SQLite keeps INTEGER arithmetic (float binding causes REAL coercion on large values).
+  await dbRun('UPDATE hacienda_state SET total = CAST(total AS INTEGER) + CAST(? AS INTEGER) WHERE id = 1', [amtStr]);
   return await getHaciendaTotal();
 };
 
