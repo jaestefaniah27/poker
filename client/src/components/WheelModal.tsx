@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socket, fmtChips } from '../utils';
 import { sfx } from '../sounds';
-import { ruletaSpinsFor, ruletaBoostedOptions } from '../../../shared/types';
+import { ruletaSpinsFor, ruletaBoostedOptions, ruletaCooldownMs } from '../../../shared/types';
 import type { TrackBoosts } from '../../../shared/types';
 
 interface WheelModalProps {
@@ -89,7 +89,8 @@ export const WheelModal = ({ user, token, onClose, onUpdateUser }: WheelModalPro
   };
 
   const now = Date.now();
-  const nextClaim = user.lastFreeSpinsClaim ? user.lastFreeSpinsClaim + 60 * 60 * 1000 : 0;
+  const cdBoosts = user.unlockedCooldownBoosts || {};
+  const nextClaim = user.lastFreeSpinsClaim ? user.lastFreeSpinsClaim + ruletaCooldownMs(cdBoosts.ruleta ?? 0) : 0;
   const isAvailable = now >= nextClaim;
 
   return (

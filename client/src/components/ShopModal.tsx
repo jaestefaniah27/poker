@@ -466,7 +466,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
                         {atMax ? '✓ Tiempo mínimo' : (
                           <>
                             <span>{fmtChips(costChips)} fichas</span>
-                            <span className="text-xs opacity-80 uppercase tracking-widest mt-0.5">{COOLDOWN_BOOST_LP_COST} puntos de nivel</span>
+                            <span className="text-xs opacity-80 uppercase tracking-widest mt-0.5">{COOLDOWN_BOOST_LP_COST} {COOLDOWN_BOOST_LP_COST === 1 ? 'punto' : 'puntos'} de nivel</span>
                           </>
                         )}
                       </button>

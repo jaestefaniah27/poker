@@ -645,7 +645,7 @@ export const authHandlers = (socket: Socket) => {
     const cooldownBoosts: CooldownBoosts = (() => { try { const p = JSON.parse(dbUser.unlocked_cooldown_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
     
     const availableLP = availableLevelPoints(level, paguita, dieta, ruleta, trivia, cooldownBoosts);
-    if (availableLP < COOLDOWN_BOOST_LP_COST) { callback({ error: `Necesitas ${COOLDOWN_BOOST_LP_COST} puntos de nivel para esta mejora` }); return; }
+    if (availableLP < COOLDOWN_BOOST_LP_COST) { callback({ error: `Necesitas ${COOLDOWN_BOOST_LP_COST} punto${COOLDOWN_BOOST_LP_COST === 1 ? '' : 's'} de nivel para esta mejora` }); return; }
 
     const currentCount = cooldownBoosts[t] ?? 0;
     if (currentCount >= COOLDOWN_BOOST_MAX) { callback({ error: 'Ya tienes el máximo de reducciones de tiempo para este track' }); return; }

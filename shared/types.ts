@@ -278,8 +278,8 @@ export type CooldownTrack = 'paguita' | 'dieta' | 'ruleta';
 export type CooldownBoosts = Partial<Record<CooldownTrack, number>>;
 
 export const COOLDOWN_BOOST_MAX = 3;
-export const COOLDOWN_BOOST_CHIP_COSTS = [1e15, 1e16, 1e17]; // 1Q, 10Q, 100Q
-export const COOLDOWN_BOOST_LP_COST = 5;
+export const COOLDOWN_BOOST_CHIP_COSTS = [5e14, 5e15, 5e16]; // 500T, 5Q, 50Q
+export const COOLDOWN_BOOST_LP_COST = 1;
 
 export const paguitaCooldownMs = (boostCount: number): number => {
   if (boostCount >= 3) return 10 * 60 * 1000;
