@@ -214,7 +214,8 @@ const MIGRATIONS = [
   // >2^53 al leerse en JS, y >2^63 se corrompen a REAL al escribirse). balance_t
   // es la fuente de verdad; se opera con BigInt. Backfill desde la INTEGER vieja.
   { name: '044_balance_text', sql: 'ALTER TABLE users ADD COLUMN balance_t TEXT', ignoreError: 'duplicate column' },
-  { name: '045_balance_text_fill', sql: "UPDATE users SET balance_t = CAST(balance AS TEXT) WHERE balance_t IS NULL OR balance_t = ''" }
+  { name: '045_balance_text_fill', sql: "UPDATE users SET balance_t = CAST(balance AS TEXT) WHERE balance_t IS NULL OR balance_t = ''" },
+  { name: '046_has_artilugio', sql: 'ALTER TABLE users ADD COLUMN has_artilugio INTEGER DEFAULT 0', ignoreError: 'duplicate column' }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -316,6 +317,9 @@ export interface UserRow {
 
   // --- Mejoras de Tienda ---
   unlocked_boosts?: string | null;
+
+  // --- Gadgets ---
+  has_artilugio?: number;
 }
 
 import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, toBig } from '../../shared/types';
@@ -343,6 +347,17 @@ const withBalanceLock = <T>(id: string, fn: () => Promise<T>): Promise<T> => {
 
 export const parsePools = (raw: string | null): Record<string, number> => {
   try { const p = JSON.parse(raw || '{}'); return (p && typeof p === 'object') ? p : {}; } catch { return {}; }
+};
+
+// Mismo merge legacy que toPublicUser: incluye free_spins_left/free_spin_value si no están en pools JSON
+export const getEffectivePools = (row: UserRow): Record<string, number> => {
+  const pools = parsePools(row.free_spins_pools ?? null);
+  const legacyLeft = row.free_spins_left ?? 0;
+  const legacyVal = row.free_spin_value ?? 0;
+  if (legacyLeft > 0 && legacyVal > 0 && !pools[String(legacyVal)]) {
+    pools[String(legacyVal)] = legacyLeft;
+  }
+  return pools;
 };
 
 export const toPublicUser = (row: UserRow): PublicUser => {
@@ -394,6 +409,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     israelPool: row.israel_pool ?? '0',
     movedToAndorra: !!row.moved_to_andorra,
     unlockedBoosts: (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {}; } catch { return {}; } })(),
+    hasArtilugio: row.has_artilugio === 1,
   };
 };
 
@@ -842,6 +858,10 @@ export const equipShopItem = async (id: string, type: 'avatar' | 'name' | 'felt'
 
 export const setMovedToAndorra = async (id: string): Promise<void> => {
   await dbRun('UPDATE users SET moved_to_andorra = 1 WHERE id = ?', [id]);
+};
+
+export const setHasArtilugio = async (id: string): Promise<void> => {
+  await dbRun('UPDATE users SET has_artilugio = 1 WHERE id = ?', [id]);
 };
 
 export const addIsraelDonation = async (donorId: string, amount: number | bigint): Promise<void> => {

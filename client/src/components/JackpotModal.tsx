@@ -5,6 +5,7 @@ import { sfx } from '../sounds';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 import SlotIcon from './SlotIcon';
 import BettingCarousel from './BettingCarousel';
+import ArtilugioModal from './ArtilugioModal';
 
 const SYMBOLS = ['club', 'diamond', 'heart', 'spade', 'chip', 'crown', 'ace'];
 
@@ -21,6 +22,7 @@ interface Props {
     balance: number;
     freeSpinPools?: Record<string, number>;
     jackpotUnlockLevel?: number;
+    hasArtilugio?: boolean;
   };
   token: string | null;
   onClose: () => void;
@@ -39,6 +41,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   ]);
   const [spinning, setSpinning] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
+  const [artilugioOpen, setArtilugioOpen] = useState(false);
   const [result, setResult] = useState<{ symbols: string[]; multiplier: number; winAmount: number; finalWinAmount?: number; taxEvent?: { type: 'none'|'tax'|'fraud'; amount: number } } | null>(null);
   const intervalsRef = useRef<ReturnType<typeof setInterval>[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -61,6 +64,11 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   const maxBetIndex = Math.max(0, unlockLevel - 1);
   const clampedBetIndex = Math.min(betIndex, maxBetIndex);
   const bet = JACKPOT_TIERS[clampedBetIndex];
+
+  // Tiradas conjuradas: valores de pools que no son tiers estándar
+  const conjuredTiers = Object.entries(pools)
+    .filter(([k, count]) => count > 0 && !JACKPOT_TIERS.includes(Number(k)))
+    .sort(([a], [b]) => Number(a) - Number(b));
 
   // Reset free spin selection if that pool runs out
   useEffect(() => {
@@ -160,6 +168,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
     : (isLocked || balance < bet));
 
   return (
+    <>
     <div
       className="fixed inset-0 z-[200] flex items-end justify-center bg-black/80"
       style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}
@@ -278,6 +287,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
               <BettingCarousel
                 tiers={JACKPOT_TIERS}
                 unlockLevel={unlockLevel}
+                extraTiers={conjuredTiers.map(([k]) => Number(k))}
                 renderItem={(t, i) => {
                   const poolCount = pools[String(t)] || 0;
                   const isFreeSpinTier = poolCount > 0;
@@ -323,6 +333,17 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                     {unlocking ? '...' : fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}
                   </button>
                 </div>
+              )}
+
+              {/* Botón Artilugio */}
+              {user.hasArtilugio && unlockLevel > 0 && (
+                <button
+                  onClick={() => setArtilugioOpen(true)}
+                  disabled={spinning}
+                  className="w-full mt-2 py-2 rounded-xl text-xs font-bold border border-purple-500/40 bg-purple-950/30 text-purple-400 hover:bg-purple-900/40 transition-colors disabled:opacity-30"
+                >
+                  🔧 Artilugio Cuántico
+                </button>
               )}
             </div>
           )}
@@ -384,5 +405,20 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
         </div>
       </motion.div>
     </div>
+
+    {/* Artilugio modal */}
+    <AnimatePresence>
+      {artilugioOpen && (
+        <ArtilugioModal
+          pools={pools}
+          token={token}
+          unlockLevel={unlockLevel}
+          balance={balance}
+          onClose={() => setArtilugioOpen(false)}
+          onUpdateUser={(u) => { onUpdateUser(u); setBalance(u.balance); }}
+        />
+      )}
+    </AnimatePresence>
+    </>
   );
 }

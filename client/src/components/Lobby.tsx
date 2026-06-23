@@ -184,8 +184,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     });
   };
 
-  const handleAdminAddBalance1B = () => {
-    socket.emit('adminAddBalance1B', { token }, (res: any) => {
+  const handleAdminAddBalance1Qi = () => {
+    socket.emit('adminAddBalance1Qi', { token }, (res: any) => {
       if (res?.user) onUpdateUser(res.user);
     });
   };
@@ -526,10 +526,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={handleAdminAddBalance1B}
+                    onClick={handleAdminAddBalance1Qi}
                     className="flex-1 py-2 rounded-2xl text-xs font-bold text-emerald-400 border border-emerald-900/40 bg-emerald-500/8 active:scale-95 transition-all"
                   >
-                    💸 +1B (Admin)
+                    💸 +1Qi (Admin)
                   </button>
                   <button
                     onClick={handleAdminAddBalance500B}
@@ -576,7 +576,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                   <div className="space-y-1 w-full mt-2">
                     {jackpotState.recentWins.map((win, i) => {
                       const spinsAgo = jackpotState.globalSpins - win.spinNumber;
-                      const timeLabel = spinsAgo === 0 ? '¡AHORA!' : `hace ${spinsAgo}t`;
+                      const timeLabel = spinsAgo <= 0 ? '¡AHORA!' : `hace ${spinsAgo}t`;
                       return (
                         <div key={i} className="bg-black/40 rounded-lg p-1.5 px-2 flex items-center justify-between text-[10px]">
                           <span className="font-bold flex items-center gap-0.5 shrink-0">

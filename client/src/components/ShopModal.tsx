@@ -141,7 +141,8 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
     const unlocked = isUnlocked(item.id, item.type);
     const equipped = isEquipped(item.id, item.type);
     const isAndorra = item.id === 'social_andorra';
-    const owned = unlocked || (isAndorra && user.movedToAndorra);
+    const isArtilugio = item.id === 'gadget_artilugio';
+    const owned = unlocked || (isAndorra && user.movedToAndorra) || (isArtilugio && user.hasArtilugio);
 
     const rarity = rarityOf(item.price);
     const isNew = NEW_ITEM_IDS.includes(item.id);
@@ -181,6 +182,9 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
             <div className="text-5xl drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
               {item.id === 'social_andorra' ? <img src="https://flagcdn.com/ad.svg" alt="Andorra" className="h-[1em] w-auto inline-block drop-shadow-md" /> : '🌟'}
             </div>
+          )}
+          {item.type === 'gadget' && (
+            <div className="text-5xl drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">🔧</div>
           )}
         </div>
 
@@ -251,7 +255,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
             >
               {meetsLevelReq ? 'Comprar' : `Requiere Nivel ${item.minLevel}`}
             </button>
-          ) : item.type !== 'social' ? (
+          ) : item.type !== 'social' && item.type !== 'gadget' ? (
             <button
               onClick={() => handleEquip(item.id, item.type)}
               className={`w-full py-3 rounded-xl font-black transition-all hover:scale-[1.02] active:scale-95 shadow-lg ${
@@ -439,7 +443,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {items.filter(i => i.type === 'social').map(item => renderItemCard(item))}
+              {items.filter(i => i.type === 'social' || i.type === 'gadget').map(item => renderItemCard(item))}
             </div>
           </div>
         ) : (

@@ -267,6 +267,9 @@ export interface PublicUser {
 
   // --- Mejoras de Tienda ---
   unlockedBoosts?: Partial<Record<LevelTrack, number>>; // count per track
+
+  // --- Gadgets ---
+  hasArtilugio?: boolean;
 }
 
 export const STAKE_TIERS: number[] = [
@@ -486,7 +489,7 @@ export interface ShopItem {
   id: string;
   name: string;
   price: number;
-  type: 'avatar' | 'name' | 'felt' | 'social';
+  type: 'avatar' | 'name' | 'felt' | 'social' | 'gadget';
   description?: string;
   minLevel?: number;
 }
@@ -552,6 +555,9 @@ export const SHOP_CATALOG: ShopItem[] = [
 
   // --- Social Benefits ---
   { id: 'social_andorra', name: 'Mudanza a Andorra', price: 500_000_000_000, type: 'social', description: 'Otorga una exención fiscal que reduce la posibilidad de que Hacienda te incaute dinero a 1/10. Además, añade el sello de Andorra a tu nombre de forma permanente.' },
+
+  // --- Gadgets ---
+  { id: 'gadget_artilugio', name: 'Artilugio Cuántico', price: 500_000_000_000_000_000, type: 'gadget', description: 'Desbloquea el Artilugio en el Jackpot. Permite tirar todas tus tiradas gratis de golpe y conjurar grupos de tiradas en una tirada de mayor valor.' },
 
 ];
 

@@ -35,7 +35,10 @@ export const loadJackpotState = async (): Promise<void> => {
       spinsSinceAce = state.spinsSinceAce ?? 0;
       spinsSinceCrown = state.spinsSinceCrown ?? 0;
       spinsSinceChip = state.spinsSinceChip ?? 0;
-      recentWins = state.recentWins ?? [];
+      // Descartar entradas cuyo spinNumber parece inflado por batch antiguo
+      const rawWins: JackpotWin[] = state.recentWins ?? [];
+      const spinsLoaded = state.globalSpins ?? 0;
+      recentWins = rawWins.filter(w => (spinsLoaded - w.spinNumber) <= 500);
       console.log(`Jackpot state loaded: ${globalSpins} global spins, ${recentWins.length} recent wins`);
     } catch (e) {
       console.error('Error parsing jackpot state:', e);
@@ -75,7 +78,16 @@ function getMultiplier(s: [Sym, Sym, Sym], isFreeSpin: boolean): number {
   return 0;
 }
 
-export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0, isBot = false): { symbols: [string, string, string]; multiplier: number; state: JackpotState } => {
+// Persiste el estado a DB. Lo usa el batch del artilugio para guardar UNA sola
+// vez tras N tiradas (en vez de N escrituras), sin perder precisión del conteo.
+export const persistJackpotState = async (): Promise<void> => {
+  await saveJackpotState();
+};
+
+// deferSave: el caller (batch artilugio) guarda al final con persistJackpotState().
+// globalSpins SIEMPRE incrementa por tirada → el historial refleja la distancia
+// real de cada premio (como si se tiraran a mano, una a una).
+export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0, isBot = false, deferSave = false): { symbols: [string, string, string]; multiplier: number; state: JackpotState } => {
   globalSpins++;
   spinsSinceAce++;
   spinsSinceCrown++;
@@ -113,23 +125,25 @@ export const spinJackpot = (playerName: string, isFreeSpin = false, bet = 0, isB
     symbols = losingCombos[Math.floor(Math.random() * losingCombos.length)];
   }
 
+  // Todos los jugadores aparecen en el historial — sin exclusiones por nombre.
+  // spinNumber = globalSpins actual → distancia real de cada premio (también en batch).
   if (multiplier === 50) {
     spinsSinceAce = 0;
-    if (playerName !== 'Jorge' && playerName !== 'Israel') recentWins.unshift({ type: 'ace', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
+    recentWins.unshift({ type: 'ace', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   } else if (multiplier === 20) {
     spinsSinceCrown = 0;
-    if (playerName !== 'Jorge' && playerName !== 'Israel') recentWins.unshift({ type: 'crown', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
+    recentWins.unshift({ type: 'crown', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   } else if (multiplier === 10) {
     spinsSinceChip = 0;
-    if (playerName !== 'Jorge' && playerName !== 'Israel') recentWins.unshift({ type: 'chip', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
+    recentWins.unshift({ type: 'chip', playerName, spinNumber: globalSpins, winAmount: Math.floor(bet * multiplier) });
   }
 
   if (recentWins.length > 3) {
     recentWins = recentWins.slice(0, 3);
   }
 
-  // Guardar estado asíncronamente (no bloqueamos)
-  saveJackpotState().catch(err => console.error('Error saving jackpot state:', err));
+  // En batch no guardamos por cada spin — el caller llama persistJackpotState() al final
+  if (!deferSave) saveJackpotState().catch(err => console.error('Error saving jackpot state:', err));
 
   return { symbols, multiplier, state: getJackpotState() };
 };

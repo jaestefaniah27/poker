@@ -1,8 +1,8 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, getEffectivePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat, dbRun } from '../db';
 import { boostMultiplier, TrackBoosts, toBig } from '../../../shared/types';
-import { spinJackpot, getJackpotState } from '../jackpotEngine';
+import { spinJackpot, getJackpotState, persistJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
 
@@ -605,5 +605,210 @@ export const minigameHandlers = (socket: Socket) => {
     await addXp(user.id, 25);
     const dbUser = await getUser(user.id);
     callback({ ok: true, reward, newBalance, user: dbUser ? toPublicUser(dbUser) : undefined });
+  });
+
+  // ── Artilugio: tirar tiradas en serie según un PLAN ordenado del cliente ──
+  // plan: Array<{ tier, count, paid }> — orden exacto de ejecución elegido por el
+  // jugador. Solo se consumen/cobran las entradas incluidas; el resto del pool se
+  // conserva (evita el bug "fantasma" de limpiar todas las tiradas gratis).
+  socket.on('artilugioSpinAll', async ({ token, plan }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const dbUser = await getUser(user.id);
+    if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+    if (!dbUser.has_artilugio) { callback({ error: 'No tienes el Artilugio' }); return; }
+    if (toBig(dbUser.israel_debt) > 0n) {
+      callback({ error: 'Debes saldar tu deuda con Israel para poder usar el Artilugio' }); return;
+    }
+
+    const unlockLevel = dbUser.jackpot_unlock_level ?? 0;
+    const pools = getEffectivePools(dbUser);                 // tiradas gratis disponibles
+    const remaining: Record<string, number> = { ...pools };  // se decrementa al consumir gratis
+    const planArr: Array<{ tier: number; count: number; paid: boolean }> = Array.isArray(plan) ? plan : [];
+
+    // Validar plan + construir spinList EN EL ORDEN dado (sin reordenar)
+    const spinList: Array<{ amount: number; paid: boolean }> = [];
+    let totalPaidCost = 0n;
+    // Conteo de gratis pedidas por tier para validar contra el pool
+    const freeReq: Record<string, number> = {};
+    for (const e of planArr) {
+      const tier = Math.floor(Number(e?.tier));
+      const count = Math.floor(Number(e?.count));
+      const paid = Boolean(e?.paid);
+      if (!Number.isInteger(count) || count < 1) { callback({ error: 'Entrada de plan inválida' }); return; }
+      if (paid) {
+        const idx = JACKPOT_TIERS.indexOf(tier);
+        if (idx === -1 || idx >= unlockLevel) { callback({ error: 'Nivel de apuesta no desbloqueado' }); return; }
+        if (count > 100) { callback({ error: 'Cantidad inválida (1–100)' }); return; }
+        totalPaidCost += toBig(tier) * BigInt(count);
+      } else {
+        freeReq[String(tier)] = (freeReq[String(tier)] || 0) + count;
+        if (freeReq[String(tier)] > (pools[String(tier)] || 0)) {
+          callback({ error: 'No tienes tantas tiradas gratis de ese valor' }); return;
+        }
+      }
+      for (let i = 0; i < count; i++) spinList.push({ amount: tier, paid });
+    }
+
+    if (spinList.length === 0) { callback({ error: 'No hay tiradas que lanzar' }); return; }
+
+    // Saldo no puede ser negativo: exigir saldo >= coste pagadas (releer fresco)
+    if (totalPaidCost > 0n) {
+      const fresh = await getUser(dbUser.id);
+      if (!fresh || toBig(fresh.balance) < totalPaidCost) { callback({ error: 'Saldo insuficiente' }); return; }
+    }
+
+    // Descontar las gratis consumidas del pool restante
+    for (const [tier, c] of Object.entries(freeReq)) {
+      remaining[tier] = (remaining[tier] || 0) - c;
+      if (remaining[tier] <= 0) delete remaining[tier];
+    }
+
+    const isCursed = dbUser.is_cursed === 1;
+    const isBot = dbUser.is_bot === 1 && socket.data.isDynamicBot;
+
+    const spins: Array<{ value: number; symbols: string[]; multiplier: number; winAmount: number; finalWinAmount: number; paid: boolean; taxEvent: { type: string; amount: number } }> = [];
+    let totalWin = 0n;            // BigInt: tiers altos desbordan number al acumular
+    let lastState: any = null;
+    let hasIsraelPool = toBig(dbUser.israel_pool) > 0n;
+    let totalTax = 0;            // telemetría hacienda (number, tolera imprecisión)
+    let totalXp = 0;
+    // Acumulamos estadísticas sin tocar DB en el loop
+    let statSpins = 0;
+    let statTotalWon = 0;
+    let statBiggestWin = 0;
+    let statTaxPaid = 0;
+    let statFrauds = 0;
+    let statBestMult = 0;
+
+    for (const { amount, paid } of spinList) {
+      const forceLoss = (isBot && Math.random() < 0.90) || (isCursed && Math.random() < 0.60);
+      // isFreeSpin = !paid; deferSave = true (cada tirada incrementa globalSpins en
+      // memoria → distancias reales; persistimos a DB una sola vez al final del lote)
+      const { symbols, multiplier, state } = spinJackpot(dbUser.name, !paid, amount, forceLoss, true);
+      lastState = state;
+
+      let winAmount = Math.floor(amount * multiplier);
+      let finalWinAmount = winAmount;
+      let taxAmount = 0;
+      let eventType: 'none' | 'tax' | 'fraud' = 'none';
+
+      if (multiplier >= 10) {
+        let probFraud = isCursed ? 0.20 : 0.01;
+        let probTax   = isCursed ? 0.50 : 0.20;
+        if (dbUser.moved_to_andorra) { probFraud /= 10; probTax /= 10; }
+        const r = Math.random();
+        if (r < probFraud) {
+          eventType = 'fraud'; taxAmount = winAmount; finalWinAmount = 0;
+        } else if (r < probFraud + probTax) {
+          eventType = 'tax'; taxAmount = Math.floor(winAmount * 0.1); finalWinAmount = winAmount - taxAmount;
+        }
+      }
+
+      if (finalWinAmount > 0 && hasIsraelPool) {
+        const bonus = await deductIsraelPool(dbUser.id, finalWinAmount);
+        finalWinAmount += bonus;
+        if (bonus === 0) hasIsraelPool = false;
+      }
+
+      totalTax += taxAmount;
+      totalWin += BigInt(finalWinAmount);
+
+      // Solo registrar en historial si hay premio — evita enterrar wins en N pérdidas
+      if (winAmount > 0) await recordJackpotSpin(dbUser.id, amount, symbols as [string, string, string], multiplier, winAmount);
+
+      statSpins++;
+      if (finalWinAmount > 0) {
+        statTotalWon += finalWinAmount;
+        if (finalWinAmount > statBiggestWin) statBiggestWin = finalWinAmount;
+      }
+      if (taxAmount > 0) statTaxPaid += taxAmount;
+      if (eventType === 'fraud') statFrauds++;
+      const multX100 = Math.round(multiplier * 100);
+      if (multX100 > statBestMult) statBestMult = multX100;
+
+      if (multiplier >= 50) totalXp += 50;
+      else if (multiplier >= 20) totalXp += 20;
+      else if (multiplier >= 10) totalXp += 10;
+
+      spins.push({ value: amount, symbols, multiplier, winAmount, finalWinAmount, paid, taxEvent: { type: eventType, amount: taxAmount } });
+    }
+
+    // Un solo applyBalanceDelta con el neto (premios − coste pagadas) → un solo
+    // leaderboardUpdated → sin rate-limit. BigInt para no perder precisión.
+    const netDelta = totalWin - totalPaidCost;
+    if (netDelta !== 0n) await applyBalanceDelta(dbUser.id, netDelta);
+    // globalSpins ya subió N en memoria (1 por tirada) → distancias reales en el
+    // historial. Persistimos a DB una sola vez aquí (no por tirada).
+    await persistJackpotState();
+    if (totalXp > 0) await addXp(dbUser.id, totalXp);
+
+    // Stats en batch
+    if (statSpins > 0) bumpStat(dbUser.id, 'jackpot_spins', statSpins);
+    if (totalPaidCost > 0n) bumpStat(dbUser.id, 'jackpot_total_bet', Number(totalPaidCost));
+    if (statTotalWon > 0) { bumpStat(dbUser.id, 'jackpot_total_won', statTotalWon); maxStat(dbUser.id, 'jackpot_biggest_win', statBiggestWin); }
+    if (statTaxPaid > 0) bumpStat(dbUser.id, 'jackpot_tax_paid', statTaxPaid);
+    if (statFrauds > 0) bumpStat(dbUser.id, 'jackpot_frauds', statFrauds);
+    maxStat(dbUser.id, 'jackpot_best_mult_x100', statBestMult);
+
+    // Un solo broadcast al terminar
+    if (totalTax > 0) {
+      const newTotal = await addHaciendaTotal(totalTax);
+      if (io) io.emit('haciendaUpdated', { total: newTotal });
+    }
+    if (io && lastState) io.emit('jackpotStateUpdated', lastState);
+
+    // Guardar pool restante (solo se consumieron las gratis lanzadas). Las columnas
+    // legacy se consolidan a 0 porque getEffectivePools ya las fundió en remaining.
+    await dbRun('UPDATE users SET free_spins_pools = ?, free_spins_left = 0, free_spin_value = 0 WHERE id = ?', [JSON.stringify(remaining), dbUser.id]);
+
+    const updatedUser = await getUser(dbUser.id);
+    callback({ ok: true, spins, totalWin: totalWin.toString(), totalPaidCost: totalPaidCost.toString(), newPools: remaining, user: updatedUser ? toPublicUser(updatedUser) : undefined });
+  });
+
+  // ── Artilugio: conjurar tiradas ────────────────────────────────────────────
+  socket.on('artilugioConjure', async ({ token, selectedTiers }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const dbUser = await getUser(user.id);
+    if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+    if (!dbUser.has_artilugio) { callback({ error: 'No tienes el Artilugio' }); return; }
+
+    if (!Array.isArray(selectedTiers) || selectedTiers.length === 0) {
+      callback({ error: 'Selecciona al menos un grupo de tiradas' }); return;
+    }
+
+    const pools = getEffectivePools(dbUser);
+    let combinedValue = 0;
+    let consumedLegacy = false;
+
+    for (const tier of selectedTiers) {
+      const tierKey = String(tier);
+      const count = pools[tierKey] || 0;
+      if (count === 0) { callback({ error: `No tienes tiradas de ${tier}` }); return; }
+      combinedValue += Number(tier) * count;
+      // Si era tirada legacy (no estaba en free_spins_pools JSON), marcar para limpiar legacy
+      const rawPools = parsePools(dbUser.free_spins_pools ?? null);
+      if (!rawPools[tierKey] && (dbUser.free_spins_left ?? 0) > 0 && String(dbUser.free_spin_value) === tierKey) {
+        consumedLegacy = true;
+      }
+      delete pools[tierKey];
+    }
+
+    if (combinedValue <= 0) { callback({ error: 'Valor combinado inválido' }); return; }
+
+    // Añadir la tirada conjurada al pool (acumular si ya existe)
+    pools[String(combinedValue)] = (pools[String(combinedValue)] || 0) + 1;
+
+    if (consumedLegacy) {
+      await dbRun('UPDATE users SET free_spins_pools = ?, free_spins_left = 0, free_spin_value = 0 WHERE id = ?', [JSON.stringify(pools), dbUser.id]);
+    } else {
+      await dbRun('UPDATE users SET free_spins_pools = ? WHERE id = ?', [JSON.stringify(pools), dbUser.id]);
+    }
+
+    const updatedUser = await getUser(dbUser.id);
+    callback({ ok: true, combinedValue, newPools: pools, user: updatedUser ? toPublicUser(updatedUser) : undefined });
   });
 };

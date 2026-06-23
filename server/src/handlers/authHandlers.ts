@@ -26,6 +26,7 @@ import {
   addUnlockedShopItem,
   equipShopItem,
   setMovedToAndorra,
+  setHasArtilugio,
   addIsraelDonation,
   dbRun,
   resetShopPurchases
@@ -173,9 +174,11 @@ export const authHandlers = (socket: Socket) => {
       callback({ error: `Necesitas nivel ${item.minLevel} para comprar esto` }); return;
     }
 
-    if (item.type === 'social' && itemId === 'social_andorra') {
+    if (item.type === 'gadget' && itemId === 'gadget_artilugio') {
+      if (dbUser.has_artilugio) { callback({ error: 'Ya tienes el Artilugio' }); return; }
+    } else if (item.type === 'social' && itemId === 'social_andorra') {
       if (dbUser.moved_to_andorra) { callback({ error: 'Ya vives en Andorra' }); return; }
-    } else if (item.type !== 'social') {
+    } else if (item.type !== 'social' && item.type !== 'gadget') {
       let isUnlocked = false;
       const getUnlocked = (col: string) => dbUser[col as keyof typeof dbUser] ? JSON.parse(dbUser[col as keyof typeof dbUser] as string) : [];
       if (item.type === 'avatar') isUnlocked = getUnlocked('unlocked_avatar_decorations').includes(item.id);
@@ -190,10 +193,11 @@ export const authHandlers = (socket: Socket) => {
 
     await applyBalanceDelta(user.id, -item.price);
 
-    if (item.type === 'social' && itemId === 'social_andorra') {
-      const { setMovedToAndorra } = require('../db');
+    if (item.type === 'gadget' && itemId === 'gadget_artilugio') {
+      await setHasArtilugio(user.id);
+    } else if (item.type === 'social' && itemId === 'social_andorra') {
       await setMovedToAndorra(user.id);
-    } else if (item.type !== 'social') {
+    } else if (item.type !== 'social' && item.type !== 'gadget') {
       await addUnlockedShopItem(user.id, item.type, item.id);
       await equipShopItem(user.id, item.type, item.id);
     }
@@ -390,10 +394,10 @@ export const authHandlers = (socket: Socket) => {
     callback({ ok: true, newBalance, user: updated ? toPublicUser(updated) : undefined });
   });
 
-  socket.on('adminAddBalance1B', async ({ token }, callback) => {
+  socket.on('adminAddBalance1Qi', async ({ token }, callback) => {
     const user = await authUser(token);
     if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
-    const newBalance = await applyBalanceDelta(user.id, 1_000_000_000);
+    const newBalance = await applyBalanceDelta(user.id, 1_000_000_000_000_000_000);
     const updated = await getUser(user.id);
     callback({ ok: true, newBalance, user: updated ? toPublicUser(updated) : undefined });
   });

@@ -4,14 +4,18 @@ interface Props {
   tiers: number[];
   unlockLevel: number;
   renderItem: (value: number, index: number) => React.ReactNode;
+  extraTiers?: number[]; // siempre visibles, sin check de unlock (ej: tiradas conjuradas)
 }
 
-export default function BettingCarousel({ tiers, unlockLevel, renderItem }: Props) {
+export default function BettingCarousel({ tiers, unlockLevel, renderItem, extraTiers = [] }: Props) {
   // Solo mostramos las opciones desbloqueadas (al menos la primera si unlockLevel es 0)
   const availableTiers = tiers.slice(0, Math.max(unlockLevel, 1));
 
-  // Fila superior: de menor a mayor
-  const topRow = availableTiers.map((t, i) => ({ value: t, originalIndex: i }));
+  // Fila superior: tiers estándar asc + extras al final
+  const topRow = [
+    ...availableTiers.map((t, i) => ({ value: t, originalIndex: i })),
+    ...extraTiers.map(t => ({ value: t, originalIndex: -1 })),
+  ];
   // Fila inferior: de mayor a menor
   const bottomRow = [...topRow].reverse();
 

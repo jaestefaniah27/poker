@@ -124,6 +124,14 @@ Grep → Read(offset+limit) → cavecrew-investigator → Read(full)
 ```
 Nunca saltar a Read(full) sin pasar por Grep primero.
 
+### Flujo Opus-planifica / Sonnet-ejecuta
+Para ahorrar tokens en tareas grandes: usar **Opus solo para planificar** y **Sonnet para implementar**. Cambio **manual** con `/model` — no hay enrutado automático por fase.
+
+1. `/model claude-opus-4-8` + plan mode → diseñar (EnterPlanMode → ExitPlanMode).
+2. Aprobado el plan: `/model claude-sonnet-4-6` → programar.
+
+⚠️ `/setup-cowork` NO sirve para esto (es onboarding de Cowork, no enrutado de modelos).
+
 ## Skills de Claude útiles para este proyecto
 
 | Skill | Cuándo usar |
