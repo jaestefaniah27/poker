@@ -215,7 +215,9 @@ const MIGRATIONS = [
   // es la fuente de verdad; se opera con BigInt. Backfill desde la INTEGER vieja.
   { name: '044_balance_text', sql: 'ALTER TABLE users ADD COLUMN balance_t TEXT', ignoreError: 'duplicate column' },
   { name: '045_balance_text_fill', sql: "UPDATE users SET balance_t = CAST(balance AS TEXT) WHERE balance_t IS NULL OR balance_t = ''" },
-  { name: '046_has_artilugio', sql: 'ALTER TABLE users ADD COLUMN has_artilugio INTEGER DEFAULT 0', ignoreError: 'duplicate column' }
+  { name: '046_has_artilugio', sql: 'ALTER TABLE users ADD COLUMN has_artilugio INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
+  { name: '047_unlocked_cooldown_boosts', sql: "ALTER TABLE users ADD COLUMN unlocked_cooldown_boosts TEXT DEFAULT '{}'", ignoreError: 'duplicate column' },
+  { name: '048_last_paguita_claim_ts', sql: 'ALTER TABLE users ADD COLUMN last_paguita_claim_ts INTEGER', ignoreError: 'duplicate column' }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -281,7 +283,8 @@ export interface UserRow {
   balance: string; // dinero grande: string decimal exacto (se opera con BigInt)
   password_hash: string | null;
   avatar: string | null;
-  last_daily_claim: string | null;
+  last_daily_claim: string | null; // legacy
+  last_paguita_claim_ts?: number | null;
   last_hourly_claim: number | null;
   free_spins_left: number;
   free_spin_value: number;
@@ -317,12 +320,13 @@ export interface UserRow {
 
   // --- Mejoras de Tienda ---
   unlocked_boosts?: string | null;
+  unlocked_cooldown_boosts?: string | null;
 
   // --- Gadgets ---
   has_artilugio?: number;
 }
 
-import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, toBig } from '../../shared/types';
+import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, toBig, CooldownBoosts, paguitaCooldownMs, dietaCooldownMs } from '../../shared/types';
 
 // Columnas de usuario con el dinero leído exacto. balance_t (TEXT) es la fuente
 // de verdad del saldo; el alias pisa la columna `balance` INTEGER del `*` (en
@@ -374,6 +378,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
   if (legacyLeft > 0 && legacyVal > 0 && !pools[String(legacyVal)]) {
     pools[String(legacyVal)] = legacyLeft;
   }
+  const cooldownBoosts: CooldownBoosts = (() => { try { const p = JSON.parse(row.unlocked_cooldown_boosts || '{}'); return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {}; } catch { return {}; } })();
   return {
     id: row.id,
     name: row.name,
@@ -381,6 +386,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     avatar: row.avatar || row.id,
     hasPassword: !!row.password_hash,
     lastDailyClaim: row.last_daily_claim ?? null,
+    lastPaguitaClaimTs: row.last_paguita_claim_ts ?? null,
     lastHourlyClaim: row.last_hourly_claim ?? null,
     freeSpinPools: pools,
     freeSpinsLeft: Object.values(pools).reduce((a, b) => a + b, 0),
@@ -391,7 +397,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     isCursed: row.is_cursed === 1,
     xp,
     level,
-    levelPoints: availableLevelPoints(level, paguitaLevel, dietaLevel, ruletaLevel, triviaLevel),
+    levelPoints: availableLevelPoints(level, paguitaLevel, dietaLevel, ruletaLevel, triviaLevel, cooldownBoosts),
     paguitaLevel,
     dietaLevel,
     ruletaLevel,
@@ -409,6 +415,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     israelPool: row.israel_pool ?? '0',
     movedToAndorra: !!row.moved_to_andorra,
     unlockedBoosts: (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {}; } catch { return {}; } })(),
+    unlockedCooldownBoosts: cooldownBoosts,
     hasArtilugio: row.has_artilugio === 1,
   };
 };
@@ -441,7 +448,7 @@ export const getUserByName = async (name: string): Promise<UserRow | undefined> 
 
 export const resetJorgeCooldowns = async (): Promise<void> => {
   await dbRun(
-    `UPDATE users SET last_daily_claim = NULL, last_hourly_claim = 0, last_free_spins_claim = 0
+    `UPDATE users SET last_daily_claim = NULL, last_paguita_claim_ts = NULL, last_hourly_claim = 0, last_free_spins_claim = 0
      WHERE name = 'Jorge' COLLATE NOCASE`
   );
 };
@@ -503,31 +510,50 @@ export const applyBalanceDelta = async (id: string, delta: number | bigint): Pro
 
 const HOURLY_COOLDOWN_MS = 30 * 60 * 1000;
 
-export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: string }> => {
+export const claimDailyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: string; nextClaimAt?: number }> => {
   const row = await dbGet<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = ?`, [id]);
   if (!row) return { ok: false, error: 'Usuario no encontrado' };
-  const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
-  if (row.last_daily_claim === today) return { ok: false, error: 'Ya recogiste el bono hoy' };
+  
+  const now = Date.now();
+  const cdBoosts: CooldownBoosts = (() => { try { const p = JSON.parse(row.unlocked_cooldown_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+  const cdMs = paguitaCooldownMs(cdBoosts.paguita ?? 0);
+  
+  let last = row.last_paguita_claim_ts;
+  if (!last && row.last_daily_claim) {
+    // Si tiene legacy claim y es del mismo día, consideramos que la recogió hoy a las 00:00 (o lo bloqueamos 24h para simplificar)
+    const today = new Date().toISOString().slice(0, 10);
+    if (row.last_daily_claim === today) {
+      last = new Date(today + "T00:00:00Z").getTime(); // aprox
+    }
+  }
+
+  const nextAt = (last ?? 0) + cdMs;
+  if (now < nextAt) return { ok: false, error: 'Demasiado pronto', nextClaimAt: nextAt };
+
   const boosts: TrackBoosts = (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
   const amount = dailyAmountFor(row.paguita_level ?? 0) * boostMultiplier('paguita', boosts);
-  // Marca el claim primero (anti doble-claim), luego acredita con precisión arbitraria.
-  await dbRun('UPDATE users SET last_daily_claim = ? WHERE id = ?', [today, id]);
+
+  await dbRun('UPDATE users SET last_paguita_claim_ts = ?, last_daily_claim = NULL WHERE id = ?', [now, id]);
   const newBalance = await applyBalanceDelta(id, amount);
-  return { ok: true, newBalance };
+  return { ok: true, newBalance, nextClaimAt: now + cdMs };
 };
 
 export const claimHourlyBonus = async (id: string): Promise<{ ok: boolean; error?: string; newBalance?: string; nextClaimAt?: number }> => {
   const row = await dbGet<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = ?`, [id]);
   if (!row) return { ok: false, error: 'Usuario no encontrado' };
   const now = Date.now();
+  const cdBoosts: CooldownBoosts = (() => { try { const p = JSON.parse(row.unlocked_cooldown_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+  const cdMs = dietaCooldownMs(cdBoosts.dieta ?? 0);
+  
   const last = row.last_hourly_claim ?? 0;
-  const nextAt = last + HOURLY_COOLDOWN_MS;
+  const nextAt = last + cdMs;
   if (now < nextAt) return { ok: false, error: 'Demasiado pronto', nextClaimAt: nextAt };
+  
   const boosts: TrackBoosts = (() => { try { const p = JSON.parse(row.unlocked_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
   const amount = hourlyAmountFor(row.dieta_level ?? 0) * boostMultiplier('dieta', boosts);
   await dbRun('UPDATE users SET last_hourly_claim = ? WHERE id = ?', [now, id]);
   const newBalance = await applyBalanceDelta(id, amount);
-  return { ok: true, newBalance, nextClaimAt: now + HOURLY_COOLDOWN_MS };
+  return { ok: true, newBalance, nextClaimAt: now + cdMs };
 };
 
 // --- Niveles personales: XP y gasto de puntos ---

@@ -229,7 +229,8 @@ export interface PublicUser {
   balance: string; // dinero grande: string decimal (bigint en lógica)
   avatar: string;
   hasPassword: boolean;
-  lastDailyClaim: string | null;  // "YYYY-MM-DD"
+  lastDailyClaim: string | null;  // "YYYY-MM-DD" (legacy fallback)
+  lastPaguitaClaimTs?: number | null; // ms timestamp para paguita
   lastHourlyClaim: number | null; // ms timestamp
   freeSpinPools?: Record<string, number>; // value (as string) → count
   freeSpinsLeft?: number;
@@ -267,10 +268,39 @@ export interface PublicUser {
 
   // --- Mejoras de Tienda ---
   unlockedBoosts?: Partial<Record<LevelTrack, number>>; // count per track
+  unlockedCooldownBoosts?: CooldownBoosts; // mejoras de reducción de tiempo
 
   // --- Gadgets ---
   hasArtilugio?: boolean;
 }
+
+export type CooldownTrack = 'paguita' | 'dieta' | 'ruleta';
+export type CooldownBoosts = Partial<Record<CooldownTrack, number>>;
+
+export const COOLDOWN_BOOST_MAX = 3;
+export const COOLDOWN_BOOST_CHIP_COSTS = [1e15, 1e16, 1e17]; // 1Q, 10Q, 100Q
+export const COOLDOWN_BOOST_LP_COST = 5;
+
+export const paguitaCooldownMs = (boostCount: number): number => {
+  if (boostCount >= 3) return 10 * 60 * 1000;
+  if (boostCount === 2) return 30 * 60 * 1000;
+  if (boostCount === 1) return 2 * 60 * 60 * 1000;
+  return 24 * 60 * 60 * 1000; // Base
+};
+
+export const dietaCooldownMs = (boostCount: number): number => {
+  if (boostCount >= 3) return 30 * 1000;
+  if (boostCount === 2) return 5 * 60 * 1000;
+  if (boostCount === 1) return 15 * 60 * 1000;
+  return 30 * 60 * 1000; // Base
+};
+
+export const ruletaCooldownMs = (boostCount: number): number => {
+  if (boostCount >= 3) return 5 * 60 * 1000;
+  if (boostCount === 2) return 15 * 60 * 1000;
+  if (boostCount === 1) return 30 * 60 * 1000;
+  return 60 * 60 * 1000; // Base
+};
 
 export const STAKE_TIERS: number[] = [
   1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000,
@@ -293,9 +323,13 @@ export const JACKPOT_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 1
 export const JACKPOT_UNLOCK_COSTS: number[] = JACKPOT_TIERS.map(t => t * 10);
 export const snapToJackpotTier = (v: number): number =>
   JACKPOT_TIERS.reduce((best, t) => Math.abs(t - v) < Math.abs(best - v) ? t : best);
+
+export const snapToStakeTier = (v: number): number =>
+  STAKE_TIERS.reduce((best, t) => Math.abs(t - v) < Math.abs(best - v) ? t : best);
+
 export const ruletaBoostedOptions = (ruletaLevel: number, boosts: TrackBoosts): number[] => {
   const mult = boostMultiplier('ruleta', boosts);
-  return ruletaOptionsFor(ruletaLevel).map(v => mult === 1 ? v : snapToJackpotTier(v * mult));
+  return ruletaOptionsFor(ruletaLevel).map(v => mult === 1 ? v : snapToStakeTier(v * mult));
 };
 export const BLIND_DIVISORS: number[] = [20, 10, 5, 4];
 export const DEFAULT_BLIND_DIVISOR = 10;
@@ -356,8 +390,14 @@ export const availableLevelPoints = (
   paguitaLevel: number,
   dietaLevel: number,
   ruletaLevel: number,
-  triviaLevel: number
-): number => Math.max(0, (level - 1) - (paguitaLevel + dietaLevel + ruletaLevel + triviaLevel));
+  triviaLevel: number,
+  cooldownBoosts?: CooldownBoosts
+): number => {
+  const cdPointsSpent = (cooldownBoosts?.paguita ?? 0) * COOLDOWN_BOOST_LP_COST
+                      + (cooldownBoosts?.dieta ?? 0) * COOLDOWN_BOOST_LP_COST
+                      + (cooldownBoosts?.ruleta ?? 0) * COOLDOWN_BOOST_LP_COST;
+  return Math.max(0, (level - 1) - (paguitaLevel + dietaLevel + ruletaLevel + triviaLevel) - cdPointsSpent);
+};
 
 // --- Paguita (bono diario): nv.0 base 10k → nv.10 máx 10M.
 //     Sube ~x3 al principio, luego lineal para no dispararse. ---
@@ -404,13 +444,13 @@ export const RULETA_LEVELS: number[][] = [
   [5*K, 10*K, 25*K, 50*K, 100*K, 250*K, 500*K, 1*M], // 1
   [10*K, 25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M], // 2
   [25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M],  // 3
-  [25*K, 50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M],  // 4
-  [50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M],  // 5
-  [100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M],  // 6
-  [250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M],   // 7
-  [500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M],    // 8
-  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 9
-  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 10
+  [50*K, 100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M],  // 4
+  [100*K, 250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M],  // 5
+  [250*K, 500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M],   // 6
+  [500*K, 1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M],    // 7
+  [1*M, 2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M],     // 8
+  [2*M, 5*M, 10*M, 10*M, 10*M, 10*M, 10*M, 10*M],    // 9
+  [5*M, 10*M, 10*M, 10*M, 10*M, 10*M, 10*M, 10*M],   // 10
 ];
 export const RULETA_MAX_LEVEL = RULETA_LEVELS.length - 1; // 10
 export const ruletaOptionsFor = (ruletaLevel: number): number[] =>
@@ -508,10 +548,10 @@ export const TRACK_BASE_PRIZE: Record<LevelTrack, number> = {
 };
 
 export const TRACK_BOOST_MAX: Record<LevelTrack, number> = {
-  paguita: 7,
-  dieta: 7,
-  ruleta: 7,
-  trivia: 7,
+  paguita: 8,
+  dieta: 8,
+  ruleta: 8,
+  trivia: 8,
 };
 
 export const trackBoostCount = (track: LevelTrack, boosts: TrackBoosts | undefined): number =>

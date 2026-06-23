@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { PublicUser } from '../../../shared/types';
-import { SHOP_CATALOG, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, TRACK_BASE_PRIZE, boostCost, trackBoostCount, boostMultiplier } from '../../../shared/types';
-import type { LevelTrack } from '../../../shared/types';
+import { SHOP_CATALOG, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, TRACK_BASE_PRIZE, boostCost, trackBoostCount, boostMultiplier, COOLDOWN_BOOST_MAX, COOLDOWN_BOOST_CHIP_COSTS, COOLDOWN_BOOST_LP_COST } from '../../../shared/types';
+import type { LevelTrack, CooldownTrack } from '../../../shared/types';
 import { fmtChips, socket, getStorage } from '../utils';
 import Avatar from './Avatar';
 import { DecoratedName } from './Decorations';
@@ -45,10 +45,37 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
     socket.on('shopCatalogUpdated', onUpdate);
     return () => { socket.off('shopCatalogUpdated', onUpdate); };
   }, []);
-  const NEW_ITEM_IDS = ['name_fire', 'name_royal', 'felt_galaxy', 'felt_royal'];
+  const NEW_ITEM_IDS = ['name_fire', 'name_royal', 'felt_galaxy', 'felt_royal', 'gadget_artilugio'];
+
+  const [hasNewShopItems, setHasNewShopItems] = useState(() => getStorage().getItem('seenArtilugio') !== 'true');
+
+  useEffect(() => {
+    const handleStorage = () => setHasNewShopItems(getStorage().getItem('seenArtilugio') !== 'true');
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('shopItemSeen', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('shopItemSeen', handleStorage);
+    };
+  }, []);
+
+  const handleItemSeen = (id: string) => {
+    if (id === 'gadget_artilugio' && getStorage().getItem('seenArtilugio') !== 'true') {
+      getStorage().setItem('seenArtilugio', 'true');
+      setHasNewShopItems(false);
+      window.dispatchEvent(new Event('shopItemSeen'));
+    }
+  };
 
   type Rarity = { label: string; badge: string; border: string; glow: string };
-  const rarityOf = (price: number): Rarity => {
+  const rarityOf = (item: any): Rarity => {
+    if (item.id === 'gadget_artilugio') return {
+      label: 'LEGENDARIO',
+      badge: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black',
+      border: 'border-amber-500/60',
+      glow: 'shadow-[0_0_20px_rgba(245,158,11,0.2)]',
+    };
+    const price = item.price;
     if (price >= 500_000_000_000) return {
       label: 'MÍTICO',
       badge: 'bg-gradient-to-r from-fuchsia-500 to-rose-500 text-white',
@@ -144,15 +171,15 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
     const isArtilugio = item.id === 'gadget_artilugio';
     const owned = unlocked || (isAndorra && user.movedToAndorra) || (isArtilugio && user.hasArtilugio);
 
-    const rarity = rarityOf(item.price);
+    const rarity = rarityOf(item);
     const isNew = NEW_ITEM_IDS.includes(item.id);
     const meetsLevelReq = !item.minLevel || (user.level ?? 1) >= item.minLevel;
 
     return (
-      <div key={item.id} className={`shop-card h-full p-5 rounded-2xl border flex flex-col justify-between transition-all duration-300 ${
+      <div key={item.id} onClick={() => handleItemSeen(item.id)} className={`shop-card h-full p-5 rounded-2xl border flex flex-col justify-between transition-all duration-300 ${
         equipped ? 'bg-gradient-to-b from-yellow-500/15 via-black/40 to-black/60 border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.35)] scale-[1.02]' :
         owned ? `bg-gradient-to-b from-emerald-500/10 via-black/40 to-black/60 border-emerald-500/50 ${rarity.glow}` :
-        `bg-gradient-to-b from-white/[0.06] via-black/40 to-black/60 ${rarity.border} ${rarity.glow} hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)]`
+        `bg-gradient-to-b from-white/[0.06] via-black/40 to-black/60 ${rarity.border} ${rarity.glow} hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer`
       }`}>
         {/* PREVIEW BOX */}
         <div className="h-32 mb-4 rounded-xl flex items-center justify-center border border-white/10 relative overflow-hidden bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.08)_0%,rgba(0,0,0,0.6)_70%)]">
@@ -318,7 +345,14 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
         <div className="flex gap-2 mb-6 bg-black/40 border border-white/10 p-1 rounded-xl overflow-x-auto">
           {[
             { id: 'cosmetics', label: '✨ Cosméticos' },
-            { id: 'social', label: '🏛️ Beneficios' }
+            { id: 'social', label: (
+              <span className="relative flex items-center">
+                🏛️ Beneficios
+                {hasNewShopItems && (
+                  <span className="absolute -top-1 -right-3 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border border-black" />
+                )}
+              </span>
+            ) }
           ].map(t => (
             <button
               key={t.id}
@@ -381,6 +415,60 @@ export const ShopModal: React.FC<ShopModalProps> = ({ user, onClose, onUpdateUse
                         }`}
                       >
                         {atBoostMax ? '✓ Máximo alcanzado' : atMax ? `${fmtChips(cost)} fichas` : `Necesitas nivel ${b.maxLevel}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h3 className="text-2xl font-black text-white mb-4 flex items-center gap-3">
+                Reducción de Tiempo
+                <span className="flex-1 h-px bg-gradient-to-r from-sky-500/40 to-transparent" />
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {(['paguita', 'dieta', 'ruleta'] as CooldownTrack[]).map(track => {
+                  const boosts = user.unlockedCooldownBoosts ?? {};
+                  const count = boosts[track] ?? 0;
+                  const atMax = count >= COOLDOWN_BOOST_MAX;
+                  const costChips = COOLDOWN_BOOST_CHIP_COSTS[count];
+                  const hasLP = user.levelPoints ? user.levelPoints >= COOLDOWN_BOOST_LP_COST : false;
+
+                  const emojis: Record<CooldownTrack, string> = { paguita: '📅', dieta: '☕', ruleta: '🎰' };
+                  const labels: Record<CooldownTrack, string> = { paguita: 'Paguita', dieta: 'Dietas', ruleta: 'Ruleta' };
+                  
+                  return (
+                    <div key={`cd_${track}`} className={`p-5 rounded-2xl border transition-all ${count > 0 ? 'bg-sky-500/10 border-sky-500/40' : 'bg-white/5 border-white/10'}`}>
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="text-3xl">{emojis[track]}</span>
+                        <div>
+                          <p className="font-black text-white">{labels[track]} Exprés</p>
+                          <p className="text-xs text-gray-400">Mejora {count}/{COOLDOWN_BOOST_MAX}</p>
+                        </div>
+                        {atMax && <span className="ml-auto text-xs font-black text-sky-400 bg-sky-500/20 px-2 py-1 rounded-full">MAX</span>}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (atMax) return;
+                          socket.emit('buyCooldownBoost', { token: getStorage().getItem('pokerToken'), track }, (res: any) => {
+                            if (res.error) onError(res.error);
+                            else onUpdateUser(res.user);
+                          });
+                        }}
+                        disabled={atMax}
+                        className={`w-full py-2.5 rounded-xl font-black text-sm transition-all active:scale-[0.98] flex flex-col items-center justify-center ${
+                          atMax ? 'bg-sky-500/20 text-sky-400 cursor-not-allowed'
+                          : hasLP ? 'bg-sky-500 text-black hover:bg-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.3)]'
+                          : 'bg-white/5 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {atMax ? '✓ Tiempo mínimo' : (
+                          <>
+                            <span>{fmtChips(costChips)} fichas</span>
+                            <span className="text-xs opacity-80 uppercase tracking-widest mt-0.5">{COOLDOWN_BOOST_LP_COST} puntos de nivel</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   );

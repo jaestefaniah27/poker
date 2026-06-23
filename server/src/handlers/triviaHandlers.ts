@@ -2,7 +2,7 @@ import { Socket } from 'socket.io';
 import { authUser } from '../socketHelpers';
 import { applyBalanceDelta, getUser, addOneFreeSpin, toPublicUser, addXp, bumpStat } from '../db';
 import { TRIVIA_QUESTIONS } from '../triviaQuestions';
-import { triviaRewardsFor, TriviaReward, XP_PER_TRIVIA_CORRECT, XP_PER_TRIVIA_PARTICIPATION, triviaCooldownMs, triviaSpinCount, boostMultiplier, snapToJackpotTier, TrackBoosts } from '../../../shared/types';
+import { triviaRewardsFor, TriviaReward, XP_PER_TRIVIA_CORRECT, XP_PER_TRIVIA_PARTICIPATION, triviaCooldownMs, triviaSpinCount, boostMultiplier, snapToStakeTier, TrackBoosts } from '../../../shared/types';
 
 const triviaState = new Map<string, { lastAnswered: number; pendingId: number | null; seenIds: Set<number> }>();
 
@@ -13,7 +13,7 @@ function pickReward(triviaLevel: number, unlockedBoosts: TrackBoosts): TriviaRew
   const mult = boostMultiplier('trivia', unlockedBoosts);
   if (mult === 1) return reward;
   if (reward.type === 'chips') return { type: 'chips', amount: reward.amount * mult };
-  return { type: 'spin', value: snapToJackpotTier(reward.value * mult) };
+  return { type: 'spin', value: snapToStakeTier(reward.value * mult) };
 }
 
 function pickQuestion(userId: string) {

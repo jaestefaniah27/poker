@@ -3,7 +3,7 @@ import { socket, fmtChips } from '../utils';
 import {
   xpForLevel, dailyAmountFor, hourlyAmountFor, ruletaOptionsFor, ruletaSpinsFor, triviaRewardsFor,
   RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL,
-  triviaCooldownMs, triviaSpinCount,
+  triviaCooldownMs, triviaSpinCount, boostMultiplier,
 } from '../../../shared/types';
 import type { LevelTrack } from '../../../shared/types';
 
@@ -40,12 +40,16 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
     });
   };
 
-  const ruletaBest = Math.max(...ruletaOptionsFor(ruletaLevel));
+  const boosts = user.unlockedBoosts || {};
+  const ruletaMult = boostMultiplier('ruleta', boosts);
+  const triviaMult = boostMultiplier('trivia', boosts);
+
+  const ruletaBest = Math.max(...ruletaOptionsFor(ruletaLevel)) * ruletaMult;
   const ruletaSpins = ruletaSpinsFor(ruletaLevel);
-  const ruletaBestNext = Math.max(...ruletaOptionsFor(ruletaLevel + 1));
+  const ruletaBestNext = Math.max(...ruletaOptionsFor(ruletaLevel + 1)) * ruletaMult;
   const ruletaSpinsNext = ruletaSpinsFor(ruletaLevel + 1);
   const worstTier = (r: { type: 'spin'; value: number } | { type: 'chips'; amount: number }) =>
-    r.type === 'spin' ? r.value : r.amount;
+    r.type === 'spin' ? r.value * triviaMult : r.amount * triviaMult;
   const triviaDesc = (lvl: number) => {
     const worst = worstTier(triviaRewardsFor(lvl)[0]);
     const secs = triviaCooldownMs(lvl) / 1000;
@@ -65,13 +69,13 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
   }[] = [
     {
       key: 'paguita', name: 'Paguita', emoji: '💶', color: '#f59e0b', lvl: paguitaLevel, maxed: paguitaLevel >= PAGUITA_MAX_LEVEL,
-      current: `$${fmtChips(dailyAmountFor(paguitaLevel))} / día`,
-      next: paguitaLevel >= PAGUITA_MAX_LEVEL ? null : `$${fmtChips(dailyAmountFor(paguitaLevel + 1))} / día`,
+      current: `$${fmtChips(dailyAmountFor(paguitaLevel) * boostMultiplier('paguita', boosts))} / día`,
+      next: paguitaLevel >= PAGUITA_MAX_LEVEL ? null : `$${fmtChips(dailyAmountFor(paguitaLevel + 1) * boostMultiplier('paguita', boosts))} / día`,
     },
     {
       key: 'dieta', name: 'Dietas', emoji: '🍽️', color: '#34d399', lvl: dietaLevel, maxed: dietaLevel >= DIETA_MAX_LEVEL,
-      current: `$${fmtChips(hourlyAmountFor(dietaLevel))} / 30 min`,
-      next: dietaLevel >= DIETA_MAX_LEVEL ? null : `$${fmtChips(hourlyAmountFor(dietaLevel + 1))} / 30 min`,
+      current: `$${fmtChips(hourlyAmountFor(dietaLevel) * boostMultiplier('dieta', boosts))} / 30 min`,
+      next: dietaLevel >= DIETA_MAX_LEVEL ? null : `$${fmtChips(hourlyAmountFor(dietaLevel + 1) * boostMultiplier('dieta', boosts))} / 30 min`,
     },
     {
       key: 'ruleta', name: 'Ruleta', emoji: '🎡', color: '#a855f7', lvl: ruletaLevel, maxed: ruletaLevel >= RULETA_MAX_LEVEL,

@@ -33,7 +33,7 @@ import {
 } from '../db';
 import { issueToken, authUser, broadcastPresence, kickOtherSessions, io } from '../socketHelpers';
 import { getShopCatalog, saveShopCatalog } from '../db';
-import { levelFromXp, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount, toBig } from '../../../shared/types';
+import { levelFromXp, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount, toBig, CooldownTrack, COOLDOWN_BOOST_MAX, COOLDOWN_BOOST_CHIP_COSTS, COOLDOWN_BOOST_LP_COST, CooldownBoosts, availableLevelPoints } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser, chipsInPlayFor } from '../roomManager';
 
@@ -617,6 +617,45 @@ export const authHandlers = (socket: Socket) => {
     await applyBalanceDelta(user.id, -cost);
     const newBoosts: TrackBoosts = { ...boosts, [t]: currentCount + 1 };
     await dbRun('UPDATE users SET unlocked_boosts = ? WHERE id = ?', [JSON.stringify(newBoosts), user.id]);
+
+    const updated = await getUser(user.id);
+    if (updated) {
+      socket.data.user = toPublicUser(updated);
+      callback({ ok: true, user: socket.data.user });
+    }
+  });
+
+  socket.on('buyCooldownBoost', async ({ token, track }, callback) => {
+    const user = await authUser(token);
+    if (!user) { callback({ error: 'No autenticado' }); return; }
+
+    const validTracks: CooldownTrack[] = ['paguita', 'dieta', 'ruleta'];
+    if (!validTracks.includes(track)) { callback({ error: 'Track inválido' }); return; }
+    const t = track as CooldownTrack;
+
+    const dbUser = await getUser(user.id);
+    if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
+
+    const level = levelFromXp(dbUser.xp ?? 0);
+    const paguita = dbUser.paguita_level ?? 0;
+    const dieta = dbUser.dieta_level ?? 0;
+    const ruleta = dbUser.ruleta_level ?? 0;
+    const trivia = dbUser.trivia_level ?? 0;
+
+    const cooldownBoosts: CooldownBoosts = (() => { try { const p = JSON.parse(dbUser.unlocked_cooldown_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+    
+    const availableLP = availableLevelPoints(level, paguita, dieta, ruleta, trivia, cooldownBoosts);
+    if (availableLP < COOLDOWN_BOOST_LP_COST) { callback({ error: `Necesitas ${COOLDOWN_BOOST_LP_COST} puntos de nivel para esta mejora` }); return; }
+
+    const currentCount = cooldownBoosts[t] ?? 0;
+    if (currentCount >= COOLDOWN_BOOST_MAX) { callback({ error: 'Ya tienes el máximo de reducciones de tiempo para este track' }); return; }
+
+    const costChips = COOLDOWN_BOOST_CHIP_COSTS[currentCount];
+    if (toBig(dbUser.balance) < toBig(costChips)) { callback({ error: 'Saldo insuficiente' }); return; }
+
+    await applyBalanceDelta(user.id, -costChips);
+    const newBoosts: CooldownBoosts = { ...cooldownBoosts, [t]: currentCount + 1 };
+    await dbRun('UPDATE users SET unlocked_cooldown_boosts = ? WHERE id = ?', [JSON.stringify(newBoosts), user.id]);
 
     const updated = await getUser(user.id);
     if (updated) {

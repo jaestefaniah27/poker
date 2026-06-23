@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Slider from './Slider';
 import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage, playCheckSound, toBig } from '../utils';
 import { sfx, isMuted, toggleMute } from '../sounds';
-import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor, boostMultiplier, type PublicUser } from '../../../shared/types';
+import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor, boostMultiplier, paguitaCooldownMs, dietaCooldownMs, ruletaCooldownMs, type PublicUser } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
 import TriviaModal from './TriviaModal';
 import MinesModal from './MinesModal';
@@ -68,6 +68,17 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showLevels, setShowLevels] = useState(false);
   const [showRoulette, setShowRoulette] = useState(false);
   const [showShop, setShowShop] = useState(false);
+  const [hasNewShopItems, setHasNewShopItems] = useState(() => getStorage().getItem('seenArtilugio') !== 'true');
+
+  useEffect(() => {
+    const handleStorage = () => setHasNewShopItems(getStorage().getItem('seenArtilugio') !== 'true');
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('shopItemSeen', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('shopItemSeen', handleStorage);
+    };
+  }, []);
 
   // Create section (poker only)
   const [newRoomName, setNewRoomName] = useState(`Sala de ${user.name}`);
@@ -146,19 +157,35 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     return () => clearInterval(id);
   }, []);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const dailyAvailable = user.lastDailyClaim !== todayStr;
-  const hourlyNextAt = user.lastHourlyClaim ? user.lastHourlyClaim + 30 * 60 * 1000 : 0;
+  const fmtTimer = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const cdBoosts = user.unlockedCooldownBoosts || {};
+
+  let dailyNextAt = 0;
+  if (user.lastPaguitaClaimTs) {
+    dailyNextAt = user.lastPaguitaClaimTs + paguitaCooldownMs(cdBoosts.paguita ?? 0);
+  } else if (user.lastDailyClaim) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (user.lastDailyClaim === todayStr) {
+      dailyNextAt = new Date(todayStr + "T00:00:00Z").getTime() + paguitaCooldownMs(cdBoosts.paguita ?? 0);
+    }
+  }
+  const dailyAvailable = now >= dailyNextAt;
+  const dailySecs = dailyAvailable ? 0 : Math.ceil((dailyNextAt - now) / 1000);
+
+  const hourlyNextAt = user.lastHourlyClaim ? user.lastHourlyClaim + dietaCooldownMs(cdBoosts.dieta ?? 0) : 0;
   const hourlyAvailable = now >= hourlyNextAt;
   const hourlySecs = hourlyAvailable ? 0 : Math.ceil((hourlyNextAt - now) / 1000);
-  const hourlyMM = String(Math.floor(hourlySecs / 60)).padStart(2, '0');
-  const hourlySS = String(hourlySecs % 60).padStart(2, '0');
 
-  const freeSpinsNextAt = user.lastFreeSpinsClaim ? user.lastFreeSpinsClaim + 60 * 60 * 1000 : 0;
+  const freeSpinsNextAt = user.lastFreeSpinsClaim ? user.lastFreeSpinsClaim + ruletaCooldownMs(cdBoosts.ruleta ?? 0) : 0;
   const freeSpinsAvailable = now >= freeSpinsNextAt;
   const freeSpinsSecs = freeSpinsAvailable ? 0 : Math.ceil((freeSpinsNextAt - now) / 1000);
-  const freeSpinsMM = String(Math.floor(freeSpinsSecs / 60)).padStart(2, '0');
-  const freeSpinsSS = String(freeSpinsSecs % 60).padStart(2, '0');
 
   const handleClaimDaily = () => {
     if (!dailyAvailable || claimingDaily) return;
@@ -457,10 +484,13 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
-            <button onClick={() => setShowShop(true)} title="Tienda" className="text-yellow-500 hover:text-yellow-400 transition-colors drop-shadow-[0_0_5px_rgba(234,179,8,0.5)] active:scale-95">
+            <button onClick={() => setShowShop(true)} title="Tienda" className="relative text-yellow-500 hover:text-yellow-400 transition-colors drop-shadow-[0_0_5px_rgba(234,179,8,0.5)] active:scale-95">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
+              {hasNewShopItems && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-black animate-pulse" />
+              )}
             </button>
           </div>
         </div>
@@ -479,7 +509,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               >
                 <span className="text-[10px] font-extrabold tracking-wider text-center">PAGUITA</span>
                 <span className="text-xs font-bold text-amber-400">+{fmtChips(dailyAmountFor(user.paguitaLevel ?? 0) * boostMultiplier('paguita', user.unlockedBoosts))}</span>
-                <span className="text-[9px] text-gray-400 text-center">{dailyAvailable ? 'Bono diario' : 'Mañana'}</span>
+                <span className="text-[9px] text-gray-400 text-center">{dailyAvailable ? 'Bono diario' : fmtTimer(dailySecs)}</span>
               </button>
 
               {/* Cada 30 min */}
@@ -491,7 +521,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               >
                 <span className="text-[10px] font-extrabold tracking-wider text-center">DIETAS</span>
                 <span className="text-xs font-bold text-emerald-400">+{fmtChips(hourlyAmountFor(user.dietaLevel ?? 0) * boostMultiplier('dieta', user.unlockedBoosts))}</span>
-                <span className="text-[9px] text-gray-400 text-center">{hourlyAvailable ? '30 min' : `${hourlyMM}:${hourlySS}`}</span>
+                <span className="text-[9px] text-gray-400 text-center">{hourlyAvailable ? 'Dietas' : fmtTimer(hourlySecs)}</span>
               </button>
 
               {/* Ruleta */}
@@ -504,7 +534,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 <span className="text-[10px] font-extrabold tracking-wider text-center">RULETA</span>
                 <span className="text-xs font-bold text-purple-400">10 Gs</span>
                 <span className="text-[9px] text-gray-400 text-center">
-                  {freeSpinsAvailable ? 'Girar' : `${freeSpinsMM}:${freeSpinsSS}`}
+                  {freeSpinsAvailable ? 'Tirada Gratis' : fmtTimer(freeSpinsSecs)}
                 </span>
               </button>
             </div>

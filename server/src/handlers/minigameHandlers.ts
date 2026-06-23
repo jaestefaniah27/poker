@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
 import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, getEffectivePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat, dbRun } from '../db';
-import { boostMultiplier, TrackBoosts, toBig } from '../../../shared/types';
+import { boostMultiplier, TrackBoosts, toBig, CooldownBoosts, ruletaCooldownMs } from '../../../shared/types';
 import { spinJackpot, getJackpotState, persistJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
@@ -62,10 +62,10 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     if (dbUser && toBig(dbUser.israel_debt) > 0n) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la paguita' }); return; }
     const result = await claimDailyBonus(user.id);
-    if (!result.ok) { callback({ error: result.error }); return; }
+    if (!result.ok) { callback({ error: result.error, nextClaimAt: result.nextClaimAt }); return; }
     bumpStat(user.id, 'bonus_claims');
     const updated = await getUser(user.id);
-    callback({ ok: true, newBalance: result.newBalance, user: updated ? toPublicUser(updated) : undefined });
+    callback({ ok: true, newBalance: result.newBalance, nextClaimAt: result.nextClaimAt, user: updated ? toPublicUser(updated) : undefined });
   });
 
   socket.on('getPresence', (callback) => {
@@ -126,7 +126,8 @@ export const minigameHandlers = (socket: Socket) => {
       return;
     }
     const now = Date.now();
-    const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+    const cdBoosts: CooldownBoosts = (() => { try { const p = JSON.parse(dbUser.unlocked_cooldown_boosts || '{}'); return (!Array.isArray(p) && typeof p === 'object') ? p : {}; } catch { return {}; } })();
+    const COOLDOWN_MS = ruletaCooldownMs(cdBoosts.ruleta ?? 0);
     const last = dbUser.last_free_spins_claim ?? 0;
     const nextAt = last + COOLDOWN_MS;
     if (now < nextAt) { callback({ error: 'Demasiado pronto', nextClaimAt: nextAt }); return; }
