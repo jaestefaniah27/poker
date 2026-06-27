@@ -92,6 +92,19 @@ Client conecta a `http://localhost:3001` via Socket.IO.
 - Framer Motion 12 usa `motion()` factory, no HOC — cuidado con imports.
 - TypeScript strict en server, menos en client — no asumir que todo está tipado en App.tsx.
 
+## Flujo de deploy — CRÍTICO
+
+El flujo correcto es **siempre**:
+
+1. Editar código en rama `dev`
+2. `git add` + `git commit` + `git push origin dev`
+3. `deploy_staging` → verificar en `/staging/`
+4. Si aprobado: `git checkout main && git merge dev && git push origin main`
+5. `deploy` (MCP) → construye desde `main` → producción
+
+**NUNCA** llamar a `deploy` sin haber mergeado `dev → main` primero.
+El MCP `deploy` siempre despliega `main`. Si `main` no tiene el commit, producción no cambia.
+
 ## Comandos útiles
 
 ```powershell
