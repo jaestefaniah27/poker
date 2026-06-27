@@ -279,28 +279,28 @@ export type CooldownTrack = 'paguita' | 'dieta' | 'ruleta';
 export type CooldownBoosts = Partial<Record<CooldownTrack, number>>;
 
 export const COOLDOWN_BOOST_MAX = 3;
-export const COOLDOWN_BOOST_CHIP_COSTS = [5e14, 5e15, 5e16]; // 500T, 5Q, 50Q
+export const COOLDOWN_BOOST_CHIP_COSTS = [5e13, 5e14, 5e15]; // 50T, 500T, 5Q
 export const COOLDOWN_BOOST_LP_COST = 1;
 
 export const paguitaCooldownMs = (boostCount: number): number => {
-  if (boostCount >= 3) return 10 * 60 * 1000;
-  if (boostCount === 2) return 30 * 60 * 1000;
-  if (boostCount === 1) return 2 * 60 * 60 * 1000;
-  return 24 * 60 * 60 * 1000; // Base
+  if (boostCount >= 3) return 5 * 60 * 1000;
+  if (boostCount === 2) return 15 * 60 * 1000;
+  if (boostCount === 1) return 60 * 60 * 1000;
+  return 12 * 60 * 60 * 1000; // Base
 };
 
 export const dietaCooldownMs = (boostCount: number): number => {
-  if (boostCount >= 3) return 30 * 1000;
-  if (boostCount === 2) return 5 * 60 * 1000;
-  if (boostCount === 1) return 15 * 60 * 1000;
-  return 30 * 60 * 1000; // Base
+  if (boostCount >= 3) return 15 * 1000;
+  if (boostCount === 2) return 2.5 * 60 * 1000;
+  if (boostCount === 1) return 7.5 * 60 * 1000;
+  return 15 * 60 * 1000; // Base
 };
 
 export const ruletaCooldownMs = (boostCount: number): number => {
-  if (boostCount >= 3) return 5 * 60 * 1000;
-  if (boostCount === 2) return 15 * 60 * 1000;
-  if (boostCount === 1) return 30 * 60 * 1000;
-  return 60 * 60 * 1000; // Base
+  if (boostCount >= 3) return 2.5 * 60 * 1000;
+  if (boostCount === 2) return 7.5 * 60 * 1000;
+  if (boostCount === 1) return 15 * 60 * 1000;
+  return 30 * 60 * 1000; // Base
 };
 
 export const STAKE_TIERS: number[] = [
