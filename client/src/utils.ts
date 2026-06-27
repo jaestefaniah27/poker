@@ -3,10 +3,13 @@ import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor, toBig } 
 
 export { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor, toBig };
 
+const socketPath = import.meta.env.VITE_SOCKET_PATH || '/socket.io';
+
 export const socket: Socket = io(
   import.meta.env.PROD 
-    ? '/' // En producción asume que está servido a través del mismo Nginx Proxy
-    : `http://${window.location.hostname}:3001`
+    ? '/'
+    : `http://${window.location.hostname}:3001`,
+  { path: socketPath }
 );
 
 export const getStorage = (): Storage => {
@@ -99,7 +102,6 @@ export const playCheckSound = () => {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     
-    // Wood knock characteristics: short, low frequency punch
     osc.type = 'sine';
     osc.frequency.setValueAtTime(150, audioCtx.currentTime + timeOffset);
     osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + timeOffset + 0.05);
@@ -116,7 +118,7 @@ export const playCheckSound = () => {
   };
 
   createKnock(0);
-  createKnock(0.15); // Second knock
+  createKnock(0.15);
 };
 
 export const vibrate = (pattern: number | number[]) => {
