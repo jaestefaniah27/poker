@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { promisify } from 'util';
 
-const dbPath = path.join(__dirname, '..', 'poker.sqlite');
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'poker.sqlite');
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Error opening database', err.message);

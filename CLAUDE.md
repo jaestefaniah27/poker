@@ -92,6 +92,18 @@ Client conecta a `http://localhost:3001` via Socket.IO.
 - Framer Motion 12 usa `motion()` factory, no HOC — cuidado con imports.
 - TypeScript strict en server, menos en client — no asumir que todo está tipado en App.tsx.
 
+## Sistema de tests E2E
+
+Suite Playwright headless en modo texto (sin screenshots, lectura directa del DOM).
+
+- **Script**: `tests/e2e.mjs`
+- **Ejecutar**: `cd /home/ubuntu/playwright-tool && node /home/ubuntu/poker_repo/tests/e2e.mjs`
+- **Staging DB separada**: `server/dist/server/poker_staging.sqlite` (proceso `poker-staging`, puerto 3002)
+- **Re-lanzar staging con DB separada**: `PORT=3002 DB_PATH=/home/ubuntu/poker_repo/server/dist/server/poker_staging.sqlite pm2 restart poker-staging --update-env`
+- **19 tests** cubren: Login, Lobby, Paguita/Dieta, Blackjack, Jackpot, Mines, Crash, Tienda, Menú de nivel, Poker, Errores de consola
+
+Ejecutar la suite después de cualquier cambio significativo para verificar que todo sigue verde.
+
 ## Flujo de deploy — CRÍTICO
 
 El flujo correcto es **siempre**:
