@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips, vibrate, toBig } from '../utils';
+import { socket, fmtChips, vibrate, m, lt, sub } from '../utils';
 import { sfx } from '../sounds';
 import { ChipRail, ChipStack, chipsFromAmount, pageForAmount, chipMultiplierFor, type ChipDenom } from './Chips';
 import AnimatedNumber from './AnimatedNumber';
@@ -74,7 +74,7 @@ export default function RouletteModal({
   const [localTimeRemaining, setLocalTimeRemaining] = useState(30);
   const [initialBalance] = useState(balance);
   const [settledBalance, setSettledBalance] = useState(balance);
-  const sessionDiff = Number(toBig(settledBalance) - toBig(initialBalance));
+  const sessionDiff = m(settledBalance).minus(m(initialBalance)).toNumber();
 
   const [result, setResult] = useState<{ num: number; win: number; net: number } | null>(null);
   const [history, setHistory] = useState<number[]>([]);
@@ -268,10 +268,10 @@ export default function RouletteModal({
   const placeBet = (zone: string, e?: React.MouseEvent) => {
     if (globalPhase !== 'betting' || localTimeRemaining <= 5) return;
     if (e && e.type === 'contextmenu') { e.preventDefault(); return; }
-    if (!activeChip || toBig(balance) < toBig(activeChip.v)) return;
+    if (!activeChip || lt(balance, activeChip.v)) return;
 
     setBets(prev => ({ ...prev, [zone]: (prev[zone] || 0) + activeChip.v }));
-    updateBalance((toBig(balance) - toBig(activeChip.v)).toString());
+    updateBalance(sub(balance, activeChip.v).toFixed(0));
     vibrate(10);
     sfx.chip();
     
@@ -297,14 +297,14 @@ export default function RouletteModal({
   const repeatBet = () => {
     if (globalPhase !== 'betting' || localTimeRemaining <= 5) return;
     const totalNeeded = Object.values(previousBets || {}).reduce((a, b) => a + b, 0);
-    if (totalNeeded === 0 || toBig(balance) < toBig(totalNeeded)) return;
+    if (totalNeeded === 0 || lt(balance, totalNeeded)) return;
 
     setBets(prev => {
       const next = { ...prev };
       for (const [z, amt] of Object.entries(previousBets)) next[z] = (next[z] || 0) + amt;
       return next;
     });
-    updateBalance((toBig(balance) - toBig(totalNeeded)).toString());
+    updateBalance(sub(balance, totalNeeded).toFixed(0));
     vibrate(10);
     sfx.chip();
     
@@ -317,14 +317,14 @@ export default function RouletteModal({
     if (globalPhase !== 'betting' || localTimeRemaining <= 5) return;
     const currentBets = { ...bets };
     const totalNeeded = Object.values(currentBets || {}).reduce((a, b) => a + b, 0);
-    if (totalNeeded === 0 || toBig(balance) < toBig(totalNeeded)) return;
+    if (totalNeeded === 0 || lt(balance, totalNeeded)) return;
 
     setBets(prev => {
       const next = { ...prev };
       for (const [z, amt] of Object.entries(currentBets)) next[z] = (next[z] || 0) + amt;
       return next;
     });
-    updateBalance((toBig(balance) - toBig(totalNeeded)).toString());
+    updateBalance(sub(balance, totalNeeded).toFixed(0));
     vibrate(10);
     sfx.chip();
     

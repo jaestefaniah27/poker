@@ -1,5 +1,16 @@
 // ============================================================
-// Dinero de precisión arbitraria (BigInt)
+// Dinero de precisión arbitraria — capa unificada en money.ts
+// ------------------------------------------------------------
+// API CANÓNICA: importar de money.ts (m, add, sub, gte, fmt, toStr...).
+// Las funciones toBig/bigStr/addClamped de abajo son wrappers de compat
+// que delegan en Decimal; se mantienen para no romper firmas durante la
+// migración. Código NUEVO debe usar la API de money.ts directamente.
+// ============================================================
+export * from './money';
+import { m as _m, toStr as _toStr, addClampedM as _addClampedM } from './money';
+
+// ============================================================
+// Dinero de precisión arbitraria (BigInt — DEPRECADO, ver money.ts)
 // ------------------------------------------------------------
 // El SALDO persistente y los pools sociales pueden superar 2^53 (≈9Q), donde
 // el `number` de JS deja de ser exacto. Por eso se representan como `string`
@@ -36,10 +47,10 @@ export const toBig = (v: string | number | bigint | null | undefined): bigint =>
 // bigint → string decimal (representación canónica para wire/DB).
 export const bigStr = (v: bigint): string => v.toString();
 
-// Suma segura de un delta (number|bigint) a un saldo (string|bigint), nunca < 0.
+// Suma segura de un delta a un saldo, nunca < 0. (compat: devuelve bigint)
+// Internamente usa Decimal para precisión uniforme.
 export const addClamped = (balance: string | bigint, delta: string | number | bigint): bigint => {
-  const r = toBig(balance) + toBig(delta);
-  return r < 0n ? 0n : r;
+  return BigInt(_toStr(_addClampedM(String(balance), String(delta))));
 };
 
 export type Suit = 'h' | 'd' | 'c' | 's'; // hearts, diamonds, clubs, spades

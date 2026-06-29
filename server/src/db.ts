@@ -217,7 +217,8 @@ const MIGRATIONS = [
   { name: '045_balance_text_fill', sql: "UPDATE users SET balance_t = CAST(balance AS TEXT) WHERE balance_t IS NULL OR balance_t = ''" },
   { name: '046_has_artilugio', sql: 'ALTER TABLE users ADD COLUMN has_artilugio INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
   { name: '047_unlocked_cooldown_boosts', sql: "ALTER TABLE users ADD COLUMN unlocked_cooldown_boosts TEXT DEFAULT '{}'", ignoreError: 'duplicate column' },
-  { name: '048_last_paguita_claim_ts', sql: 'ALTER TABLE users ADD COLUMN last_paguita_claim_ts INTEGER', ignoreError: 'duplicate column' }
+  { name: '048_last_paguita_claim_ts', sql: 'ALTER TABLE users ADD COLUMN last_paguita_claim_ts INTEGER', ignoreError: 'duplicate column' },
+  { name: '049_user_stats_value_t', sql: 'ALTER TABLE user_stats ADD COLUMN value_t TEXT', ignoreError: 'duplicate column' }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -257,20 +258,20 @@ export const initDB = async (): Promise<void> => {
   const appliedRows = await dbAll<{ name: string }>('SELECT name FROM migrations');
   const applied = new Set(appliedRows.map(r => r.name));
 
-  for (const m of MIGRATIONS) {
-    if (!applied.has(m.name)) {
+  for (const mig of MIGRATIONS) {
+    if (!applied.has(mig.name)) {
       try {
-        await dbRun(m.sql);
+        await dbRun(mig.sql);
       } catch (err: any) {
-        if (m.ignoreError && err.message.includes(m.ignoreError)) {
-          console.log(`Migration ${m.name} recovered from old schema (${m.ignoreError})`);
+        if (mig.ignoreError && err.message.includes(mig.ignoreError)) {
+          console.log(`Migration ${mig.name} recovered from old schema (${mig.ignoreError})`);
         } else {
-          console.error(`Error running migration ${m.name}:`, err);
+          console.error(`Error running migration ${mig.name}:`, err);
           throw err;
         }
       }
-      await dbRun('INSERT INTO migrations (name) VALUES (?)', [m.name]);
-      console.log(`Migration applied: ${m.name}`);
+      await dbRun('INSERT INTO migrations (name) VALUES (?)', [mig.name]);
+      console.log(`Migration applied: ${mig.name}`);
     }
   }
   console.log('Database migrations up to date.');
@@ -326,7 +327,7 @@ export interface UserRow {
   has_artilugio?: number;
 }
 
-import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, toBig, CooldownBoosts, paguitaCooldownMs, dietaCooldownMs } from '../../shared/types';
+import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, CooldownBoosts, paguitaCooldownMs, dietaCooldownMs, Money, m, add, sub, toStr, clampNonNeg, gte, gt } from '../../shared/types';
 
 // Columnas de usuario con el dinero leído exacto. balance_t (TEXT) es la fuente
 // de verdad del saldo; el alias pisa la columna `balance` INTEGER del `*` (en
@@ -492,18 +493,18 @@ export const updateUserBalance = async (id: string, amount: number | bigint): Pr
 // Aplica un delta al saldo (BigInt, precisión arbitraria) y devuelve el saldo
 // resultante como string decimal. El read-modify-write va bajo mutex por usuario
 // para evitar carreras (no se puede hacer atómico en SQL sobre TEXT). Nunca < 0.
-export const applyBalanceDelta = async (id: string, delta: number | bigint): Promise<string> => {
+export const applyBalanceDelta = async (id: string, delta: number | bigint | string | Money): Promise<string> => {
   return withBalanceLock(id, async () => {
     const row = await dbGet<{ balance: string | null; balance_t: string | null }>(
       'SELECT CAST(balance AS TEXT) AS balance, balance_t FROM users WHERE id = ?', [id]
     );
-    let next = toBig(row?.balance_t ?? row?.balance ?? 0) + toBig(delta);
-    if (next < 0n) next = 0n;
-    const s = next.toString();
+    const current = m(row?.balance_t ?? row?.balance ?? 0);
+    const next = clampNonNeg(current.plus(m(delta as any)));
+    const s = toStr(next);
     await dbRun('UPDATE users SET balance_t = ? WHERE id = ?', [s, id]);
     onBalanceChanged();
-    // Récord histórico (stat de display; tolera la imprecisión de number a gran escala).
-    void maxStat(id, 'max_balance', Number(next));
+    // Récord histórico de saldo máximo (Decimal, precisión exacta a cualquier escala).
+    void maxStatBig(id, 'max_balance', s);
     return s;
   });
 };
@@ -745,6 +746,45 @@ export const maxStat = async (userId: string, stat: string, value: number): Prom
   } catch (err) { console.error(`[stats] max ${stat}:`, err); }
 };
 
+// --- Stats monetarios de precisión arbitraria (value_t TEXT, Decimal) ---
+// Para stats que pueden superar 9.2e18 (límite INTEGER de SQLite): max_balance,
+// totales de premios/apuestas grandes, etc.
+export const maxStatBig = async (userId: string, stat: string, value: string | Money): Promise<void> => {
+  try {
+    const v = toStr(value as any);
+    const row = await dbGet<{ value_t: string | null }>(
+      'SELECT value_t FROM user_stats WHERE user_id = ? AND stat = ?', [userId, stat]
+    );
+    if (!row) {
+      await dbRun('INSERT INTO user_stats (user_id, stat, value, value_t) VALUES (?, ?, 0, ?)', [userId, stat, v]);
+    } else if (row.value_t == null || gt(v, row.value_t)) {
+      await dbRun('UPDATE user_stats SET value_t = ? WHERE user_id = ? AND stat = ?', [v, userId, stat]);
+    }
+  } catch (err) { console.error(`[stats] maxBig ${stat}:`, err); }
+};
+
+export const bumpStatBig = async (userId: string, stat: string, delta: string | Money): Promise<void> => {
+  try {
+    const row = await dbGet<{ value_t: string | null }>(
+      'SELECT value_t FROM user_stats WHERE user_id = ? AND stat = ?', [userId, stat]
+    );
+    const current = row?.value_t ?? '0';
+    const next = toStr(add(current, delta as any));
+    if (!row) {
+      await dbRun('INSERT INTO user_stats (user_id, stat, value, value_t) VALUES (?, ?, 0, ?)', [userId, stat, next]);
+    } else {
+      await dbRun('UPDATE user_stats SET value_t = ? WHERE user_id = ? AND stat = ?', [next, userId, stat]);
+    }
+  } catch (err) { console.error(`[stats] bumpBig ${stat}:`, err); }
+};
+
+export const getStatBig = async (userId: string, stat: string): Promise<string> => {
+  const row = await dbGet<{ value_t: string | null }>(
+    'SELECT value_t FROM user_stats WHERE user_id = ? AND stat = ?', [userId, stat]
+  );
+  return row?.value_t ?? '0';
+};
+
 export const getAllStats = async (userId: string): Promise<Record<string, number>> => {
   const rows = await dbAll<{ stat: string; value: number }>(
     'SELECT stat, value FROM user_stats WHERE user_id = ?',
@@ -848,8 +888,8 @@ export const saveShopCatalog = async (catalog: ShopItem[]): Promise<void> => {
   }
 };
 
-export const addHaciendaTotal = async (amount: bigint | number): Promise<string> => {
-  const amtStr = (typeof amount === 'bigint' ? amount : BigInt(Math.round(amount))).toString();
+export const addHaciendaTotal = async (amount: bigint | number | string | Money): Promise<string> => {
+  const amtStr = toStr(amount as any);
   await dbRun('INSERT OR IGNORE INTO hacienda_state (id, total) VALUES (1, 0)');
   // Bind as string so SQLite keeps INTEGER arithmetic (float binding causes REAL coercion on large values).
   await dbRun('UPDATE hacienda_state SET total = CAST(total AS INTEGER) + CAST(? AS INTEGER) WHERE id = 1', [amtStr]);
@@ -858,13 +898,13 @@ export const addHaciendaTotal = async (amount: bigint | number): Promise<string>
 
 export const payIsrael = async (id: string): Promise<string> => {
   const user = await getUser(id);
-  const debt = toBig(user?.israel_debt ?? 0);
-  if (debt <= 0n) return '0';
+  const debt = m(user?.israel_debt ?? 0);
+  if (debt.lte(0)) return '0';
 
   await dbRun('UPDATE users SET israel_debt = 0, paid_israel = 1 WHERE id = ?', [id]);
-  const balanceBefore = toBig(user?.balance ?? 0);
-  await applyBalanceDelta(id, -debt);
-  return (balanceBefore < debt ? balanceBefore : debt).toString(); // lo que realmente se pudo cobrar
+  const balanceBefore = m(user?.balance ?? 0);
+  await applyBalanceDelta(id, debt.negated());
+  return toStr(balanceBefore.lt(debt) ? balanceBefore : debt); // lo que realmente se pudo cobrar
 }
 
 // --- Shop Helpers ---
@@ -892,9 +932,9 @@ export const setHasArtilugio = async (id: string): Promise<void> => {
   await dbRun('UPDATE users SET has_artilugio = 1 WHERE id = ?', [id]);
 };
 
-export const addIsraelDonation = async (donorId: string, amount: number | bigint): Promise<void> => {
-  const amt = toBig(amount);
-  if (amt <= 0n) return;
+export const addIsraelDonation = async (donorId: string, amount: number | bigint | string | Money): Promise<void> => {
+  const amt = m(amount);
+  if (amt.lte(0)) return;
   // Transferir a la cuenta de Israel (saldo exacto vía applyBalanceDelta).
   const israelUser = await getUserByName('Israel');
   if (israelUser) {
@@ -904,20 +944,21 @@ export const addIsraelDonation = async (donorId: string, amount: number | bigint
     await applyBalanceDelta('israel-id', amt);
   }
   // Descontar del donante.
-  await applyBalanceDelta(donorId, -amt);
+  await applyBalanceDelta(donorId, amt.negated());
 
   // Stats del donante (donación acumulada + pool 1.5×).
-  const poolAddition = (amt * 3n) / 2n;
-  await dbRun('UPDATE users SET israel_donation = israel_donation + ?, israel_pool = israel_pool + ? WHERE id = ?', [amt.toString(), poolAddition.toString(), donorId]);
+  const poolAddition = toStr(amt.times(3).div(2).floor());
+  await dbRun('UPDATE users SET israel_donation = israel_donation + ?, israel_pool = israel_pool + ? WHERE id = ?', [toStr(amt), poolAddition, donorId]);
 };
 
 export const deductIsraelPool = async (id: string, amount: number): Promise<number> => {
   const row = await getUser(id);
-  const pool = toBig(row?.israel_pool ?? 0);
-  if (pool <= 0n) return 0;
-  const deducted = toBig(amount) < pool ? toBig(amount) : pool; // amount (premio) ≤ ~1e14 → cabe en number al devolver
-  await dbRun('UPDATE users SET israel_pool = israel_pool - ? WHERE id = ?', [deducted.toString(), id]);
-  return Number(deducted);
+  const pool = m(row?.israel_pool ?? 0);
+  if (pool.lte(0)) return 0;
+  const amt = m(amount);
+  const deducted = amt.lt(pool) ? amt : pool;
+  await dbRun('UPDATE users SET israel_pool = israel_pool - ? WHERE id = ?', [toStr(deducted), id]);
+  return deducted.toNumber();
 };
 
 export const resetShopPurchases = async (id: string): Promise<void> => {

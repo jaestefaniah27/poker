@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
 import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, getEffectivePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat, dbRun } from '../db';
-import { boostMultiplier, TrackBoosts, toBig, CooldownBoosts, ruletaCooldownMs } from '../../../shared/types';
+import { boostMultiplier, TrackBoosts, CooldownBoosts, ruletaCooldownMs, m, lt, gt, add, sub, toStr } from '../../../shared/types';
 import { spinJackpot, getJackpotState, persistJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
@@ -60,7 +60,7 @@ export const minigameHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
     const dbUser = await getUser(user.id);
-    if (dbUser && toBig(dbUser.israel_debt) > 0n) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la paguita' }); return; }
+    if (dbUser && gt(dbUser.israel_debt, 0)) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la paguita' }); return; }
     const result = await claimDailyBonus(user.id);
     if (!result.ok) { callback({ error: result.error, nextClaimAt: result.nextClaimAt }); return; }
     bumpStat(user.id, 'bonus_claims');
@@ -106,7 +106,7 @@ export const minigameHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
     const dbUser = await getUser(user.id);
-    if (dbUser && toBig(dbUser.israel_debt) > 0n) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la dieta' }); return; }
+    if (dbUser && gt(dbUser.israel_debt, 0)) { callback({ error: 'Debes saldar tu deuda con Israel antes de cobrar la dieta' }); return; }
     const result = await claimHourlyBonus(user.id);
     if (!result.ok) { callback({ error: result.error, nextClaimAt: result.nextClaimAt }); return; }
     bumpStat(user.id, 'bonus_claims');
@@ -121,7 +121,7 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
 
-    if (toBig(dbUser.israel_debt) > 0n) {
+    if (gt(dbUser.israel_debt, 0)) {
       callback({ error: 'Debes saldar tu deuda con Israel antes de tirar la ruleta' });
       return;
     }
@@ -161,7 +161,7 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
 
-    if (toBig(dbUser.israel_debt) > 0n) {
+    if (gt(dbUser.israel_debt, 0)) {
       callback({ error: 'Debes saldar tu deuda con Israel para poder jugar a la Jackpot' });
       return;
     }
@@ -199,7 +199,7 @@ export const minigameHandlers = (socket: Socket) => {
       // No se permite apostar por encima del saldo (saldo ya no puede ser
       // negativo). Releemos el saldo por si un settle previo acaba de acreditar.
       const fresh = await getUser(dbUser.id);
-      if (!fresh || toBig(fresh.balance) < toBig(amount)) { callback({ error: 'Saldo insuficiente' }); return; }
+      if (!fresh || lt(fresh.balance, amount)) { callback({ error: 'Saldo insuficiente' }); return; }
     }
 
     // Solo se castiga si el Admin lo ha marcado manualmente Y ADEMÁS está usando el script
@@ -241,7 +241,7 @@ export const minigameHandlers = (socket: Socket) => {
     }
 
     let israelBonus = 0;
-    if (finalWinAmount > 0 && toBig(dbUser.israel_pool) > 0n) {
+    if (finalWinAmount > 0 && gt(dbUser.israel_pool, 0)) {
       israelBonus = await deductIsraelPool(dbUser.id, finalWinAmount);
       finalWinAmount += israelBonus;
     }
@@ -343,7 +343,7 @@ export const minigameHandlers = (socket: Socket) => {
     }
 
     const cost = JACKPOT_UNLOCK_COSTS[currentLevel];
-    if (toBig(dbUser.balance) < toBig(cost)) {
+    if (lt(dbUser.balance, cost)) {
       callback({ error: 'Saldo insuficiente para desbloquear este nivel' });
       return;
     }
@@ -360,7 +360,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
     const dbUserLocal = await getUser(user.id);
-    if (dbUserLocal && toBig(dbUserLocal.israel_debt) > 0n) {
+    if (dbUserLocal && gt(dbUserLocal.israel_debt, 0)) {
       callback({ error: 'Debes saldar tu deuda con Israel para poder jugar a las Minas' });
       return;
     }
@@ -369,7 +369,7 @@ export const minigameHandlers = (socket: Socket) => {
     const betAmt = Math.floor(Number(bet));
     if (nm < 1 || nm > 24) { callback({ error: 'Minas inválidas (1-24)' }); return; }
     if (betAmt <= 0) { callback({ error: 'Apuesta inválida' }); return; }
-    if (toBig(user.balance) < toBig(betAmt)) { callback({ error: 'Saldo insuficiente' }); return; }
+    if (lt(user.balance, betAmt)) { callback({ error: 'Saldo insuficiente' }); return; }
 
     activeMinesGames.delete(socket.id);
 
@@ -447,7 +447,7 @@ export const minigameHandlers = (socket: Socket) => {
       const dbUser = await getUser(user.id);
       let finalWinnable = winnable;
       let israelBonus = 0;
-      if (dbUser && toBig(dbUser.israel_pool) > 0n) {
+      if (dbUser && gt(dbUser.israel_pool, 0)) {
         israelBonus = await deductIsraelPool(user.id, winnable);
         finalWinnable += israelBonus;
       }
@@ -484,7 +484,7 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     let finalWinAmount = winAmount;
     let israelBonus = 0;
-    if (dbUser && toBig(dbUser.israel_pool) > 0n) {
+    if (dbUser && gt(dbUser.israel_pool, 0)) {
       israelBonus = await deductIsraelPool(user.id, winAmount);
       finalWinAmount += israelBonus;
     }
@@ -534,7 +534,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
     const dbUserLocal = await getUser(user.id);
-    if (dbUserLocal && toBig(dbUserLocal.israel_debt) > 0n) {
+    if (dbUserLocal && gt(dbUserLocal.israel_debt, 0)) {
       callback({ error: 'Debes saldar tu deuda con Israel para poder apostar en la Ruleta' });
       return;
     }
@@ -543,7 +543,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (totalBet <= 0) { callback({ error: 'Apuesta inválida' }); return; }
 
     const dbUser = await getUser(user.id);
-    if (!dbUser || toBig(dbUser.balance) < toBig(totalBet)) { callback({ error: 'Saldo insuficiente' }); return; }
+    if (!dbUser || lt(dbUser.balance, totalBet)) { callback({ error: 'Saldo insuficiente' }); return; }
 
     const timeRemainingMs = rouletteEngine.phaseEndsAt - Date.now();
     if (rouletteEngine.phase !== 'betting' || timeRemainingMs <= 5000) {
@@ -583,7 +583,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
     const dbUserLocal = await getUser(user.id);
-    if (dbUserLocal && toBig(dbUserLocal.israel_debt) > 0n) {
+    if (dbUserLocal && gt(dbUserLocal.israel_debt, 0)) {
       callback({ error: 'Debes saldar tu deuda con Israel' });
       return;
     }
@@ -619,7 +619,7 @@ export const minigameHandlers = (socket: Socket) => {
     const dbUser = await getUser(user.id);
     if (!dbUser) { callback({ error: 'Usuario no encontrado' }); return; }
     if (!dbUser.has_artilugio) { callback({ error: 'No tienes el Artilugio' }); return; }
-    if (toBig(dbUser.israel_debt) > 0n) {
+    if (gt(dbUser.israel_debt, 0)) {
       callback({ error: 'Debes saldar tu deuda con Israel para poder usar el Artilugio' }); return;
     }
 
@@ -630,7 +630,7 @@ export const minigameHandlers = (socket: Socket) => {
 
     // Validar plan + construir spinList EN EL ORDEN dado (sin reordenar)
     const spinList: Array<{ amount: number; paid: boolean }> = [];
-    let totalPaidCost = 0n;
+    let totalPaidCost = m(0);
     // Conteo de gratis pedidas por tier para validar contra el pool
     const freeReq: Record<string, number> = {};
     for (const e of planArr) {
@@ -642,7 +642,7 @@ export const minigameHandlers = (socket: Socket) => {
         const idx = JACKPOT_TIERS.indexOf(tier);
         if (idx === -1 || idx >= unlockLevel) { callback({ error: 'Nivel de apuesta no desbloqueado' }); return; }
         if (count > 100) { callback({ error: 'Cantidad inválida (1–100)' }); return; }
-        totalPaidCost += toBig(tier) * BigInt(count);
+        totalPaidCost = totalPaidCost.plus(m(tier).times(count));
       } else {
         freeReq[String(tier)] = (freeReq[String(tier)] || 0) + count;
         if (freeReq[String(tier)] > (pools[String(tier)] || 0)) {
@@ -655,9 +655,9 @@ export const minigameHandlers = (socket: Socket) => {
     if (spinList.length === 0) { callback({ error: 'No hay tiradas que lanzar' }); return; }
 
     // Saldo no puede ser negativo: exigir saldo >= coste pagadas (releer fresco)
-    if (totalPaidCost > 0n) {
+    if (gt(totalPaidCost, 0)) {
       const fresh = await getUser(dbUser.id);
-      if (!fresh || toBig(fresh.balance) < totalPaidCost) { callback({ error: 'Saldo insuficiente' }); return; }
+      if (!fresh || lt(fresh.balance, totalPaidCost)) { callback({ error: 'Saldo insuficiente' }); return; }
     }
 
     // Descontar las gratis consumidas del pool restante
@@ -670,9 +670,9 @@ export const minigameHandlers = (socket: Socket) => {
     const isBot = dbUser.is_bot === 1 && socket.data.isDynamicBot;
 
     const spins: Array<{ value: number; symbols: string[]; multiplier: number; winAmount: number; finalWinAmount: number; paid: boolean; taxEvent: { type: string; amount: number } }> = [];
-    let totalWin = 0n;            // BigInt: tiers altos desbordan number al acumular
+    let totalWin = m(0);           // Decimal: tiers altos desbordan number al acumular
     let lastState: any = null;
-    let hasIsraelPool = toBig(dbUser.israel_pool) > 0n;
+    let hasIsraelPool = gt(dbUser.israel_pool, 0);
     let totalTax = 0;            // telemetría hacienda (number, tolera imprecisión)
     let totalXp = 0;
     // Acumulamos estadísticas sin tocar DB en el loop
@@ -714,7 +714,7 @@ export const minigameHandlers = (socket: Socket) => {
       }
 
       totalTax += taxAmount;
-      totalWin += BigInt(finalWinAmount);
+      totalWin = totalWin.plus(finalWinAmount);
 
       // Solo registrar en historial si hay premio — evita enterrar wins en N pérdidas
       if (winAmount > 0) await recordJackpotSpin(dbUser.id, amount, symbols as [string, string, string], multiplier, winAmount);
@@ -738,8 +738,8 @@ export const minigameHandlers = (socket: Socket) => {
 
     // Un solo applyBalanceDelta con el neto (premios − coste pagadas) → un solo
     // leaderboardUpdated → sin rate-limit. BigInt para no perder precisión.
-    const netDelta = totalWin - totalPaidCost;
-    if (netDelta !== 0n) await applyBalanceDelta(dbUser.id, netDelta);
+    const netDelta = totalWin.minus(totalPaidCost);
+    if (!netDelta.isZero()) await applyBalanceDelta(dbUser.id, netDelta);
     // globalSpins ya subió N en memoria (1 por tirada) → distancias reales en el
     // historial. Persistimos a DB una sola vez aquí (no por tirada).
     await persistJackpotState();
@@ -747,7 +747,7 @@ export const minigameHandlers = (socket: Socket) => {
 
     // Stats en batch
     if (statSpins > 0) bumpStat(dbUser.id, 'jackpot_spins', statSpins);
-    if (totalPaidCost > 0n) bumpStat(dbUser.id, 'jackpot_total_bet', Number(totalPaidCost));
+    if (gt(totalPaidCost, 0)) bumpStat(dbUser.id, 'jackpot_total_bet', totalPaidCost.toNumber());
     if (statTotalWon > 0) { bumpStat(dbUser.id, 'jackpot_total_won', statTotalWon); maxStat(dbUser.id, 'jackpot_biggest_win', statBiggestWin); }
     if (statTaxPaid > 0) bumpStat(dbUser.id, 'jackpot_tax_paid', statTaxPaid);
     if (statFrauds > 0) bumpStat(dbUser.id, 'jackpot_frauds', statFrauds);
@@ -765,7 +765,7 @@ export const minigameHandlers = (socket: Socket) => {
     await dbRun('UPDATE users SET free_spins_pools = ?, free_spins_left = 0, free_spin_value = 0 WHERE id = ?', [JSON.stringify(remaining), dbUser.id]);
 
     const updatedUser = await getUser(dbUser.id);
-    callback({ ok: true, spins, totalWin: totalWin.toString(), totalPaidCost: totalPaidCost.toString(), newPools: remaining, user: updatedUser ? toPublicUser(updatedUser) : undefined });
+    callback({ ok: true, spins, totalWin: toStr(totalWin), totalPaidCost: toStr(totalPaidCost), newPools: remaining, user: updatedUser ? toPublicUser(updatedUser) : undefined });
   });
 
   // ── Artilugio: conjurar tiradas ────────────────────────────────────────────

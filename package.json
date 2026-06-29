@@ -1,0 +1,26 @@
+{
+  "name": "poker_repo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "extract.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaestefaniah27/poker.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jaestefaniah27/poker/issues"
+  },
+  "homepage": "https://github.com/jaestefaniah27/poker#readme",
+  "dependencies": {
+    "decimal.js": "^10.6.0"
+  }
+}

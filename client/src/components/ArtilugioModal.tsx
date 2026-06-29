@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips } from '../utils';
+import { socket, fmtChips, m } from '../utils';
 import { JACKPOT_TIERS } from '../../../shared/types';
 
 interface SpinResult {
@@ -26,7 +26,7 @@ export default function ArtilugioModal({ pools, token, unlockLevel, balance, onC
   const [tab, setTab] = useState<'serie' | 'conjurar'>('serie');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SpinResult[] | null>(null);
-  const [totalWin, setTotalWin] = useState('0');        // BigInt como string
+  const [totalWin, setTotalWin] = useState('0');        // string decimal (Money)
   const [totalPaidCost, setTotalPaidCost] = useState('0');
   const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set());
   const [conjureMsg, setConjureMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -78,9 +78,9 @@ export default function ArtilugioModal({ pools, token, unlockLevel, balance, onC
 
   const freeSpins = enabledItems.filter(it => !it.paid).reduce((a, it) => a + it.count, 0);
   const paidCount = enabledItems.filter(it => it.paid).reduce((a, it) => a + it.count, 0);
-  const paidCostBig = enabledItems.filter(it => it.paid).reduce((acc, it) => acc + BigInt(it.tier) * BigInt(it.count), 0n);
-  const balanceBig = (() => { try { return BigInt(typeof balance === 'string' ? balance : Math.floor(Number(balance))); } catch { return 0n; } })();
-  const canAfford = paidCostBig <= balanceBig;
+  const paidCostBig = enabledItems.filter(it => it.paid).reduce((acc, it) => acc.plus(m(it.tier).times(it.count)), m(0));
+  const balanceBig = m(balance ?? 0);
+  const canAfford = paidCostBig.lte(balanceBig);
   const totalToLaunch = freeSpins + paidCount;
 
   const addPaidBet = () => {
@@ -251,7 +251,7 @@ export default function ArtilugioModal({ pools, token, unlockLevel, balance, onC
                                 : isConjured(String(it.tier)) && <span className="ml-1 text-[10px] text-purple-400">conjurada</span>}
                             </span>
                             <div className="flex items-center gap-2 shrink-0">
-                              {it.paid && <span className="text-xs text-gray-400">{fmtChips(BigInt(it.tier) * BigInt(it.count))}</span>}
+                              {it.paid && <span className="text-xs text-gray-400">{fmtChips(m(it.tier).times(it.count).toFixed(0))}</span>}
                               {!it.paid && <span className="text-[10px] text-emerald-400/80 font-bold uppercase">gratis</span>}
                               {it.paid && <button onClick={() => removePaidBet(it.tier)} className="text-red-400/70 hover:text-red-400 text-sm">✕</button>}
                             </div>
@@ -266,7 +266,7 @@ export default function ArtilugioModal({ pools, token, unlockLevel, balance, onC
                 {paidCount > 0 && (
                   <div className={`flex justify-between items-center rounded-xl px-4 py-2 mb-3 text-sm ${canAfford ? 'bg-white/5' : 'bg-red-950/40 border border-red-500/30'}`}>
                     <span className="text-gray-400">Coste apuestas</span>
-                    <span className={`font-bold ${canAfford ? 'text-white' : 'text-red-400'}`}>{fmtChips(paidCostBig)}</span>
+                    <span className={`font-bold ${canAfford ? 'text-white' : 'text-red-400'}`}>{fmtChips(paidCostBig.toFixed(0))}</span>
                   </div>
                 )}
                 {paidCount > 0 && !canAfford && (
@@ -295,17 +295,17 @@ export default function ArtilugioModal({ pools, token, unlockLevel, balance, onC
               const best = results.reduce((a, r) => r.finalWinAmount > a.finalWinAmount ? r : a, results[0]);
               const numTax = results.filter(r => r.taxEvent.type === 'tax').length;
               const numFraud = results.filter(r => r.taxEvent.type === 'fraud').length;
-              const winBig = (() => { try { return BigInt(totalWin || '0'); } catch { return 0n; } })();
-              const costBig = (() => { try { return BigInt(totalPaidCost || '0'); } catch { return 0n; } })();
-              const net = winBig - costBig;  // las gratis no cuestan; solo restamos las pagadas
+              const winBig = m(totalWin || '0');
+              const costBig = m(totalPaidCost || '0');
+              const net = winBig.minus(costBig);  // las gratis no cuestan; solo restamos las pagadas
               return (
               <motion.div key="results" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                 {/* Total arriba del todo */}
-                <div className={`rounded-2xl p-5 text-center mb-3 ${winBig > 0n ? 'bg-emerald-900/30 border border-emerald-500/30' : 'bg-white/5'}`}>
+                <div className={`rounded-2xl p-5 text-center mb-3 ${winBig.gt(0) ? 'bg-emerald-900/30 border border-emerald-500/30' : 'bg-white/5'}`}>
                   <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Ganancia total</p>
-                  <p className={`text-3xl font-extrabold ${winBig > 0n ? 'text-emerald-300' : 'text-gray-500'}`}>{winBig > 0n ? `+${fmtChips(winBig)}` : '—'}</p>
-                  <p className={`text-xs font-semibold mt-1 ${net >= 0n ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
-                    Neto: {net >= 0n ? '+' : ''}{fmtChips(net)}
+                  <p className={`text-3xl font-extrabold ${winBig.gt(0) ? 'text-emerald-300' : 'text-gray-500'}`}>{winBig.gt(0) ? `+${fmtChips(winBig.toFixed(0))}` : '—'}</p>
+                  <p className={`text-xs font-semibold mt-1 ${net.gte(0) ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+                    Neto: {net.gte(0) ? '+' : ''}{fmtChips(net.toFixed(0))}
                   </p>
                 </div>
 
@@ -314,7 +314,7 @@ export default function ArtilugioModal({ pools, token, unlockLevel, balance, onC
                   <div className="bg-white/5 rounded-xl px-3 py-2 flex justify-between"><span className="text-gray-500">Tiradas</span><span className="font-bold text-white">{numSpins}</span></div>
                   <div className="bg-white/5 rounded-xl px-3 py-2 flex justify-between"><span className="text-gray-500">Premiadas</span><span className="font-bold text-emerald-400">{numWins}</span></div>
                   <div className="bg-white/5 rounded-xl px-3 py-2 flex justify-between"><span className="text-gray-500">Mejor</span><span className="font-bold text-amber-300">{best.finalWinAmount > 0 ? `x${best.multiplier}` : '—'}</span></div>
-                  <div className="bg-white/5 rounded-xl px-3 py-2 flex justify-between"><span className="text-gray-500">Apostado</span><span className="font-bold text-gray-300">{fmtChips(costBig)}</span></div>
+                  <div className="bg-white/5 rounded-xl px-3 py-2 flex justify-between"><span className="text-gray-500">Apostado</span><span className="font-bold text-gray-300">{fmtChips(costBig.toFixed(0))}</span></div>
                   {(numTax > 0 || numFraud > 0) && (
                     <div className="col-span-2 bg-red-950/30 border border-red-500/20 rounded-xl px-3 py-2 flex justify-between text-xs">
                       <span className="text-red-400/80">Hacienda</span>

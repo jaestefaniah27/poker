@@ -4,7 +4,7 @@ import { getRooms, createRoom, getRoom, joinRoom, leaveRoom } from '../roomManag
 import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR } from '../pokerEngine';
 import { authUser, broadcastRoom, armTurnTimer, clearTurnTimer, io } from '../socketHelpers';
 import { applyBalanceDelta, getUser, toPublicUser } from '../db';
-import { levelFromXp, toBig } from '../../../shared/types';
+import { levelFromXp, m, gt, lte, sub, toStr, toNum } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { maybeStartBlackjack, handleBlackjackLeave, clearBlackjackTimers } from './blackjackHandlers';
 
@@ -44,19 +44,20 @@ export const roomHandlers = (socket: Socket) => {
           : room.buyIn);
 
     // Para evitar problemas de redondeo con números gigantes, si pidió ALL u over-requested por rounding:
-    let finalBuyIn = toBig(buyIn);
+    let finalBuyIn = m(buyIn);
+    const bal = m(dbUser.balance);
     const isReconnect = room.players.some(p => p.userId === dbUser.id && p.isActive);
-    if (!isReconnect && finalBuyIn > toBig(dbUser.balance)) {
-      if (finalBuyIn <= toBig(dbUser.balance) + toBig(dbUser.balance)/1000n) {
-        finalBuyIn = toBig(dbUser.balance);
+    if (!isReconnect && gt(finalBuyIn, bal)) {
+      if (lte(finalBuyIn, bal.plus(bal.div(1000)))) {
+        finalBuyIn = bal;
       } else {
         socket.emit('error', 'Saldo insuficiente para entrar a esta mesa.');
         return;
       }
     }
 
-    const offTableBalance = (toBig(dbUser.balance) - finalBuyIn).toString();
-    const finalBuyInNum = Number(finalBuyIn);
+    const offTableBalance = toStr(sub(bal, finalBuyIn));
+    const finalBuyInNum = toNum(finalBuyIn);
 
     const result = joinRoom(roomId, {
       id: socket.id,

@@ -6,7 +6,7 @@ import JackpotModal from './JackpotModal';
 import SlotIcon from './SlotIcon';
 import { AnimatePresence, motion } from 'framer-motion';
 import Slider from './Slider';
-import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage, playCheckSound, toBig } from '../utils';
+import { socket, STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, BLIND_LABELS, blindsFor, fmtChips, getStorage, playCheckSound, m, gt } from '../utils';
 import { sfx, isMuted, toggleMute } from '../sounds';
 import { BLIND_LEVEL_DURATIONS, dailyAmountFor, hourlyAmountFor, boostMultiplier, paguitaCooldownMs, dietaCooldownMs, ruletaCooldownMs, type PublicUser } from '../../../shared/types';
 import { WheelModal } from './WheelModal';
@@ -93,10 +93,10 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [buyInTierIndex, setBuyInTierIndex] = useState(1); // default 5000
 
   // Calculate max tier available for the user
-  const userBalBig = toBig(user.balance);
+  const userBalBig = m(user.balance);
   let maxTierIdx = 0;
   for (let i = STAKE_TIERS.length - 1; i >= 0; i--) {
-    if (toBig(STAKE_TIERS[i]) <= userBalBig) {
+    if (m(STAKE_TIERS[i]).lte(userBalBig)) {
       maxTierIdx = i;
       break;
     }
@@ -146,7 +146,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     const prev = prevBalanceRef.current;
     prevBalanceRef.current = user.balance;
     if (user.balance === prev) return;
-    setBalanceFlash(toBig(user.balance) > toBig(prev) ? 'up' : 'down');
+    setBalanceFlash(gt(user.balance, prev) ? 'up' : 'down');
     const t = setTimeout(() => setBalanceFlash(null), 900);
     return () => clearTimeout(t);
   }, [user.balance]);
@@ -432,8 +432,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 <span className="text-xs text-gray-400 font-medium relative flex items-center gap-1">
                   <DecoratedName name={user.name} decorationId={user.equippedNameDecoration} andorra={user.movedToAndorra} />
                 </span>
-                <span className={`font-mono text-sm inline-block ${toBig(user.balance) < 0n ? 'text-red-400' : 'text-emerald-400'} ${balanceFlash === 'up' ? 'balance-flash-up' : balanceFlash === 'down' ? 'balance-flash-down' : ''}`}>
-                  {toBig(user.balance) < 0n ? `-$${fmtChips(-toBig(user.balance))}` : `$${fmtChips(toBig(user.balance))}`}
+                <span className={`font-mono text-sm inline-block ${'text-emerald-400'} ${balanceFlash === 'up' ? 'balance-flash-up' : balanceFlash === 'down' ? 'balance-flash-down' : ''}`}>
+                  {`$${fmtChips(user.balance)}`}
                 </span>
               </div>
               <button onClick={() => setShowProfile(true)} title="Mi perfil" className="rounded-full transition-all relative ring-2 ring-transparent hover:ring-gray-500">
@@ -992,7 +992,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 </button>
               </div>
               
-              {createIsProportional && toBig(user.balance) > 0n && (
+              {createIsProportional && gt(user.balance, 0) && (
                 <button onClick={() => confirmCreateRoom('ALL')} className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform mt-2">
                   💰 Todo mi saldo — {fmtChips(user.balance)}
                 </button>
@@ -1037,7 +1037,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
                 <button onClick={() => setBuyInRoom(null)} className="flex-1 bg-background border border-gray-700 text-gray-300 py-3 rounded-xl font-semibold text-sm active:scale-95 transition-transform">Cancelar</button>
                 <button onClick={() => confirmBuyIn()} className={`flex-1 ${buyInRoom.isProportional ? 'bg-purple-500 text-white' : 'bg-sky-500 text-black'} py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform`}>Entrar con {fmtChips(amount)}</button>
               </div>
-              {toBig(user.balance) > 0n && (
+              {gt(user.balance, 0) && (
                 <button onClick={() => confirmBuyIn('ALL')} className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-transform">
                   💰 Todo mi saldo — {fmtChips(user.balance)}
                 </button>

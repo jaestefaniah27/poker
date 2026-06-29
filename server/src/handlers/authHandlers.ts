@@ -33,7 +33,7 @@ import {
 } from '../db';
 import { issueToken, authUser, broadcastPresence, kickOtherSessions, io } from '../socketHelpers';
 import { getShopCatalog, saveShopCatalog } from '../db';
-import { levelFromXp, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount, toBig, CooldownTrack, COOLDOWN_BOOST_MAX, COOLDOWN_BOOST_CHIP_COSTS, COOLDOWN_BOOST_LP_COST, CooldownBoosts, availableLevelPoints } from '../../../shared/types';
+import { levelFromXp, PAGUITA_MAX_LEVEL, DIETA_MAX_LEVEL, RULETA_MAX_LEVEL, TRIVIA_MAX_LEVEL, TRACK_BOOST_MAX, boostCost, TrackBoosts, LevelTrack, trackBoostCount, m, lt, gt, add, toStr, CooldownTrack, COOLDOWN_BOOST_MAX, COOLDOWN_BOOST_CHIP_COSTS, COOLDOWN_BOOST_LP_COST, CooldownBoosts, availableLevelPoints } from '../../../shared/types';
 import { sanitizeInput } from '../security';
 import { findActiveRoomForUser, chipsInPlayFor } from '../roomManager';
 
@@ -187,7 +187,7 @@ export const authHandlers = (socket: Socket) => {
       if (isUnlocked) { callback({ error: 'Ya tienes este item' }); return; }
     }
 
-    if (toBig(dbUser.balance) < toBig(item.price)) {
+    if (lt(dbUser.balance, item.price)) {
       callback({ error: 'Saldo insuficiente' }); return;
     }
 
@@ -270,12 +270,12 @@ export const authHandlers = (socket: Socket) => {
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
     const dbUserBefore = await getUser(user.id);
-    const debt = toBig(dbUserBefore?.israel_debt ?? 0);
+    const debt = m(dbUserBefore?.israel_debt ?? 0);
 
     await payIsrael(user.id);
 
     const israelUser = await getUserByName('Israel');
-    if (israelUser && debt > 0n) {
+    if (israelUser && gt(debt, 0)) {
       await applyBalanceDelta(israelUser.id, debt);
       
       const { notifyUser } = require('../socketHelpers');
@@ -506,7 +506,7 @@ export const authHandlers = (socket: Socket) => {
       .map(u => {
         const pub = toPublicUser(u!);
         // Patrimonio real: saldo fuera de mesa + fichas en juego (si está sentado all-in, su saldo de BD es 0).
-        return { ...pub, balance: (toBig(pub.balance) + BigInt(chipsInPlayFor(u!.id))).toString() };
+        return { ...pub, balance: toStr(add(pub.balance, chipsInPlayFor(u!.id))) };
       });
     callback({ ok: true, players });
   });
@@ -515,13 +515,13 @@ export const authHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
     
-    const amt = toBig(amount);
-    if (amt <= 0n) {
+    const amt = m(amount);
+    if (amt.lte(0)) {
       callback({ error: 'Cantidad inválida' }); return;
     }
 
     const dbUser = await getUser(user.id);
-    if (!dbUser || toBig(dbUser.balance) < amt) {
+    if (!dbUser || lt(dbUser.balance, amt)) {
       callback({ error: 'Saldo insuficiente' }); return;
     }
     
@@ -534,23 +534,23 @@ export const authHandlers = (socket: Socket) => {
       callback({ error: 'No puedes regalarte a ti mismo' }); return;
     }
     
-    await applyBalanceDelta(user.id, -amt);
+    await applyBalanceDelta(user.id, amt.negated());
 
-    const tax = (amt * 20n) / 100n;
-    const finalAmount = amt - tax;
+    const tax = amt.times(20).div(100).floor();
+    const finalAmount = amt.minus(tax);
     await applyBalanceDelta(target.id, finalAmount);
-    bumpStat(user.id, 'gifts_sent', Number(amt));
-    bumpStat(target.id, 'gifts_received', Number(finalAmount));
+    bumpStat(user.id, 'gifts_sent', amt.toNumber());
+    bumpStat(target.id, 'gifts_received', finalAmount.toNumber());
 
-    if (tax > 0n) {
+    if (tax.gt(0)) {
       const newTotal = await addHaciendaTotal(tax);
       const { io } = require('../socketHelpers');
       if (io) io.emit('haciendaUpdated', { total: newTotal });
     }
     
     let extraXp = 0;
-    if (amt >= 1_000_000n) {
-      extraXp = Math.floor(Math.log10(Number(amt) / 1_000_000 + 1) * 500);
+    if (amt.gte(1_000_000)) {
+      extraXp = Math.floor(Math.log10(amt.toNumber() / 1_000_000 + 1) * 500);
     }
     const xpReward = Math.min(500, 100 + extraXp);
     await addXp(user.id, xpReward);
@@ -576,11 +576,11 @@ export const authHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user) { callback({ error: 'No autenticado' }); return; }
 
-    const amt = toBig(amount);
-    if (amt <= 0n) { callback({ error: 'Cantidad inválida' }); return; }
+    const amt = m(amount);
+    if (amt.lte(0)) { callback({ error: 'Cantidad inválida' }); return; }
 
     const dbDonor = await getUser(user.id);
-    if (!dbDonor || toBig(dbDonor.balance) < amt) { callback({ error: 'Saldo insuficiente' }); return; }
+    if (!dbDonor || lt(dbDonor.balance, amt)) { callback({ error: 'Saldo insuficiente' }); return; }
 
     await addIsraelDonation(user.id, amt);
 
@@ -612,7 +612,7 @@ export const authHandlers = (socket: Socket) => {
     if (currentCount >= maxBoosts) { callback({ error: 'Ya tienes el máximo de mejoras para este track' }); return; }
 
     const cost = boostCost(t, currentCount);
-    if (toBig(dbUser.balance) < toBig(cost)) { callback({ error: 'Saldo insuficiente' }); return; }
+    if (lt(dbUser.balance, cost)) { callback({ error: 'Saldo insuficiente' }); return; }
 
     await applyBalanceDelta(user.id, -cost);
     const newBoosts: TrackBoosts = { ...boosts, [t]: currentCount + 1 };
@@ -651,7 +651,7 @@ export const authHandlers = (socket: Socket) => {
     if (currentCount >= COOLDOWN_BOOST_MAX) { callback({ error: 'Ya tienes el máximo de reducciones de tiempo para este track' }); return; }
 
     const costChips = COOLDOWN_BOOST_CHIP_COSTS[currentCount];
-    if (toBig(dbUser.balance) < toBig(costChips)) { callback({ error: 'Saldo insuficiente' }); return; }
+    if (lt(dbUser.balance, costChips)) { callback({ error: 'Saldo insuficiente' }); return; }
 
     await applyBalanceDelta(user.id, -costChips);
     const newBoosts: CooldownBoosts = { ...cooldownBoosts, [t]: currentCount + 1 };

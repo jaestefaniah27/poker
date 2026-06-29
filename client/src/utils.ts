@@ -1,7 +1,9 @@
 import { io, Socket } from 'socket.io-client';
-import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor, toBig } from '../../shared/types';
+import { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor, toBig, fmt, m, add, sub, mul, div, gte, gt, lte, lt, eq, isZero, isNeg, maxM, minM, clampNonNeg, addClampedM, toStr, toNum } from '../../shared/types';
+import type { Money, Decimal } from '../../shared/types';
 
-export { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor, toBig };
+export { STAKE_TIERS, BLIND_DIVISORS, DEFAULT_BLIND_DIVISOR, blindsFor, toBig, fmt, m, add, sub, mul, div, gte, gt, lte, lt, eq, isZero, isNeg, maxM, minM, clampNonNeg, addClampedM, toStr, toNum };
+export type { Money, Decimal };
 
 const socketPath = import.meta.env.VITE_SOCKET_PATH || '/socket.io';
 
@@ -21,29 +23,9 @@ export const getStorage = (): Storage => {
 
 export const BLIND_LABELS: Record<number, string> = { 20: 'Profunda', 10: 'Normal', 5: 'Rápida', 4: 'Express' };
 
-// Escala de unidades (de mayor a menor). Se formatea con BigInt para ser EXACTO
-// a cualquier tamaño (los saldos pueden superar 2^53, donde el number falla).
-const UNIT_TIERS: [bigint, string][] = [
-  [10n ** 30n, 'No'], [10n ** 27n, 'Oc'], [10n ** 24n, 'Sp'], [10n ** 21n, 'Sx'], [10n ** 18n, 'Qi'],
-  [10n ** 15n, 'Q'], [10n ** 12n, 'T'], [10n ** 9n, 'B'], [10n ** 6n, 'M'], [10n ** 3n, 'k'],
-];
-
-export const fmtChips = (input: number | string | bigint | null | undefined): string => {
-  if (input == null) return '0';
-  const v = toBig(input);
-  const neg = v < 0n;
-  const abs = neg ? -v : v;
-  for (const [tier, suf] of UNIT_TIERS) {
-    if (abs >= tier) {
-      const whole = abs / tier;
-      // 2 decimales truncados, sin ceros sobrantes.
-      const frac = ((abs % tier) * 100n) / tier;
-      const fracStr = frac > 0n ? '.' + frac.toString().padStart(2, '0').replace(/0+$/, '') : '';
-      return (neg ? '-' : '') + whole.toString() + fracStr + suf;
-    }
-  }
-  return v.toString();
-};
+// Formato de fichas: delega en fmt() de money.ts (Decimal, precisión uniforme).
+export const fmtChips = (input: number | string | bigint | null | undefined): string =>
+  fmt(input == null ? '0' : String(input));
 
 // Formatea milisegundos como duración legible: "3d 5h", "2h 14m", "8m".
 export const fmtDuration = (ms: number): string => {
