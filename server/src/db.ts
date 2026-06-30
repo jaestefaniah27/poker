@@ -267,6 +267,44 @@ const MIGRATIONS = [
       claimed_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, achievement_id)
     )`
+  },
+  // Baseline de logros: snapshot ÚNICO tomado en el momento de este deploy para que
+  // los jugadores veteranos no reciban de golpe los logros de actividad acumulada
+  // (manos jugadas, tiradas, etc.) ni los de "mayor premio en una mano". Solo
+  // max_balance queda fuera de este sistema (es un récord histórico legítimo).
+  {
+    name: '064_achievement_baselines',
+    sql: `CREATE TABLE IF NOT EXISTS user_achievement_baselines (
+      user_id TEXT NOT NULL,
+      stat_key TEXT NOT NULL,
+      baseline_value TEXT NOT NULL DEFAULT '0',
+      PRIMARY KEY (user_id, stat_key)
+    )`
+  },
+  {
+    name: '065_achievement_baselines_backfill',
+    // Se ejecuta UNA sola vez (las migraciones no se re-corren). Copia el valor actual
+    // de cada stat relevante (de user_stats y poker_stats) como baseline de cada usuario
+    // existente en este momento. Usuarios creados después de este deploy no tienen fila
+    // -> su baseline es 0 (lógica en código), que es justo lo que queremos.
+    sql: `
+      INSERT OR IGNORE INTO user_achievement_baselines (user_id, stat_key, baseline_value)
+      SELECT user_id, stat, COALESCE(value_t, CAST(value AS TEXT), '0') FROM user_stats
+      WHERE stat != 'max_balance'
+    `
+  },
+  {
+    name: '066_achievement_baselines_backfill_poker',
+    // hands_played/hands_won/biggest_pot de jugadores que jugaron poker ANTES de que se
+    // empezara a duplicar en user_stats (ver roomManager.ts) viven solo en poker_stats.
+    sql: `
+      INSERT OR IGNORE INTO user_achievement_baselines (user_id, stat_key, baseline_value)
+      SELECT user_id, 'hands_played', CAST(hands_played AS TEXT) FROM poker_stats
+      UNION ALL
+      SELECT user_id, 'hands_won', CAST(hands_won AS TEXT) FROM poker_stats
+      UNION ALL
+      SELECT user_id, 'biggest_pot', CAST(biggest_pot AS TEXT) FROM poker_stats
+    `
   }
 ];
 
@@ -379,7 +417,7 @@ export interface UserRow {
   has_artilugio?: number;
 }
 
-import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, CooldownBoosts, paguitaCooldownMs, dietaCooldownMs, Money, m, add, sub, toStr, clampNonNeg, gte, gt } from '../../shared/types';
+import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, CooldownBoosts, paguitaCooldownMs, dietaCooldownMs, Money, m, add, sub, toStr, clampNonNeg, gte, gt, isNeg } from '../../shared/types';
 
 // Columnas de usuario con el dinero leído exacto. balance_t (TEXT) es la fuente
 // de verdad del saldo; el alias pisa la columna `balance` INTEGER del `*` (en
@@ -1083,14 +1121,35 @@ export interface AchievementView {
   rewardXp: number;
 }
 
+const ACHIEVEMENT_BIG_STAT_KEYS = new Set(['max_balance', 'biggest_pot', 'bj_biggest_win', 'roulette_biggest_win', 'jackpot_biggest_win', 'mines_biggest_win']);
+// max_balance es un récord histórico legítimo: NO se le resta baseline (cuenta desde siempre).
+// Todo lo demás (actividad acumulada y récords de premio en una jugada) cuenta desde el
+// snapshot tomado en el deploy de este fix, para que los veteranos no reciban logros de golpe.
+const ACHIEVEMENT_NO_BASELINE_STATS = new Set(['max_balance']);
+
+const getAchievementBaseline = async (userId: string, statKey: string): Promise<string> => {
+  if (ACHIEVEMENT_NO_BASELINE_STATS.has(statKey)) return '0';
+  const row = await dbGet<{ baseline_value: string }>(
+    'SELECT baseline_value FROM user_achievement_baselines WHERE user_id = ? AND stat_key = ?',
+    [userId, statKey]
+  );
+  return row?.baseline_value ?? '0'; // usuarios nuevos (sin fila) -> baseline 0
+};
+
+// Valor "efectivo" de un stat para logros: stat_actual - baseline (clamp a 0), salvo
+// max_balance que se devuelve crudo.
+const getEffectiveAchievementStat = async (userId: string, statKey: string, statsCache: Record<string, number>): Promise<string> => {
+  const raw = ACHIEVEMENT_BIG_STAT_KEYS.has(statKey) ? await getStatBig(userId, statKey) : String(statsCache[statKey] ?? 0);
+  const baseline = await getAchievementBaseline(userId, statKey);
+  const effective = sub(raw, baseline);
+  return isNeg(effective) ? '0' : toStr(effective);
+};
+
 // Devuelve, por cada cadena, solo el tier actual (primero no reclamado).
 export const getAchievementsView = async (userId: string): Promise<AchievementView[]> => {
   const claimedRows = await dbAll<{ achievement_id: string }>('SELECT achievement_id FROM user_achievement_claims WHERE user_id = ?', [userId]);
   const claimedSet = new Set(claimedRows.map(r => r.achievement_id));
   const stats = await getAllStats(userId);
-  const statsBig: Record<string, string> = {};
-  // Para stats que pueden ser grandes (max_balance, *_biggest_win), usar getStatBig si hace falta.
-  const bigStatKeys = new Set(['max_balance', 'biggest_pot', 'bj_biggest_win', 'roulette_biggest_win', 'jackpot_biggest_win', 'mines_biggest_win']);
 
   const byChain = new Map<string, typeof ACHIEVEMENTS_CATALOG>();
   for (const a of ACHIEVEMENTS_CATALOG) {
@@ -1108,12 +1167,12 @@ export const getAchievementsView = async (userId: string): Promise<AchievementVi
       : [sorted[firstUnclaimedIdx]]; // solo el tier actual
 
     for (const a of visible) {
-      const rawStat = bigStatKeys.has(a.statKey) ? await getStatBig(userId, a.statKey) : String(stats[a.statKey] ?? 0);
-      const progress = gte(rawStat, a.requirement) ? a.requirement : rawStat;
+      const effectiveStat = await getEffectiveAchievementStat(userId, a.statKey, stats);
+      const progress = gte(effectiveStat, a.requirement) ? a.requirement : effectiveStat;
       out.push({
         id: a.id, chainId: a.chainId, tier: a.tier, game: a.game, emoji: a.emoji, label: a.label,
         requirement: a.requirement, progress,
-        completed: gte(rawStat, a.requirement),
+        completed: gte(effectiveStat, a.requirement),
         claimed: claimedSet.has(a.id),
         rewardChips: a.rewardChips, rewardXp: a.rewardXp,
       });
@@ -1122,7 +1181,7 @@ export const getAchievementsView = async (userId: string): Promise<AchievementVi
   return out;
 };
 
-// Reclama un logro. Server-authoritative: revalida el stat real contra el requisito.
+// Reclama un logro. Server-authoritative: revalida el stat efectivo (tras baseline) contra el requisito.
 export const claimAchievement = async (userId: string, achievementId: string): Promise<{ ok: boolean; error?: string; rewardChips?: string; rewardXp?: number }> => {
   const def = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
   if (!def) return { ok: false, error: 'Logro no encontrado' };
@@ -1130,10 +1189,9 @@ export const claimAchievement = async (userId: string, achievementId: string): P
   const already = await dbGet('SELECT 1 FROM user_achievement_claims WHERE user_id = ? AND achievement_id = ?', [userId, achievementId]);
   if (already) return { ok: false, error: 'Ya reclamado' };
 
-  const bigStatKeys = new Set(['max_balance', 'biggest_pot', 'bj_biggest_win', 'roulette_biggest_win', 'jackpot_biggest_win', 'mines_biggest_win']);
   const stats = await getAllStats(userId);
-  const rawStat = bigStatKeys.has(def.statKey) ? await getStatBig(userId, def.statKey) : String(stats[def.statKey] ?? 0);
-  if (!gte(rawStat, def.requirement)) return { ok: false, error: 'Requisito no alcanzado' };
+  const effectiveStat = await getEffectiveAchievementStat(userId, def.statKey, stats);
+  if (!gte(effectiveStat, def.requirement)) return { ok: false, error: 'Requisito no alcanzado' };
 
   await dbRun('INSERT INTO user_achievement_claims (user_id, achievement_id, claimed_at) VALUES (?, ?, ?)', [userId, achievementId, Date.now()]);
   await applyBalanceDelta(userId, def.rewardChips);
