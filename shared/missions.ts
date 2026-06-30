@@ -216,19 +216,26 @@ const BP_ORO: Breakpoints     = { 0: '500000', 10: '500000000000000000', 30: '10
 // Interpolación geométrica (log-lineal) con Decimal, evaluada en `level`.
 // Para level fuera de rango por encima, extrapola con el ratio/nivel del último tramo
 // (mantiene el track "virtualmente infinito" sin un tope explícito).
+// exp(ln(x)) introduce error de redondeo de punto flotante (p.ej. 5e19 -> 49999...999).
+// Para niveles que coinciden EXACTAMENTE con un breakpoint conocido, devolvemos el valor
+// literal del breakpoint en vez de recalcularlo via log/exp. Para los demás (interpolados
+// o extrapolados), redondeamos al entero más cercano en vez de truncar hacia abajo, ya que
+// el truncamiento amplifica el error de log/exp en la dirección equivocada.
 const interpGeo = (bp: Breakpoints, level: number): Money => {
   const keys = Object.keys(bp).map(Number).sort((a, b) => a - b);
   const first = keys[0], last = keys[keys.length - 1];
   if (level <= first) return m(bp[first]);
+  if (bp[level] !== undefined) return m(bp[level]);
 
   const logOf = (s: string): Decimal => Decimal.ln(m(s));
+  const roundLogResult = (logResult: Decimal): Money => Decimal.exp(logResult).toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
 
   if (level >= last) {
     const k0 = keys[keys.length - 2], k1 = last;
     const v0 = logOf(bp[k0]), v1 = logOf(bp[k1]);
     const ratioPerLevel = v1.minus(v0).div(k1 - k0);
     const logResult = v1.plus(ratioPerLevel.times(level - k1));
-    return Decimal.exp(logResult).floor();
+    return roundLogResult(logResult);
   }
 
   for (let i = 0; i < keys.length - 1; i++) {
@@ -239,7 +246,7 @@ const interpGeo = (bp: Breakpoints, level: number): Money => {
       const v0 = logOf(bp[k0]), v1 = logOf(bp[k1]);
       const frac = (level - k0) / (k1 - k0);
       const logResult = v0.plus(v1.minus(v0).times(frac));
-      return Decimal.exp(logResult).floor();
+      return roundLogResult(logResult);
     }
   }
   return m(bp[last]);
