@@ -1,4 +1,5 @@
 import { Card, Player, Room, SidebetType, BjSidebetResult, Suit } from '../../shared/types';
+import { m, add, sub, mul, gt, gte, toStr, type Money } from '../../shared/money';
 import { createDeck, shuffleDeck } from './pokerEngine';
 
 export { createDeck, shuffleDeck };
@@ -86,10 +87,10 @@ const isRed = (s: Suit) => s === 'h' || s === 'd';
 const llMult = (a: Card, b: Card, dealerBJ: boolean): Win => {
   if (cardValue(a.rank) + cardValue(b.rank) !== 20) return null;
   const isLL = a.rank === 'Q' && a.suit === 'h' && b.rank === 'Q' && b.suit === 'h';
-  
+
   if (isLL && dealerBJ) return { mult: 1000, label: 'Lucky Ladies + Dealer BJ' };
   if (isLL) return { mult: 200, label: 'Lucky Ladies' };
-  
+
   const sameRank = a.rank === b.rank;
   const sameSuit = a.suit === b.suit;
   const sameColor = isRed(a.suit) === isRed(b.suit);
@@ -105,35 +106,35 @@ const llMult = (a: Card, b: Card, dealerBJ: boolean): Win => {
 // dealerCards[0]=up-card (descubierta), dealerCards[1]=hole (tapada).
 export const evaluateSidebets = (
   player: Player, dealerCards: Card[]
-): { results: BjSidebetResult[]; delta: number } => {
+): { results: BjSidebetResult[]; delta: string } => {
   const sb = player.bjSidebets;
   const results: BjSidebetResult[] = [];
   if (!sb || !player.cards || player.cards.length < 2 || !dealerCards || dealerCards.length < 2) {
-    return { results, delta: 0 };
+    return { results, delta: '0' };
   }
   const [a, b] = player.cards;
   const up = dealerCards[0]; // [up, hole]: descubierta en índice 0
   const dealerBJ = isBlackjack(dealerCards);
-  let delta = 0;
+  let delta: Money = m(0);
 
-  const add = (type: SidebetType, bet: number, win: Win, loseLabel: string) => {
-    if (!bet || bet <= 0) return;
+  const addSb = (type: SidebetType, betRaw: string | undefined, win: Win, loseLabel: string) => {
+    const bet = m(betRaw ?? 0);
+    if (bet.lte(0)) return;
     if (win) {
-      const d = win.mult * bet;
-      results.push({ type, bet, delta: d, won: true, label: win.label });
-      delta += d;
+      const d = mul(bet, win.mult);
+      results.push({ type, bet: toStr(bet), delta: toStr(d), won: true, label: win.label });
+      delta = add(delta, d);
     } else {
-      results.push({ type, bet, delta: -bet, won: false, label: loseLabel });
-      delta -= bet;
+      results.push({ type, bet: toStr(bet), delta: toStr(bet.negated()), won: false, label: loseLabel });
+      delta = sub(delta, bet);
     }
   };
 
-  add('perfectPairs', sb.perfectPairs || 0, ppMult(a, b), 'Sin pareja');
-  add('twentyOneThree', sb.twentyOneThree || 0, tp3Mult(a, b, up), 'Sin mano');
-  add('luckyLadies', sb.luckyLadies || 0, llMult(a, b, dealerBJ), 'Sin 20');
+  addSb('perfectPairs', sb.perfectPairs, ppMult(a, b), 'Sin pareja');
+  addSb('twentyOneThree', sb.twentyOneThree, tp3Mult(a, b, up), 'Sin mano');
+  addSb('luckyLadies', sb.luckyLadies, llMult(a, b, dealerBJ), 'Sin 20');
 
-
-  return { results, delta };
+  return { results, delta: toStr(delta) };
 };
 
 export const needsReshuffle = (room: Room, minCards: number): boolean =>
@@ -147,13 +148,16 @@ const ensureDeck = (room: Room, minCards: number) => {
   if (needsReshuffle(room, minCards)) initShoe(room);
 };
 
+// Apuesta de la mano actual > 0 (helper de filtrado).
+const hasBet = (p: Player): boolean => gt(m(p.bet ?? 0), 0);
+
 // Reparte siguiendo el orden real de casino:
 //  1) una carta a cada jugador (izq→der), 2) up-card del dealer (visible),
 //  3) segunda carta a cada jugador, 4) hole-card del dealer (oculta).
 // dealerCards = [up, hole]: índice 0 = descubierta (visible), índice 1 = tapada.
 // Si alguno tiene blackjack natural lo marca; el resto queda 'playing'.
 export const dealBlackjack = (room: Room) => {
-  const players = room.players.filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0);
+  const players = room.players.filter(p => p.isActive && !p.isSpectating && hasBet(p));
   ensureDeck(room, players.length * 2 + 2);
 
   // Ronda 1: primera carta a cada jugador.
@@ -174,7 +178,7 @@ export const dealBlackjack = (room: Room) => {
 
     p.bjHands = [{
       cards: [p.cards[0], p.cards[1]],
-      bet: p.bet || 0,
+      bet: toStr(m(p.bet ?? 0)),
       status: p.bjStatus
     }];
     p.bjActiveHandIndex = 0;
@@ -182,14 +186,14 @@ export const dealBlackjack = (room: Room) => {
     // Sidebets: se evalúan ya con las 2 cartas iniciales + dealer real. Se acreditan inmediatamente.
     const sb = evaluateSidebets(p, room.dealerCards!);
     p.bjSidebetResults = sb.results.length ? sb.results : undefined;
-    p.bjSidebetDelta = sb.delta || undefined;
+    p.bjSidebetDelta = m(sb.delta).isZero() ? undefined : sb.delta;
 
     // Acreditación temprana de Parejas, 21+3, Lucky Ladies.
-    if (p.bjSidebetDelta) p.chips += p.bjSidebetDelta;
+    if (p.bjSidebetDelta) p.chips = toStr(add(p.chips, p.bjSidebetDelta));
   });
   // Jugadores sin bet: mano vacía, idle
   room.players
-    .filter(p => p.isActive && !p.isSpectating && (p.bet || 0) === 0)
+    .filter(p => p.isActive && !p.isSpectating && !hasBet(p))
     .forEach(p => {
       p.cards = [];
       p.bjStatus = 'idle';
@@ -226,33 +230,33 @@ export const resolveBlackjack = (room: Room) => {
   const dealerBust = dealer.total > 21;
 
   room.players
-    .filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0)
+    .filter(p => p.isActive && !p.isSpectating && hasBet(p))
     .forEach(p => {
-      let totalDelta = 0;
+      let totalDelta: Money = m(0);
 
       if (p.bjHands && p.bjHands.length > 0) {
         for (const hand of p.bjHands) {
-          const bet = hand.bet;
+          const bet = m(hand.bet);
           const player = handValue(hand.cards);
           const playerBJ = hand.status === 'blackjack';
 
-          let delta = 0;
+          let delta: Money = m(0);
           let result: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender' = 'lose';
 
           if (hand.status === 'bust' || player.total > 21) {
-            delta = -bet;
+            delta = bet.negated();
             result = 'lose';
           } else if (hand.status === 'surrender') {
-            delta = -Math.ceil(bet / 2);
+            delta = bet.div(2).ceil().negated();
             result = 'surrender';
           } else if (playerBJ && dealerBJ) {
-            delta = 0; // push
+            delta = m(0); // push
             result = 'push';
           } else if (playerBJ) {
-            delta = Math.floor(bet * 1.5); // 3:2
+            delta = bet.times(3).div(2).floor(); // 3:2
             result = 'blackjack';
           } else if (dealerBJ) {
-            delta = -bet;
+            delta = bet.negated();
             result = 'lose';
           } else if (dealerBust) {
             delta = bet;
@@ -261,48 +265,48 @@ export const resolveBlackjack = (room: Room) => {
             delta = bet;
             result = 'win';
           } else if (player.total < dealer.total) {
-            delta = -bet;
+            delta = bet.negated();
             result = 'lose';
           } else {
-            delta = 0;
+            delta = m(0);
             result = 'push';
           }
 
-          hand.delta = delta;
+          hand.delta = toStr(delta);
           hand.result = result;
-          totalDelta += delta;
+          totalDelta = add(totalDelta, delta);
         }
 
-        p.chips += totalDelta;
-        p.bjDelta = totalDelta;
+        p.chips = toStr(add(p.chips, totalDelta));
+        p.bjDelta = toStr(totalDelta);
         // Resultado global = balance neto de TODAS las manos (no solo la primera).
         // Con una sola mano se conserva su resultado exacto (blackjack/surrender).
         p.bjResult = p.bjHands.length === 1
           ? p.bjHands[0].result
-          : (totalDelta > 0 ? 'win' : totalDelta < 0 ? 'lose' : 'push');
+          : (gt(totalDelta, 0) ? 'win' : gt(m(0), totalDelta) ? 'lose' : 'push');
       } else {
         // Fallback for legacy state without bjHands
-        const bet = p.bet || 0;
+        const bet = m(p.bet ?? 0);
         const player = handValue(p.cards);
         const playerBJ = p.bjStatus === 'blackjack';
 
-        let delta = 0;
+        let delta: Money = m(0);
         let result: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender' = 'lose';
 
         if (p.bjStatus === 'bust' || player.total > 21) {
-          delta = -bet;
+          delta = bet.negated();
           result = 'lose';
         } else if (p.bjStatus === 'surrender') {
-          delta = -Math.ceil(bet / 2);
+          delta = bet.div(2).ceil().negated();
           result = 'surrender';
         } else if (playerBJ && dealerBJ) {
-          delta = 0; // push
+          delta = m(0); // push
           result = 'push';
         } else if (playerBJ) {
-          delta = Math.floor(bet * 1.5); // 3:2
+          delta = bet.times(3).div(2).floor(); // 3:2
           result = 'blackjack';
         } else if (dealerBJ) {
-          delta = -bet;
+          delta = bet.negated();
           result = 'lose';
         } else if (dealerBust) {
           delta = bet;
@@ -311,83 +315,83 @@ export const resolveBlackjack = (room: Room) => {
           delta = bet;
           result = 'win';
         } else if (player.total < dealer.total) {
-          delta = -bet;
+          delta = bet.negated();
           result = 'lose';
         } else {
-          delta = 0;
+          delta = m(0);
           result = 'push';
         }
 
-        p.chips += delta;
-        p.bjDelta = delta;
+        p.chips = toStr(add(p.chips, delta));
+        p.bjDelta = toStr(delta);
         p.bjResult = result;
       }
 
       // Pago de sidebets (las principales ya evaluadas al repartir)
       // Pago de sidebets resolubles al final de la mano (Seguro, Dealer Busted)
-      let lateSidebetDelta = 0;
+      let lateSidebetDelta: Money = m(0);
       const resList = p.bjSidebetResults || [];
 
       // 1. Seguro
       if (p.bjSidebets?.insurance) {
-        const insBet = p.bjSidebets.insurance;
+        const insBet = m(p.bjSidebets.insurance);
         const up = room.dealerCards![0]; // [up, hole]
-        
-        let delta = 0;
+
+        let delta: Money = m(0);
         let won = false;
         let label = '';
-        
+
         if (up.rank !== 'A') {
-          delta = 0;
+          delta = m(0);
           won = false;
           label = 'Sin As · devuelto';
         } else if (dealerBJ) {
-          delta = 2 * insBet;
+          delta = insBet.times(2);
           won = true;
           label = 'Dealer BJ';
         } else {
-          delta = -insBet;
+          delta = insBet.negated();
           won = false;
           label = 'Dealer sin BJ';
         }
-        
-        resList.push({ type: 'insurance', bet: insBet, delta, won, label });
-        lateSidebetDelta += delta;
+
+        resList.push({ type: 'insurance', bet: toStr(insBet), delta: toStr(delta), won, label });
+        lateSidebetDelta = add(lateSidebetDelta, delta);
       }
 
       // 2. Dealer Busted
       if (p.bjSidebets?.dealerBusted) {
-        const bBet = p.bjSidebets.dealerBusted;
-        let delta = 0;
+        const bBet = m(p.bjSidebets.dealerBusted);
+        let delta: Money = m(0);
         let won = false;
         let label = '';
-        
+
         if (!dealerBust) {
-          delta = -bBet;
+          delta = bBet.negated();
           won = false;
           label = 'No Busted';
         } else {
           const count = room.dealerCards!.length;
           won = true;
           if (count <= 4) {
-            delta = 2 * bBet;
+            delta = bBet.times(2);
             label = `Bust ${count} cartas`;
           } else if (count === 5) {
-            delta = 4 * bBet;
+            delta = bBet.times(4);
             label = 'Bust 5 cartas';
           } else if (count === 6) {
-            delta = 15 * bBet;
+            delta = bBet.times(15);
             label = 'Bust 6 cartas';
           } else if (count === 7) {
-            delta = 50 * bBet;
+            delta = bBet.times(50);
             label = 'Bust 7 cartas';
           } else {
-            delta = 250 * bBet;
+            delta = bBet.times(250);
             label = 'Bust 8+ cartas';
           }
         }
-        resList.push({ type: 'dealerBusted', bet: bBet, delta, won, label });
-        lateSidebetDelta += delta;
+        resList.push({ type: 'dealerBusted', bet: toStr(bBet), delta: toStr(delta), won, label });
+        lateSidebetDelta = add(lateSidebetDelta, delta);
       }
 
       if (resList.length > 0) {
@@ -395,9 +399,9 @@ export const resolveBlackjack = (room: Room) => {
       }
 
       // Añadimos solo las ganancias/pérdidas de esta fase tardía al saldo
-      if (lateSidebetDelta) {
-        p.chips += lateSidebetDelta;
-        p.bjSidebetDelta = (p.bjSidebetDelta || 0) + lateSidebetDelta;
+      if (!lateSidebetDelta.isZero()) {
+        p.chips = toStr(add(p.chips, lateSidebetDelta));
+        p.bjSidebetDelta = toStr(add(p.bjSidebetDelta ?? '0', lateSidebetDelta));
       }
     });
 };
@@ -407,7 +411,7 @@ export const resetBlackjackHand = (room: Room) => {
   room.dealerCards = [];
   room.players.forEach(p => {
     p.cards = [];
-    p.bet = 0;
+    p.bet = '0';
     p.bjStatus = 'idle';
     p.bjDoubled = false;
     p.bjHands = undefined;
@@ -420,7 +424,7 @@ export const resetBlackjackHand = (room: Room) => {
 // Devuelve el siguiente jugador que debe actuar (bet > 0 y bjStatus === 'playing'), o undefined.
 export const nextBlackjackActor = (room: Room, afterUserId?: string): Player | undefined => {
   const eligibles = room.players.filter(p => {
-    if (!p.isActive || p.isSpectating || (p.bet || 0) === 0) return false;
+    if (!p.isActive || p.isSpectating || !hasBet(p)) return false;
     if (p.bjHands && p.bjHands.length > 0) {
       return p.bjHands.some(h => h.status === 'playing');
     }

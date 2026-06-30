@@ -1,7 +1,11 @@
-import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp, SidebetType, SIDEBET_ORDER, add, sub, toStr } from '../../shared/types';
+import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp, SidebetType, SIDEBET_ORDER, m, add, sub, mul, gt, gte, lt, lte, toStr, toNum, maxM, minM, clampNonNeg, type Money } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 import { dealBlackjack, dealerPlay as bjDealerPlay, resolveBlackjack, resetBlackjackHand, handValue as bjHandValue, needsReshuffle, initShoe } from './blackjackEngine';
-import { deleteRoomFromDB, recordMatchHistory, addXp, getUser, recordHandStats, bumpStat, maxStat, maxStatBig } from './db';
+import { deleteRoomFromDB, recordMatchHistory, addXp, getUser, recordHandStats, bumpStat, bumpStatBig, maxStat, maxStatBig } from './db';
+
+// Helpers money locales para comparaciones mixtas string(Money) ↔ number(Room).
+const isZeroM = (v: string | number): boolean => m(v).isZero();
+const eqNum = (a: string | number, b: string | number): boolean => m(a).eq(m(b));
 
 // Calidad de mano de poker → rango 1..10 (pokersolver hand.name en inglés).
 const HAND_RANK: Record<string, number> = {
@@ -44,10 +48,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Cierra la sesión de un jugador en una sala: persiste el historial (entrada / pico / salida)
 // y limpia los campos de sesión. Devuelve las fichas con las que sale (cash_out).
-const closePlayerSession = (room: Room, player: Player, cashOutChips: number) => {
+const closePlayerSession = (room: Room, player: Player, cashOutChips: string) => {
   const buyIn = player.sessionBuyIn;
-  if (buyIn == null || buyIn <= 0) return;
-  const maxChips = Math.max(player.sessionMaxChips ?? cashOutChips, cashOutChips);
+  if (buyIn == null || lte(buyIn, 0)) return;
+  const maxChips = toStr(maxM(player.sessionMaxChips ?? cashOutChips, cashOutChips));
   recordMatchHistory(
     player.userId,
     room.name,
@@ -66,8 +70,8 @@ export const bumpMaxChips = (room: Room) => {
   room.players.forEach(p => {
     if (!p.isActive) return;
     if (p.sessionBuyIn == null) return;
-    const cur = p.sessionMaxChips ?? 0;
-    if (p.chips > cur) p.sessionMaxChips = p.chips;
+    const cur = p.sessionMaxChips ?? '0';
+    if (gt(p.chips, cur)) p.sessionMaxChips = p.chips;
   });
 };
 
@@ -107,7 +111,7 @@ export const createRoom = (
   gameType: GameType = 'poker', minBet?: number, maxBet?: number,
   isProportional = false
 ): Room => {
-  const buyIn = isProportional ? 1000 : (STAKE_TIERS[tierIndex] ?? STAKE_TIERS[0]);
+  const buyIn = isProportional ? 1000 : Number(STAKE_TIERS[tierIndex] ?? STAKE_TIERS[0]);
   const { smallBlind, bigBlind } = blindsFor(buyIn, blindDivisor);
   const newRoom: Room = {
     id,
@@ -160,7 +164,7 @@ export const touchRoom = (roomId: string) => {
 
 // Echa a TODOS de la sala (limpieza por inactividad). Devuelve los cash-outs pendientes para que la
 // capa de BD reintegre las fichas al saldo. Borra la sala si no es persistente; si lo es, la vacía.
-export const evictAll = (roomId: string): { userId: string; chips: number }[] => {
+export const evictAll = (roomId: string): { userId: string; chips: string }[] => {
   const room = rooms.get(roomId);
   if (!room) return [];
   // Grabar historial para TODOS los jugadores con sesión abierta (incluso los busted con chips=0)
@@ -168,11 +172,11 @@ export const evictAll = (roomId: string): { userId: string; chips: number }[] =>
     .filter(p => p.isActive && !p.hasCashedOut)
     .forEach(p => closePlayerSession(room, p, p.chips));
   const cashOuts = room.players
-    .filter(p => p.isActive && !p.hasCashedOut && p.chips > 0)
+    .filter(p => p.isActive && !p.hasCashedOut && gt(p.chips, 0))
     .map(p => {
       let chipsToReturn = p.chips;
       if (room.isProportional) {
-        chipsToReturn = Math.floor((p.chips / 1000) * (p.sessionBuyIn || 1000));
+        chipsToReturn = toStr(mul(m(p.chips).div(1000), p.sessionBuyIn || 1000).floor());
       }
       return { userId: p.userId, chips: chipsToReturn };
     });
@@ -213,14 +217,14 @@ export const getRoom = (id: string): Room | undefined => rooms.get(id);
 
 // Fichas que un usuario tiene en juego (sentado, no cashed-out) sumadas en todas las salas.
 // El saldo de BD es solo el dinero "fuera de mesa"; para mostrar patrimonio real se suma esto.
-export const chipsInPlayFor = (userId: string): number => {
-  let total = 0;
+export const chipsInPlayFor = (userId: string): string => {
+  let total: Money = m(0);
   for (const room of rooms.values()) {
     for (const p of room.players) {
-      if (p.userId === userId && p.isActive && !p.hasCashedOut) total += p.chips || 0;
+      if (p.userId === userId && p.isActive && !p.hasCashedOut) total = add(total, p.chips || 0);
     }
   }
-  return total;
+  return toStr(total);
 };
 
 // 'joined' = nuevo asiento (hay que cobrar buy-in) | 'reconnected' = vuelve sin cobrar | 'full' = mesa llena | false = error
@@ -267,8 +271,8 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     existing.hasCashedOut = false;
     existing.hasFolded = false;
     existing.hasActed = false;
-    existing.currentBet = 0;
-    existing.totalContribution = 0;
+    existing.currentBet = '0';
+    existing.totalContribution = '0';
     existing.isSpectating = isGameActive;
     existing.isOnline = true;
     existing.offlineSince = undefined;
@@ -285,8 +289,8 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     ...player,
     hasFolded: false,
     hasActed: false,
-    currentBet: 0,
-    totalContribution: 0,
+    currentBet: '0',
+    totalContribution: '0',
     hasCashedOut: false,
     isOnline: true,
     reducedTime: false,
@@ -294,14 +298,14 @@ export const joinRoom = (roomId: string, player: Player): 'joined' | 'reconnecte
     sessionBuyIn: player.sessionBuyIn ?? player.chips,
     sessionMaxChips: player.chips,
     sessionStartedAt: Date.now(),
-    bet: room.gameType === 'blackjack' ? 0 : undefined,
+    bet: room.gameType === 'blackjack' ? '0' : undefined,
     bjStatus: room.gameType === 'blackjack' ? 'idle' : undefined
   });
   return 'joined';
 };
 
 // Devuelve la info para hacer cash-out del saldo en la capa de BD, o null si no hay nada que retirar
-export const leaveRoom = (roomId: string, socketId: string): { userId: string; chips: number } | null => {
+export const leaveRoom = (roomId: string, socketId: string): { userId: string; chips: string } | null => {
   const room = rooms.get(roomId);
   if (!room) return null;
   const player = room.players.find(p => p.id === socketId);
@@ -320,19 +324,19 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
 
   let chipsToReturn = player.chips;
   if (room.isProportional) {
-    chipsToReturn = Math.floor((player.chips / 1000) * (player.sessionBuyIn || 1000));
+    chipsToReturn = toStr(mul(m(player.chips).div(1000), player.sessionBuyIn || 1000).floor());
   }
   const cashOut = { userId: player.userId, chips: chipsToReturn };
 
   // Blackjack: si el jugador se va a mitad de mano (isInHand), pierde su apuesta total de esa mano.
-  if (isInHand && room.gameType === 'blackjack' && (player.bet || 0) > 0) {
-    let lostBet = player.bet || 0;
+  if (isInHand && room.gameType === 'blackjack' && gt(m(player.bet ?? 0), 0)) {
+    let lostBet: Money = m(player.bet ?? 0);
     if (player.bjHands && player.bjHands.length > 0) {
-       lostBet = player.bjHands.reduce((sum, h) => sum + h.bet, 0);
+       lostBet = player.bjHands.reduce((sum, h) => add(sum, h.bet), m(0));
     }
-    player.chips = Math.max(0, player.chips - lostBet);
+    player.chips = toStr(clampNonNeg(sub(player.chips, lostBet)));
     cashOut.chips = player.chips;
-    player.bet = 0;
+    player.bet = '0';
     player.bjStatus = 'idle';
   }
   
@@ -343,12 +347,12 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
   }
   if (isInHand && room.gameType === 'blackjack') {
     // En blackjack, el jugador que se va abandona la mano: bet a 0, status idle.
-    player.bet = 0;
+    player.bet = '0';
     player.bjStatus = 'idle';
   }
 
   // Retiramos sus fichas (se devuelven al saldo) y marcamos el asiento como liberado
-  player.chips = 0;
+  player.chips = '0';
   player.isActive = false;
   player.hasCashedOut = true;
   player.cards = [];
@@ -379,9 +383,9 @@ export const leaveRoom = (roomId: string, socketId: string): { userId: string; c
       room.winners = [];
       room.players.forEach(p => {
         p.cards = [];
-        p.currentBet = 0;
+        p.currentBet = '0';
         p.hasActed = false;
-        p.totalContribution = 0;
+        p.totalContribution = '0';
         p.handName = undefined;
       });
     }
@@ -394,13 +398,13 @@ export const rebuy = (roomId: string, userId: string, buyIn: number): boolean =>
   const room = rooms.get(roomId);
   if (!room) return false;
   const player = room.players.find(p => p.userId === userId);
-  if (!player || player.chips > 0) return false; // Solo se recompra estando a 0
-  player.chips = buyIn;
+  if (!player || gt(player.chips, 0)) return false; // Solo se recompra estando a 0
+  player.chips = toStr(m(buyIn));
   player.balance = toStr(sub(player.balance, buyIn));
   player.hasCashedOut = false;
   player.isSpectating = true; // Se incorpora en la siguiente mano
-  player.sessionBuyIn = (player.sessionBuyIn ?? 0) + buyIn;
-  if (buyIn > (player.sessionMaxChips ?? 0)) player.sessionMaxChips = buyIn;
+  player.sessionBuyIn = toStr(add(player.sessionBuyIn ?? '0', buyIn));
+  if (gt(buyIn, player.sessionMaxChips ?? '0')) player.sessionMaxChips = toStr(m(buyIn));
   if (!player.sessionStartedAt) player.sessionStartedAt = Date.now();
   return true;
 };
@@ -408,7 +412,7 @@ export const rebuy = (roomId: string, userId: string, buyIn: number): boolean =>
 export const startGame = (roomId: string) => {
   const room = rooms.get(roomId);
   // Se necesitan al menos 2 jugadores activos CON fichas para repartir
-  if (!room || room.players.filter(p => p.isActive && p.chips > 0).length < 2) return false;
+  if (!room || room.players.filter(p => p.isActive && gt(p.chips, 0)).length < 2) return false;
 
   room.deck = createDeck();
   shuffleDeck(room.deck);
@@ -420,8 +424,8 @@ export const startGame = (roomId: string) => {
 
   // Los activos con fichas entran en la mano; los arruinados (chips 0) quedan como espectadores hasta que recompren
   room.players.filter(p => p.isActive).forEach(p => {
-    p.isSpectating = p.chips <= 0;
-    if (p.isSpectating) { p.cards = []; p.hasFolded = false; p.currentBet = 0; p.handName = ''; }
+    p.isSpectating = lte(p.chips, 0);
+    if (p.isSpectating) { p.cards = []; p.hasFolded = false; p.currentBet = '0'; p.handName = ''; }
     // Si sigue offline al EMPEZAR esta mano, su turno se reduce a 8s sin gracia
     p.reducedTime = p.isOnline === false;
   });
@@ -448,19 +452,19 @@ export const startGame = (roomId: string) => {
   const bbAmount = room.bigBlind;
   
   if (activePlayers[sbActiveIndex]) {
-    const amount = Math.min(sbAmount, activePlayers[sbActiveIndex].chips);
-    activePlayers[sbActiveIndex].currentBet = amount;
-    activePlayers[sbActiveIndex].chips -= amount;
-    activePlayers[sbActiveIndex].totalContribution += amount;
+    const amount = minM(sbAmount, activePlayers[sbActiveIndex].chips);
+    activePlayers[sbActiveIndex].currentBet = toStr(amount);
+    activePlayers[sbActiveIndex].chips = toStr(sub(activePlayers[sbActiveIndex].chips, amount));
+    activePlayers[sbActiveIndex].totalContribution = toStr(add(activePlayers[sbActiveIndex].totalContribution, amount));
   }
   if (activePlayers[bbActiveIndex]) {
-    const amount = Math.min(bbAmount, activePlayers[bbActiveIndex].chips);
-    activePlayers[bbActiveIndex].currentBet = amount;
-    activePlayers[bbActiveIndex].chips -= amount;
-    activePlayers[bbActiveIndex].totalContribution += amount;
+    const amount = minM(bbAmount, activePlayers[bbActiveIndex].chips);
+    activePlayers[bbActiveIndex].currentBet = toStr(amount);
+    activePlayers[bbActiveIndex].chips = toStr(sub(activePlayers[bbActiveIndex].chips, amount));
+    activePlayers[bbActiveIndex].totalContribution = toStr(add(activePlayers[bbActiveIndex].totalContribution, amount));
   }
   
-  room.highestBet = Math.min(bbAmount, activePlayers[bbActiveIndex]?.currentBet || 0);
+  room.highestBet = Math.min(bbAmount, Number(activePlayers[bbActiveIndex]?.currentBet || 0));
   
   // Turno es del siguiente al BB
   let turnActiveIndex = (bbActiveIndex + 1) % numActive;
@@ -482,40 +486,40 @@ export const handlePlayerAction = (roomId: string, userId: string, actionType: s
   const player = room.players[playerIndex];
   
   // Calcular cantidad requerida para igualar
-  const toCall = room.highestBet - player.currentBet;
+  const toCall = sub(room.highestBet, player.currentBet);
 
   if (actionType === 'Fold') {
     player.hasFolded = true;
   } 
   else if (actionType === 'Check') {
-    if (toCall > 0) return false; // No puede hacer check si debe igualar
+    if (gt(toCall, 0)) return false; // No puede hacer check si debe igualar
   } 
   else if (actionType === 'Call') {
-    const callAmount = Math.min(toCall, player.chips);
-    player.chips -= callAmount;
-    player.currentBet += callAmount;
-    player.totalContribution += callAmount;
+    const callAmount = minM(toCall, player.chips);
+    player.chips = toStr(sub(player.chips, callAmount));
+    player.currentBet = toStr(add(player.currentBet, callAmount));
+    player.totalContribution = toStr(add(player.totalContribution, callAmount));
   } 
   else if (actionType === 'Raise') {
-    const raiseTotal = amount || 0; 
+    const raiseTotal = m(amount || 0); 
     
     // Si intenta subir menos o igual a lo que ya hay apostado, no es un Raise válido
     // (A menos que esté yendo All-in por menos de highestBet, lo cual en las reglas suele ser un Call, 
     // pero aquí lo bloqueamos como Raise para forzarle a usar Call).
-    if (raiseTotal <= room.highestBet && raiseTotal < player.chips + player.currentBet) return false;
+    if (lte(raiseTotal, room.highestBet) && lt(raiseTotal, add(player.chips, player.currentBet))) return false;
 
-    const additionalAmount = raiseTotal - player.currentBet;
-    if (additionalAmount <= 0) return false;
+    const additionalAmount = sub(raiseTotal, player.currentBet);
+    if (lte(additionalAmount, 0)) return false;
     
     // Si intenta subir más de lo que tiene, le limitamos al All-in
-    const actualAdditional = Math.min(additionalAmount, player.chips);
+    const actualAdditional = minM(additionalAmount, player.chips);
     
-    player.chips -= actualAdditional;
-    player.currentBet += actualAdditional;
-    player.totalContribution += actualAdditional;
+    player.chips = toStr(sub(player.chips, actualAdditional));
+    player.currentBet = toStr(add(player.currentBet, actualAdditional));
+    player.totalContribution = toStr(add(player.totalContribution, actualAdditional));
     
-    if (player.currentBet > room.highestBet) {
-      room.highestBet = player.currentBet;
+    if (gt(player.currentBet, room.highestBet)) {
+      room.highestBet = toNum(player.currentBet);
       // Nueva apuesta, los demás deben volver a hablar
       room.players.forEach(p => {
         if (p.id !== player.id && !p.hasFolded && p.isActive) {
@@ -537,7 +541,7 @@ const checkRoundEnd = (room: Room): 'advancePhase' | 'endRound' | 'continue' => 
     return 'endRound';
   }
 
-  const allActedAndMatched = activePlayers.every(p => (p.hasActed && p.currentBet === room.highestBet) || p.chips === 0);
+  const allActedAndMatched = activePlayers.every(p => (p.hasActed && eqNum(p.currentBet, room.highestBet)) || isZeroM(p.chips));
 
   if (allActedAndMatched) {
     return 'advancePhase';
@@ -556,7 +560,7 @@ const advanceTurn = (room: Room) => {
   while (count < numPlayers && (
     !room.players[nextIndex].isActive ||
     room.players[nextIndex].hasFolded ||
-    room.players[nextIndex].chips === 0 ||
+    isZeroM(room.players[nextIndex].chips) ||
     room.players[nextIndex].isSpectating
   )) {
     nextIndex = (nextIndex + 1) % numPlayers;
@@ -568,8 +572,8 @@ const advanceTurn = (room: Room) => {
 
 export const gatherBetsToPot = (room: Room) => {
   room.players.forEach(p => {
-    room.pot += p.currentBet;
-    p.currentBet = 0;
+    room.pot += toNum(p.currentBet);
+    p.currentBet = '0';
   });
 };
 
@@ -579,7 +583,7 @@ export const contenders = (room: Room): Player[] =>
 
 // ¿Se acabó toda decisión de apuesta en lo que queda de mano? (como mucho 1 jugador con fichas)
 export const bettingClosed = (room: Room): boolean => {
-  const withChips = room.players.filter(p => p.isActive && !p.hasFolded && !p.isSpectating && p.chips > 0);
+  const withChips = room.players.filter(p => p.isActive && !p.hasFolded && !p.isSpectating && gt(p.chips, 0));
   return withChips.length <= 1;
 };
 
@@ -591,7 +595,7 @@ const setTurnToFirstActor = (room: Room) => {
   while (guard < len && (
     !room.players[nextTurn].isActive ||
     room.players[nextTurn].hasFolded ||
-    room.players[nextTurn].chips === 0 ||
+    isZeroM(room.players[nextTurn].chips) ||
     room.players[nextTurn].isSpectating
   )) {
     nextTurn = (nextTurn + 1) % len;
@@ -648,31 +652,29 @@ export const endRound = (room: Room) => {
     // Solo queda uno, se lo lleva todo
     const winner = activePlayers[0];
     const won = room.pot;
-    winner.chips += won;
+    winner.chips = toStr(add(winner.chips, won));
     room.pot = 0;
     room.winners = [{ id: winner.id, amount: won, handName: 'Won by fold', winningCards: [] }];
   } else if (activePlayers.length > 1) {
-    // Showdown con múltiples jugadores, calculamos side pots
-    let remainingPot = room.pot;
-    let playersForPot = [...activePlayers].sort((a, b) => a.totalContribution - b.totalContribution);
+    // Showdown con múltiples jugadores, calculamos side pots (en Money para soportar all-ins enormes)
+    let remainingPot: Money = m(room.pot);
+    let playersForPot = [...activePlayers].sort((a, b) => (lt(a.totalContribution, b.totalContribution) ? -1 : gt(a.totalContribution, b.totalContribution) ? 1 : 0));
     room.winners = [];
 
-    while (remainingPot > 0 && playersForPot.length > 0) {
+    while (gt(remainingPot, 0) && playersForPot.length > 0) {
       // Cogemos el que menos aportó de los que quedan
       const minContribution = playersForPot[0].totalContribution;
       
       // Construimos el bote secundario actual basado en esta aportación mínima
-      // Todos los que llegaron hasta aquí (incluidos fold) pueden haber contribuido a este bote.
-      // Simplificación: asumimos que el remainingPot se compone de lo que queda de las aportaciones.
-      let currentSidePot = 0;
+      let currentSidePot: Money = m(0);
       room.players.forEach(p => {
-        const amountFromPlayer = Math.min(p.totalContribution, minContribution);
-        currentSidePot += amountFromPlayer;
-        p.totalContribution -= amountFromPlayer; // Lo descontamos
+        const amountFromPlayer = minM(p.totalContribution, minContribution);
+        currentSidePot = add(currentSidePot, amountFromPlayer);
+        p.totalContribution = toStr(sub(p.totalContribution, amountFromPlayer)); // Lo descontamos
       });
-      remainingPot -= currentSidePot;
+      remainingPot = sub(remainingPot, currentSidePot);
 
-      if (currentSidePot > 0) {
+      if (gt(currentSidePot, 0)) {
         // ¿Quién gana este bote? Solo los activePlayers que llegaron a este bote pueden ganarlo
         const eligiblePlayers = playersForPot.filter(p => p.isActive && !p.hasFolded);
         
@@ -681,21 +683,21 @@ export const endRound = (room: Room) => {
         const evaluatedWinnersInfo = evaluateHands(tempRoom); 
         // evaluatedWinnersInfo: { playerId, handName, winningCards }[]
         
-        const splitAmount = Math.floor(currentSidePot / evaluatedWinnersInfo.length);
+        const splitAmount = currentSidePot.div(evaluatedWinnersInfo.length).floor();
         
         evaluatedWinnersInfo.forEach((wInfo: any) => {
           const winner = room.players.find(p => p.id === wInfo.playerId);
           if (winner) {
-            winner.chips += splitAmount;
+            winner.chips = toStr(add(winner.chips, splitAmount));
             
             // Añadir al registro de ganadores
             const existingWinner = room.winners?.find(w => w.id === winner.id);
             if (existingWinner) {
-              existingWinner.amount += splitAmount;
+              existingWinner.amount += toNum(splitAmount);
             } else {
               room.winners?.push({
                 id: winner.id,
-                amount: splitAmount,
+                amount: toNum(splitAmount),
                 handName: wInfo.handName,
                 winningCards: wInfo.winningCards
               });
@@ -705,7 +707,7 @@ export const endRound = (room: Room) => {
       }
       
       // Quitamos de playersForPot a los que ya cubrieron su totalContribution máxima
-      playersForPot = playersForPot.filter(p => p.totalContribution > 0);
+      playersForPot = playersForPot.filter(p => gt(p.totalContribution, 0));
     }
     room.pot = 0; // Vaciamos el bote global
   }
@@ -782,9 +784,9 @@ export const nextHand = (roomId: string) => {
 
   room.phase = 'waiting';
   room.players.forEach(p => {
-    p.currentBet = 0;
+    p.currentBet = '0';
     p.hasActed = false;
-    p.totalContribution = 0;
+    p.totalContribution = '0';
   });
   room.highestBet = 0;
   room.winners = [];
@@ -827,7 +829,7 @@ export const markBustedPlayers = (roomId: string) => {
   const room = rooms.get(roomId);
   if (!room || !room.isTournament) return;
   room.players.forEach(p => {
-    if (p.isActive && p.chips <= 0 && p.bustedSeq == null) {
+    if (p.isActive && lte(p.chips, 0) && p.bustedSeq == null) {
       room.bustCounter = (room.bustCounter || 0) + 1;
       p.bustedSeq = room.bustCounter;
     }
@@ -839,7 +841,7 @@ export const checkTournamentEnd = (roomId: string): { ended: boolean; winner?: P
   const room = rooms.get(roomId);
   if (!room || !room.isTournament) return { ended: false };
   const active = room.players.filter(p => p.isActive);
-  const withChips = active.filter(p => p.chips > 0);
+  const withChips = active.filter(p => gt(p.chips, 0));
   if (active.length >= 2 && withChips.length <= 1) {
     return { ended: true, winner: withChips[0] };
   }
@@ -847,32 +849,32 @@ export const checkTournamentEnd = (roomId: string): { ended: boolean; winner?: P
 };
 
 // Reinicia el torneo con la misma config. Devuelve deltas de saldo a aplicar en BD.
-export const restartTournament = (roomId: string): { userId: string; socketId: string; delta: number }[] => {
+export const restartTournament = (roomId: string): { userId: string; socketId: string; delta: string }[] => {
   const room = rooms.get(roomId);
   if (!room) return [];
   clearBlindTimer(roomId);
   const buyIn = room.startingChips ?? room.buyIn;
-  const deltas: { userId: string; socketId: string; delta: number }[] = [];
+  const deltas: { userId: string; socketId: string; delta: string }[] = [];
   room.players.forEach(p => {
     if (!p.isActive) return;
-    const delta = p.chips - buyIn; // banca ganancias / cobra nueva entrada
+    const delta = toStr(sub(p.chips, buyIn)); // banca ganancias / cobra nueva entrada
     deltas.push({ userId: p.userId, socketId: p.id, delta });
     p.balance = toStr(add(p.balance, delta));
     // Cerramos historial de la sesión que acaba (cash_out = fichas actuales)
     closePlayerSession(room, p, p.chips);
-    p.chips = buyIn;
+    p.chips = toStr(m(buyIn));
     p.isSpectating = false;
     p.hasCashedOut = false;
     p.bustedSeq = undefined;
     p.cards = [];
-    p.currentBet = 0;
+    p.currentBet = '0';
     p.hasFolded = false;
     p.hasActed = false;
-    p.totalContribution = 0;
+    p.totalContribution = '0';
     p.handName = '';
     // Arrancamos sesión nueva con el nuevo buy-in
-    p.sessionBuyIn = buyIn;
-    p.sessionMaxChips = buyIn;
+    p.sessionBuyIn = toStr(m(buyIn));
+    p.sessionMaxChips = toStr(m(buyIn));
     p.sessionStartedAt = Date.now();
   });
   room.tournamentEnded = false;
@@ -927,9 +929,9 @@ export const startBlackjackRound = (roomId: string): boolean => {
   if (!room || room.gameType !== 'blackjack') return false;
   
   // Guardar apuestas tempranas (jugadores que ya apostaron durante resolve)
-  const earlyBets = new Map<string, { bet: number; status: string; sidebets?: Partial<Record<SidebetType, number>> }>();
+  const earlyBets = new Map<string, { bet: string; status: string; sidebets?: Partial<Record<SidebetType, string>> }>();
   room.players.forEach(p => {
-    if (p.bjHasContinued && (p.bet || 0) > 0) {
+    if (p.bjHasContinued && gt(m(p.bet ?? 0), 0)) {
       earlyBets.set(p.userId, { bet: p.bet!, status: p.bjStatus || 'playing', sidebets: p.bjSidebets });
     }
   });
@@ -940,7 +942,7 @@ export const startBlackjackRound = (roomId: string): boolean => {
     if (p.isActive) p.reducedTime = p.isOnline === false;
     p.bjHasContinued = false;
   });
-  const eligibles = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
+  const eligibles = room.players.filter(p => p.isActive && !p.isSpectating && gt(p.chips, 0));
   if (eligibles.length < 1) return false;
   resetBlackjackHand(room);
   room.bjPhase = 'betting';
@@ -951,7 +953,7 @@ export const startBlackjackRound = (roomId: string): boolean => {
   // Restaurar apuestas tempranas
   for (const [userId, saved] of earlyBets) {
     const p = room.players.find(pl => pl.userId === userId);
-    if (p && p.isActive && !p.isSpectating && p.chips > 0) {
+    if (p && p.isActive && !p.isSpectating && gt(p.chips, 0)) {
       p.bet = saved.bet;
       p.bjStatus = 'playing';
       p.bjSidebets = saved.sidebets;
@@ -971,33 +973,34 @@ export const startBlackjackRound = (roomId: string): boolean => {
 
 // Coloca apuesta del jugador. Devuelve true si la apuesta queda registrada.
 export const placeBlackjackBet = (
-  roomId: string, userId: string, amount: number,
-  sidebets?: Partial<Record<SidebetType, number>>
+  roomId: string, userId: string, amount: number | string,
+  sidebets?: Partial<Record<SidebetType, number | string>>
 ): boolean => {
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack') return false;
   const player = room.players.find(p => p.userId === userId);
-  if (!player || !player.isActive || player.isSpectating || player.chips <= 0) return false;
+  if (!player || !player.isActive || player.isSpectating || lte(player.chips, 0)) return false;
 
   if (room.bjPhase !== 'betting') {
     if (!(room.bjPhase === 'resolve' && player.bjHasContinued)) return false;
   }
 
-  const min = room.minBet || 1;
+  const min = m(room.minBet || 1);
   // maxBet === MAX_SAFE_INTEGER es el sentinel "sin tope": el límite real son las fichas del jugador.
   const noCap = !room.maxBet || room.maxBet >= Number.MAX_SAFE_INTEGER;
-  const max = noCap ? player.chips : Math.min(room.maxBet ?? player.chips, player.chips);
-  const safe = Math.floor(Math.max(min, Math.min(max, amount)));
-  if (!Number.isFinite(safe) || safe <= 0) return false;
-  player.bet = safe;
+  const max = noCap ? m(player.chips) : minM(room.maxBet ?? player.chips, player.chips);
+  // safe = clamp(amount, min, max), floored
+  const safe = maxM(min, minM(max, m(amount))).floor();
+  if (!safe.isFinite() || safe.lte(0)) return false;
+  player.bet = toStr(safe);
   player.bjStatus = 'playing'; // se mantendrá hasta deal; deal sobrescribe a blackjack si procede
 
   // Sidebets: sin límite de apuesta. Solo se guardan junto a una apuesta principal válida.
   if (sidebets) {
-    const clean: Partial<Record<SidebetType, number>> = {};
+    const clean: Partial<Record<SidebetType, string>> = {};
     for (const k of SIDEBET_ORDER) {
-      const v = Math.floor(Number(sidebets[k]) || 0);
-      if (Number.isFinite(v) && v > 0) clean[k] = v;
+      const v = m(sidebets[k] ?? 0).floor();
+      if (v.isFinite() && v.gt(0)) clean[k] = toStr(v);
     }
     player.bjSidebets = Object.keys(clean).length ? clean : undefined;
   } else {
@@ -1011,8 +1014,8 @@ export const placeBlackjackBet = (
 // ¿Todos los jugadores activos con fichas ya apostaron?
 export const allBlackjackBetsIn = (room: Room): boolean => {
   if (room.bjPhase !== 'betting') return false;
-  const eligibles = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
-  return eligibles.length > 0 && eligibles.every(p => (p.bet || 0) > 0);
+  const eligibles = room.players.filter(p => p.isActive && !p.isSpectating && gt(p.chips, 0));
+  return eligibles.length > 0 && eligibles.every(p => gt(m(p.bet ?? 0), 0));
 };
 
 // Reparte. Si NADIE apostó, vuelve a betting (skip ronda). Si todos tienen blackjack/bust, salta a resolve.
@@ -1023,10 +1026,10 @@ export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerActi
   
   // Limpiar apuestas de los que estaban admirando sin darle a continuar
   room.players.forEach(p => {
-    if (!p.bjHasContinued && room.bjPhase === 'resolve') p.bet = 0;
+    if (!p.bjHasContinued && room.bjPhase === 'resolve') p.bet = '0';
   });
   
-  const bettors = room.players.filter(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0);
+  const bettors = room.players.filter(p => p.isActive && !p.isSpectating && gt(m(p.bet ?? 0), 0));
   if (bettors.length === 0) {
     // Nadie apostó → reabrir betting
     room.bjPhase = 'betting';
@@ -1061,7 +1064,7 @@ export const dealBlackjackHands = (roomId: string): 'playerAction' | 'dealerActi
 // ¿Queda algún jugador con mano viva ('playing')?
 const anyStillPlaying = (room: Room): boolean =>
   room.players.some(p => {
-    if (!p.isActive || p.isSpectating || (p.bet || 0) === 0) return false;
+    if (!p.isActive || p.isSpectating || isZeroM(p.bet ?? 0)) return false;
     if (p.bjHands && p.bjHands.length > 0) return p.bjHands.some(h => h.status === 'playing');
     return p.bjStatus === 'playing';
   });
@@ -1102,10 +1105,10 @@ export const blackjackPlayerAction = (
       hand.status = 'stand';
     } else if (action === 'Double') {
       if (hand.cards.length !== 2) return null;
-      const totalBet = player.bjHands.reduce((sum, h) => sum + h.bet, 0);
-      if (player.chips < totalBet + hand.bet) return null;
+      const totalBet = player.bjHands.reduce((sum, h) => add(sum, h.bet), m(0));
+      if (lt(player.chips, add(totalBet, hand.bet))) return null;
       hand.doubled = true;
-      hand.bet *= 2;
+      hand.bet = toStr(mul(hand.bet, 2));
       if (room.deck.length === 0) initShoe(room);
       let drawn = room.deck.pop()!;
       hand.cards.push(drawn);
@@ -1133,8 +1136,8 @@ export const blackjackPlayerAction = (
       const isPair = p1 === p2;
       if (!isPair) return null;
 
-      const totalBet = player.bjHands.reduce((sum, h) => sum + h.bet, 0);
-      if (player.chips < totalBet + hand.bet) return null;
+      const totalBetSplit = player.bjHands.reduce((sum, h) => add(sum, h.bet), m(0));
+      if (lt(player.chips, add(totalBetSplit, hand.bet))) return null;
 
       // Casino real: se separa UNA carta de la pareja → la mano actual queda con 1 carta.
       // No se reparte aquí: settleActiveHand dará la 2ª carta a la mano que toca jugar.
@@ -1152,16 +1155,16 @@ export const blackjackPlayerAction = (
       if (room.dealerCards?.[0]?.rank !== 'A') return null; // Solo si la descubierta del dealer es As
       if (player.bjSidebets?.insurance) return null; // Ya pidió seguro
 
-      const halfBet = Math.floor(hand.bet / 2);
-      const SIDEBET_ORDER: import('../../shared/types').SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies'];
+      const halfBet = m(hand.bet).div(2).floor();
+      const SB_ORDER: import('../../shared/types').SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies'];
       const currentSidebets = player.bjSidebets 
-        ? SIDEBET_ORDER.reduce((sum, k) => sum + ((player.bjSidebets as any)[k] || 0), 0) 
-        : 0;
+        ? SB_ORDER.reduce((sum, k) => add(sum, (player.bjSidebets as any)[k] || 0), m(0)) 
+        : m(0);
       
-      if (player.chips < (player.bet || 0) + currentSidebets + halfBet) return null;
+      if (lt(player.chips, add(add(m(player.bet ?? 0), currentSidebets), halfBet))) return null;
 
       if (!player.bjSidebets) player.bjSidebets = {};
-      player.bjSidebets.insurance = halfBet;
+      player.bjSidebets.insurance = toStr(halfBet);
       // No modificamos hand.status (sigue jugando)
     } else {
       return null;
@@ -1188,7 +1191,7 @@ export const blackjackPlayerAction = (
 
     player.bjStatus = player.bjHands.some(h => h.status === 'playing') ? 'playing' : player.bjHands[0].status;
     player.cards = player.bjHands[0].cards;
-    player.bet = player.bjHands.reduce((acc, h) => acc + h.bet, 0);
+    player.bet = toStr(player.bjHands.reduce((acc, h) => add(acc, h.bet), m(0)));
 
   } else {
     // legacy mode
@@ -1215,9 +1218,9 @@ export const blackjackPlayerAction = (
       player.bjStatus = 'stand';
     } else if (action === 'Double') {
       if (player.cards.length !== 2) return null;
-      if (player.chips < (player.bet || 0) * 2) return null;
+      if (lt(player.chips, mul(player.bet ?? 0, 2))) return null;
       player.bjDoubled = true;
-      player.bet = (player.bet || 0) * 2;
+      player.bet = toStr(mul(player.bet ?? 0, 2));
       if (room.deck.length === 0) initShoe(room);
       let drawn = room.deck.pop()!;
       player.cards.push(drawn);
@@ -1242,16 +1245,16 @@ export const blackjackPlayerAction = (
       if (room.dealerCards?.[0]?.rank !== 'A') return null;
       if (player.bjSidebets?.insurance) return null;
 
-      const halfBet = Math.floor((player.bet || 0) / 2);
-      const SIDEBET_ORDER: import('../../shared/types').SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies'];
+      const halfBet = m(player.bet ?? 0).div(2).floor();
+      const SB_ORDER2: import('../../shared/types').SidebetType[] = ['perfectPairs', 'twentyOneThree', 'luckyLadies'];
       const currentSidebets = player.bjSidebets 
-        ? SIDEBET_ORDER.reduce((sum, k) => sum + ((player.bjSidebets as any)[k] || 0), 0) 
-        : 0;
+        ? SB_ORDER2.reduce((sum, k) => add(sum, (player.bjSidebets as any)[k] || 0), m(0)) 
+        : m(0);
       
-      if (player.chips < (player.bet || 0) + currentSidebets + halfBet) return null;
+      if (lt(player.chips, add(add(m(player.bet ?? 0), currentSidebets), halfBet))) return null;
 
       if (!player.bjSidebets) player.bjSidebets = {};
-      player.bjSidebets.insurance = halfBet;
+      player.bjSidebets.insurance = toStr(halfBet);
     } else {
       return null;
     }
@@ -1269,7 +1272,7 @@ export const forceStandRemaining = (roomId: string): boolean => {
   if (!room || room.gameType !== 'blackjack' || room.bjPhase !== 'playerAction') return false;
   let changed = false;
   room.players.forEach(p => {
-    if (p.isActive && !p.isSpectating && (p.bet || 0) > 0) {
+    if (p.isActive && !p.isSpectating && gt(m(p.bet ?? 0), 0)) {
       if (p.bjHands && p.bjHands.length > 0) {
         p.bjHands.forEach(h => {
           if (h.status === 'playing') {
@@ -1300,14 +1303,14 @@ export const rebuyBlackjack = (roomId: string, userId: string, requestedAmount?:
   const room = rooms.get(roomId);
   if (!room || room.gameType !== 'blackjack') return 0;
   const player = room.players.find(p => p.userId === userId);
-  if (!player || !player.isActive || player.chips > 0) return 0;
-  const amount = requestedAmount && requestedAmount > 0 ? requestedAmount : (player.lastBuyIn && player.lastBuyIn > 0 ? player.lastBuyIn : 1000);
-  player.chips = amount;
+  if (!player || !player.isActive || gt(player.chips, 0)) return 0;
+  const amount = requestedAmount && requestedAmount > 0 ? requestedAmount : (player.lastBuyIn && gt(player.lastBuyIn, 0) ? Number(player.lastBuyIn) : 1000);
+  player.chips = toStr(m(amount));
   player.balance = toStr(sub(player.balance, amount));
-  player.lastBuyIn = amount;
+  player.lastBuyIn = toStr(m(amount));
   player.isSpectating = false;
-  player.sessionBuyIn = (player.sessionBuyIn ?? 0) + amount;
-  if (amount > (player.sessionMaxChips ?? 0)) player.sessionMaxChips = amount;
+  player.sessionBuyIn = toStr(add(player.sessionBuyIn ?? '0', amount));
+  if (gt(amount, player.sessionMaxChips ?? '0')) player.sessionMaxChips = toStr(m(amount));
   room.lastActivityAt = Date.now();
   return amount;
 };
@@ -1318,7 +1321,7 @@ export const finishBlackjackHand = (roomId: string) => {
   if (!room || room.gameType !== 'blackjack') return;
   // Si nadie quedó vivo (todos bust), dealer no necesita jugar pero igual revelamos
   const anyStanding = room.players.some(p =>
-    p.isActive && (p.bet || 0) > 0 && (p.bjStatus === 'stand' || p.bjStatus === 'blackjack')
+    p.isActive && gt(m(p.bet ?? 0), 0) && (p.bjStatus === 'stand' || p.bjStatus === 'blackjack')
   );
   if (anyStanding) bjDealerPlay(room);
   resolveBlackjack(room);
@@ -1328,32 +1331,32 @@ export const finishBlackjackHand = (roomId: string) => {
 
   // Estadísticas persistentes de blackjack (una entrada por mano jugada, splits incluidos).
   for (const p of room.players) {
-    if (!p.isActive || (p.bet || 0) === 0) continue;
+    if (!p.isActive || isZeroM(p.bet ?? 0)) continue;
     const hands = p.bjHands && p.bjHands.length > 0
-      ? p.bjHands.map(h => ({ result: h.result, delta: h.delta || 0 }))
-      : [{ result: p.bjResult, delta: p.bjDelta || 0 }];
+      ? p.bjHands.map(h => ({ result: h.result, delta: h.delta || '0' }))
+      : [{ result: p.bjResult, delta: p.bjDelta || '0' }];
     for (const h of hands) {
       bumpStat(p.userId, 'bj_hands');
       if (h.result === 'win' || h.result === 'blackjack') bumpStat(p.userId, 'bj_wins');
       if (h.result === 'blackjack') bumpStat(p.userId, 'bj_blackjacks');
-      if (h.delta > 0) {
-        bumpStat(p.userId, 'bj_total_won', h.delta);
-        maxStatBig(p.userId, 'bj_biggest_win', String(h.delta));
+      if (gt(h.delta, 0)) {
+        bumpStatBig(p.userId, 'bj_total_won', h.delta);
+        maxStatBig(p.userId, 'bj_biggest_win', h.delta);
       }
     }
-    bumpStat(p.userId, 'bj_net', p.bjDelta || 0);
+    bumpStatBig(p.userId, 'bj_net', p.bjDelta || '0');
 
     // Sidebets: una entrada por cada sidebet jugada en la mano.
     if (p.bjSidebetResults && p.bjSidebetResults.length > 0) {
       for (const r of p.bjSidebetResults) {
         bumpStat(p.userId, 'bj_sidebet_hands');
         if (r.won) bumpStat(p.userId, 'bj_sidebet_wins');
-        if (r.delta > 0) {
-          bumpStat(p.userId, 'bj_sidebet_won', r.delta);
-          maxStatBig(p.userId, 'bj_sidebet_biggest', String(r.delta));
+        if (gt(r.delta, 0)) {
+          bumpStatBig(p.userId, 'bj_sidebet_won', r.delta);
+          maxStatBig(p.userId, 'bj_sidebet_biggest', r.delta);
         }
       }
-      bumpStat(p.userId, 'bj_sidebet_net', p.bjSidebetDelta || 0);
+      bumpStatBig(p.userId, 'bj_sidebet_net', p.bjSidebetDelta || '0');
     }
   }
 
@@ -1361,14 +1364,14 @@ export const finishBlackjackHand = (roomId: string) => {
   awardHandXp(
     room,
     room.players
-      .filter(p => p.isActive && (p.bet || 0) > 0)
+      .filter(p => p.isActive && gt(m(p.bet ?? 0), 0))
       .map(p => ({ userId: p.userId, amount: blackjackXp(p.bjResult) }))
   ).catch(err => console.error('Error XP blackjack:', err));
   
   // Auto-continuar a los que NO apostaron en esta ronda: no participaron,
   // así que no necesitan pulsar Continuar para admirar nada.
   room.players.forEach(p => {
-    if (p.isActive && !p.isSpectating && (p.bet || 0) === 0) {
+    if (p.isActive && !p.isSpectating && isZeroM(p.bet ?? 0)) {
       p.bjHasContinued = true;
     }
   });

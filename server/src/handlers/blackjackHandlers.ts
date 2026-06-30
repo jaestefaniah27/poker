@@ -9,13 +9,13 @@ import {
 import { initShoe } from '../blackjackEngine';
 import { broadcastRoom, io, hasOnlinePlayers } from '../socketHelpers';
 import { applyBalanceDelta, getUser } from '../db';
-import { Room, lt } from '../../../shared/types';
+import { Room, m, gt, lt, isZero } from '../../../shared/types';
 
 const RESHUFFLE_PAUSE_MS = 2_500;
 
 // ¿Queda alguien con mano viva en playerAction?
 const anyPlaying = (room: Room): boolean =>
-  room.players.some(p => p.isActive && !p.isSpectating && (p.bet || 0) > 0 && p.bjStatus === 'playing');
+  room.players.some(p => p.isActive && !p.isSpectating && gt(m(p.bet ?? 0), 0) && p.bjStatus === 'playing');
 
 type BJTimerSet = {
   betting?: NodeJS.Timeout;
@@ -44,7 +44,7 @@ export const clearBlackjackTimers = (roomId: string) => {
 };
 
 const eligibleCount = (room: Room) =>
-  room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0).length;
+  room.players.filter(p => p.isActive && !p.isSpectating && gt(p.chips, 0)).length;
 
 const armBettingTimer = (roomId: string) => {
   const room = getRoom(roomId);
@@ -95,7 +95,7 @@ const onResolveTimeout = (roomId: string) => {
   room.players.forEach(p => {
     if (p.isActive && !p.isSpectating && p.isOnline === false && !p.bjHasContinued) {
       p.bjHasContinued = true;
-      p.bet = 0;
+      p.bet = '0';
       p.bjResult = undefined;
       p.bjDelta = undefined;
       p.bjSidebetResults = undefined;
@@ -103,7 +103,7 @@ const onResolveTimeout = (roomId: string) => {
       changed = true;
     }
   });
-  const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
+  const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating && gt(p.chips, 0));
   const allContinued = activePlayers.length === 0 || activePlayers.every(p => p.bjHasContinued);
   if (allContinued) {
     startNextRound(roomId);
@@ -133,7 +133,7 @@ const proceedDeal = async (roomId: string) => {
   room.paused = false;
   // Echar jugadores offline sin apuesta antes de repartir
   const toKick = room.players.filter(
-    p => p.isActive && !p.hasCashedOut && p.isOnline === false && (p.bet || 0) === 0
+    p => p.isActive && !p.hasCashedOut && p.isOnline === false && isZero(p.bet ?? 0)
   );
   for (const p of toKick) {
     const cashOut = leaveRoom(roomId, p.id);
@@ -249,7 +249,7 @@ export const blackjackHandlers = (socket: Socket) => {
       }
     }
 
-    const ok = placeBlackjackBet(roomId, seat.userId, Number(amount) || 0, sidebets);
+    const ok = placeBlackjackBet(roomId, seat.userId, amount ?? 0, sidebets);
     if (!ok) return;
     
     if (!room.bettingDeadline) {
@@ -301,7 +301,7 @@ export const blackjackHandlers = (socket: Socket) => {
     if (!p || p.bjHasContinued) return; // ya continuó, ignorar
     
     p.bjHasContinued = true;
-    p.bet = 0; // limpiar apuesta de la ronda anterior
+    p.bet = '0'; // limpiar apuesta de la ronda anterior
     p.bjResult = undefined;
     p.bjDelta = undefined;
     p.bjSidebetResults = undefined;
@@ -311,7 +311,7 @@ export const blackjackHandlers = (socket: Socket) => {
     room.players.forEach(pl => {
       if (pl.isActive && !pl.isSpectating && pl.isOnline === false && !pl.bjHasContinued) {
         pl.bjHasContinued = true;
-        pl.bet = 0;
+        pl.bet = '0';
         pl.bjResult = undefined;
         pl.bjDelta = undefined;
         pl.bjSidebetResults = undefined;
@@ -319,7 +319,7 @@ export const blackjackHandlers = (socket: Socket) => {
       }
     });
 
-    const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating && p.chips > 0);
+    const activePlayers = room.players.filter(p => p.isActive && !p.isSpectating && gt(p.chips, 0));
     const allContinued = activePlayers.every(p => p.bjHasContinued);
 
     if (allContinued) {
@@ -337,7 +337,7 @@ export const blackjackHandlers = (socket: Socket) => {
     if (!seat) return;
     // Compute expected rebuy amount BEFORE touching room state
     const requestedAmount = Number(amount) || 0;
-    const expectedAmount = requestedAmount > 0 ? requestedAmount : (seat.lastBuyIn && seat.lastBuyIn > 0 ? seat.lastBuyIn : 1000);
+    const expectedAmount = requestedAmount > 0 ? requestedAmount : (seat.lastBuyIn && gt(seat.lastBuyIn, 0) ? Number(seat.lastBuyIn) : 1000);
     const dbSeat = await getUser(seat.userId);
     if (!dbSeat || lt(dbSeat.balance, expectedAmount)) return;
     const reboughtAmount = rebuyBlackjack(roomId, seat.userId, requestedAmount);

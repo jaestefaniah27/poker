@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Server } from 'socket.io';
 import { getUser, UserRow, saveSessionToDB, getSessionFromDB, deleteSessionFromDB, saveRoomToDB } from './db';
+import { gt, lte, sub } from '../../shared/types';
 
 export let io: Server;
 export const setIo = (serverIo: Server) => { io = serverIo; };
@@ -180,7 +181,7 @@ export const armTurnTimer = (roomId: string, force = false) => {
 
   const idx = room.currentTurnIndex;
   const p = idx >= 0 ? room.players[idx] : undefined;
-  const valid = !!p && isBettingPhase(room) && p.isActive && !p.hasFolded && !p.isSpectating && p.chips > 0;
+  const valid = !!p && isBettingPhase(room) && p.isActive && !p.hasFolded && !p.isSpectating && gt(p.chips, 0);
   if (!p || !valid) {
     clearTurnTimer(roomId);
     room.inGrace = false;
@@ -236,7 +237,7 @@ export const turnWatchdog = () => {
 
     // If the current turn player is invalid (left, folded, busted, etc.),
     // force a default action to unstick the game.
-    if (!p || !p.isActive || p.hasFolded || p.isSpectating || p.chips <= 0) {
+    if (!p || !p.isActive || p.hasFolded || p.isSpectating || lte(p.chips, 0)) {
       console.warn(`[Watchdog] sala ${r.id} turno de jugador inválido (active=${p?.isActive}, folded=${p?.hasFolded}, chips=${p?.chips}), forzando avance.`);
       if (p && p.isActive && !p.hasFolded) {
         applyDefaultAction(r.id, p.userId);
@@ -290,8 +291,8 @@ export const applyDefaultAction = (roomId: string, userId: string) => {
   const p = idx >= 0 ? room.players[idx] : undefined;
   if (!p || p.userId !== userId) return;
   room.inGrace = false;
-  const toCall = (room.highestBet || 0) - p.currentBet;
-  const action = toCall > 0 ? 'Fold' : 'Check';
+  const toCall = sub(room.highestBet || 0, p.currentBet);
+  const action = gt(toCall, 0) ? 'Fold' : 'Check';
   processAction(roomId, userId, action);
 };
 

@@ -91,7 +91,7 @@ const bootServer = async () => {
       room.bjTurnUserId = undefined;
       room.bettingDeadline = undefined;
       room.dealerCards = [];
-      room.players.forEach(p => { p.bet = 0; p.bjStatus = 'idle'; p.cards = []; });
+      room.players.forEach(p => { p.bet = '0'; p.bjStatus = 'idle'; p.cards = []; });
     }
     restoreRoom(room);
   }

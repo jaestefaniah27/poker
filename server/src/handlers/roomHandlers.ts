@@ -57,7 +57,7 @@ export const roomHandlers = (socket: Socket) => {
     }
 
     const offTableBalance = toStr(sub(bal, finalBuyIn));
-    const finalBuyInNum = toNum(finalBuyIn);
+    const finalBuyInStr = toStr(finalBuyIn);
 
     const result = joinRoom(roomId, {
       id: socket.id,
@@ -65,16 +65,16 @@ export const roomHandlers = (socket: Socket) => {
       name: dbUser.name,
       avatar: dbUser.avatar || dbUser.id,
       cards: [],
-      chips: isProp ? 1000 : finalBuyInNum,
-      sessionBuyIn: finalBuyInNum,
+      chips: isProp ? '1000' : finalBuyInStr,
+      sessionBuyIn: finalBuyInStr,
       balance: offTableBalance,
-      currentBet: 0,
+      currentBet: '0',
       hasFolded: false,
       hasActed: false,
       isActive: true,
-      totalContribution: 0,
+      totalContribution: '0',
       level: levelFromXp(dbUser.xp ?? 0),
-      lastBuyIn: isBJ ? buyIn : undefined,
+      lastBuyIn: isBJ ? String(buyIn) : undefined,
       equippedBjFelt: dbUser.equipped_bj_felt || undefined,
       equippedAvatarDecoration: dbUser.equipped_avatar_decoration || undefined,
       equippedNameDecoration: dbUser.equipped_name_decoration || undefined,
@@ -92,7 +92,7 @@ export const roomHandlers = (socket: Socket) => {
     socket.join(roomId);
 
     if (result === 'joined') {
-      const newBalance = await applyBalanceDelta(dbUser.id, -finalBuyInNum);
+      const newBalance = await applyBalanceDelta(dbUser.id, finalBuyIn.negated());
       socket.emit('balanceUpdated', { balance: newBalance });
     } else {
       socket.emit('balanceUpdated', { balance: dbUser.balance });
@@ -134,7 +134,7 @@ export const roomHandlers = (socket: Socket) => {
       if (after && ['preflop', 'flop', 'turn', 'river'].includes(after.phase)) {
         const idx = after.currentTurnIndex;
         const current = idx >= 0 ? after.players[idx] : undefined;
-        if (!current || !current.isActive || current.hasFolded || current.isSpectating || current.chips <= 0) {
+        if (!current || !current.isActive || current.hasFolded || current.isSpectating || lte(current.chips, 0)) {
           // Current turn player is invalid — force-advance via armTurnTimer which will
           // trigger the watchdog path. We need to immediately resolve this.
           clearTurnTimer(roomId);

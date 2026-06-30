@@ -63,11 +63,11 @@ export interface Card {
 
 export interface BjHand {
   cards: Card[];
-  bet: number;
+  bet: string;   // Money (Decimal string)
   status: 'playing' | 'stand' | 'bust' | 'blackjack' | 'surrender';
   doubled?: boolean;
   result?: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender';
-  delta?: number;
+  delta?: string; // Money (Decimal string)
 }
 
 // --- BlackJack sidebets (apuestas laterales) ---
@@ -75,8 +75,8 @@ export type SidebetType = 'perfectPairs' | 'twentyOneThree' | 'luckyLadies' | 'i
 
 export interface BjSidebetResult {
   type: SidebetType;
-  bet: number;
-  delta: number;  // neto en fichas: +ganancia, -apuesta perdida, 0 si devuelta (insurance sin As)
+  bet: string;   // Money (Decimal string)
+  delta: string;  // neto en fichas (Decimal string): +ganancia, -apuesta perdida, 0 si devuelta
   won: boolean;
   label: string;  // etiqueta del resultado, p.ej. "Pareja perfecta", "Color", "Sin As · devuelto"
 }
@@ -115,8 +115,8 @@ export interface Player {
   name: string;
   avatar?: string;
   cards: Card[];
-  chips: number;
-  currentBet: number;
+  chips: string;        // Money (Decimal string)
+  currentBet: string;   // Money (Decimal string)
   hasFolded: boolean;
   hasActed: boolean;
   isActive: boolean;
@@ -128,10 +128,10 @@ export interface Player {
   isCursed?: boolean;
   level?: number; // nivel de cuenta (para mostrar en la mesa)
   handName?: string;
-  totalContribution: number;
+  totalContribution: string; // Money (Decimal string)
   bustedSeq?: number; // Orden de eliminación en modo torneo (1 = primer eliminado)
-  sessionBuyIn?: number;   // Fichas totales compradas en esta sesión de mesa (incluye recompras)
-  sessionMaxChips?: number; // Pico de fichas durante la sesión
+  sessionBuyIn?: string;   // Money: fichas totales compradas en esta sesión (incluye recompras)
+  sessionMaxChips?: string; // Money: pico de fichas durante la sesión
   sessionStartedAt?: number; // Timestamp del primer buy-in de la sesión
   offlineSince?: number; // Timestamp en que pasó a offline (para expulsión automática)
   equippedAvatarDecoration?: string; // Marco de avatar equipado
@@ -139,19 +139,19 @@ export interface Player {
   equippedBjFelt?: string; // Tapete de blackjack equipado
   movedToAndorra?: boolean; // Empadronado en Andorra
   // --- BlackJack ---
-  bet?: number; // Apuesta de la mano actual de blackjack (legacy para retrocompatibilidad rápida de monto total apostado/etc)
+  bet?: string; // Money: apuesta de la mano actual de blackjack (legacy)
   bjStatus?: 'idle' | 'betting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'surrender'; // legacy
   bjDoubled?: boolean; // legacy
   bjResult?: 'win' | 'lose' | 'push' | 'blackjack' | 'surrender'; // legacy
-  bjDelta?: number; // legacy
-  lastBuyIn?: number;
+  bjDelta?: string; // Money (legacy)
+  lastBuyIn?: string; // Money
   bjHasContinued?: boolean;
   bjHands?: BjHand[]; // <-- NUEVO: array de manos para soportar split
   bjActiveHandIndex?: number; // <-- NUEVO: índice de la mano activa
   // --- Sidebets ---
-  bjSidebets?: Partial<Record<SidebetType, number>>; // apuestas laterales de la ronda
+  bjSidebets?: Partial<Record<SidebetType, string>>; // Money: apuestas laterales de la ronda
   bjSidebetResults?: BjSidebetResult[];              // resueltas al repartir, pagadas en resolve
-  bjSidebetDelta?: number;                           // neto total de sidebets (fichas)
+  bjSidebetDelta?: string;                           // Money: neto total de sidebets
 }
 
 export type GameType = 'poker' | 'blackjack';
@@ -316,21 +316,21 @@ export const ruletaCooldownMs = (boostCount: number): number => {
   return 30 * 60 * 1000; // Base
 };
 
-export const STAKE_TIERS: number[] = [
+export const STAKE_TIERS: string[] = ([
   1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000,
   10000000, 25000000, 50000000, 100000000, 250000000, 500000000, 1000000000, 2500000000, 5000000000,
   10000000000, 25000000000, 50000000000, 100000000000, 250000000000, 500000000000, 1000000000000,
   2500000000000, 5000000000000, 10000000000000, 25000000000000, 50000000000000, 100000000000000,
   250000000000000, 500000000000000, 1000000000000000, 2500000000000000, 5000000000000000,
-  1e16, 2.5e16, 5e16, 1e17, 2.5e17, 5e17, // 10Q, 25Q, 50Q, 100Q, 250Q, 500Q
-  1e18, 2.5e18, 5e18, 1e19, 2.5e19, 5e19, // 1Qi, 2.5Qi, 5Qi, 10Qi, 25Qi, 50Qi
-  1e20, 2.5e20, 5e20, 1e21, 2.5e21, 5e21, // 100Qi, 250Qi, 500Qi, 1Sx, 2.5Sx, 5Sx
-  1e22, 2.5e22, 5e22, 1e23, 2.5e23, 5e23, // 10Sx, 25Sx, 50Sx, 100Sx, 250Sx, 500Sx
-  1e24, 2.5e24, 5e24, 1e25, 2.5e25, 5e25, // 1Sp, 2.5Sp, 5Sp, 10Sp, 25Sp, 50Sp
-  1e26, 2.5e26, 5e26, 1e27, 2.5e27, 5e27, // 100Sp, 250Sp, 500Sp, 1Oc, 2.5Oc, 5Oc
-  1e28, 2.5e28, 5e28, 1e29, 2.5e29, 5e29, // 10Oc, 25Oc, 50Oc, 100Oc, 250Oc, 500Oc
-  1e30, 2.5e30, 5e30 // 1No, 2.5No, 5No
-];
+  1e16, 2.5e16, 5e16, 1e17, 2.5e17, 5e17,
+  1e18, 2.5e18, 5e18, 1e19, 2.5e19, 5e19,
+  1e20, 2.5e20, 5e20, 1e21, 2.5e21, 5e21,
+  1e22, 2.5e22, 5e22, 1e23, 2.5e23, 5e23,
+  1e24, 2.5e24, 5e24, 1e25, 2.5e25, 5e25,
+  1e26, 2.5e26, 5e26, 1e27, 2.5e27, 5e27,
+  1e28, 2.5e28, 5e28, 1e29, 2.5e29, 5e29,
+  1e30, 2.5e30, 5e30
+]).map(n => _toStr(_m(n)));
 
 // Jackpot-specific tiers and unlock costs (cost = 10x bet)
 export const JACKPOT_TIERS: number[] = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000, 25000000, 50000000, 100000000, 250000000, 500000000, 1000000000, 5000000000, 10000000000, 25000000000, 50000000000, 100000000000, 250000000000, 500000000000, 1000000000000, 5000000000000, 10000000000000, 25000000000000, 50000000000000, 100000000000000];
@@ -338,12 +338,16 @@ export const JACKPOT_UNLOCK_COSTS: number[] = JACKPOT_TIERS.map(t => t * 10);
 export const snapToJackpotTier = (v: number): number =>
   JACKPOT_TIERS.reduce((best, t) => Math.abs(t - v) < Math.abs(best - v) ? t : best);
 
-export const snapToStakeTier = (v: number): number =>
-  STAKE_TIERS.reduce((best, t) => Math.abs(t - v) < Math.abs(best - v) ? t : best);
+export const snapToStakeTier = (v: number | string): string => {
+  const target = _m(v);
+  return STAKE_TIERS.reduce((best, t) =>
+    _m(t).minus(target).abs().lt(_m(best).minus(target).abs()) ? t : best
+  );
+};
 
 export const ruletaBoostedOptions = (ruletaLevel: number, boosts: TrackBoosts): number[] => {
   const mult = boostMultiplier('ruleta', boosts);
-  return ruletaOptionsFor(ruletaLevel).map(v => mult === 1 ? v : snapToStakeTier(v * mult));
+  return ruletaOptionsFor(ruletaLevel).map(v => mult === 1 ? v : Number(snapToStakeTier(v * mult)));
 };
 export const BLIND_DIVISORS: number[] = [20, 10, 5, 4];
 export const DEFAULT_BLIND_DIVISOR = 10;

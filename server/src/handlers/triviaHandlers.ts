@@ -13,7 +13,7 @@ function pickReward(triviaLevel: number, unlockedBoosts: TrackBoosts): TriviaRew
   const mult = boostMultiplier('trivia', unlockedBoosts);
   if (mult === 1) return reward;
   if (reward.type === 'chips') return { type: 'chips', amount: reward.amount * mult };
-  return { type: 'spin', value: snapToStakeTier(reward.value * mult) };
+  return { type: 'spin', value: Number(snapToStakeTier(reward.value * mult)) };
 }
 
 function pickQuestion(userId: string) {

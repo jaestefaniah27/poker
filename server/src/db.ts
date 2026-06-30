@@ -293,6 +293,12 @@ const MIGRATIONS = [
       WHERE stat != 'max_balance'
     `
   },
+  // match_history: buy_in/max_chips/cash_out en mesas de BJ pueden superar 2^53
+  // tras la migración de blackjackEngine a Decimal. Columnas _t (TEXT) son la
+  // fuente de verdad para nuevas filas; las INTEGER quedan legacy/sin tocar.
+  { name: '067_match_history_buyin_t', sql: 'ALTER TABLE match_history ADD COLUMN buy_in_t TEXT', ignoreError: 'duplicate column' },
+  { name: '068_match_history_maxchips_t', sql: 'ALTER TABLE match_history ADD COLUMN max_chips_t TEXT', ignoreError: 'duplicate column' },
+  { name: '069_match_history_cashout_t', sql: 'ALTER TABLE match_history ADD COLUMN cash_out_t TEXT', ignoreError: 'duplicate column' },
   {
     name: '066_achievement_baselines_backfill_poker',
     // hands_played/hands_won/biggest_pot de jugadores que jugaron poker ANTES de que se
@@ -417,7 +423,7 @@ export interface UserRow {
   has_artilugio?: number;
 }
 
-import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, CooldownBoosts, paguitaCooldownMs, dietaCooldownMs, Money, m, add, sub, toStr, clampNonNeg, gte, gt, isNeg } from '../../shared/types';
+import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAmountFor, LevelTrack, LEVEL_TRACK_MAX, boostMultiplier, TrackBoosts, CooldownBoosts, paguitaCooldownMs, dietaCooldownMs, Money, m, add, sub, toStr, toNum, clampNonNeg, gte, gt, isNeg } from '../../shared/types';
 
 // Columnas de usuario con el dinero leído exacto. balance_t (TEXT) es la fuente
 // de verdad del saldo; el alias pisa la columna `balance` INTEGER del `*` (en
@@ -740,20 +746,25 @@ export interface MatchHistoryRow {
   buy_in: number;
   max_chips: number;
   cash_out: number;
+  buy_in_t?: string | null;
+  max_chips_t?: string | null;
+  cash_out_t?: string | null;
   played_at: number;
 }
 
 export const recordMatchHistory = async (
   userId: string,
   roomName: string,
-  buyIn: number,
-  maxChips: number,
-  cashOut: number,
+  buyIn: string | number,
+  maxChips: string | number,
+  cashOut: string | number,
   playedAt: number
 ): Promise<void> => {
+  // buy_in/max_chips/cash_out (INTEGER legacy) se rellenan con el valor truncado a Number
+  // solo por compatibilidad de lectura antigua; buy_in_t/etc (TEXT) son la fuente de verdad.
   await dbRun(
-    'INSERT INTO match_history (user_id, room_name, buy_in, max_chips, cash_out, played_at) VALUES (?, ?, ?, ?, ?, ?)',
-    [userId, roomName, buyIn, maxChips, cashOut, playedAt]
+    'INSERT INTO match_history (user_id, room_name, buy_in, max_chips, cash_out, played_at, buy_in_t, max_chips_t, cash_out_t) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [userId, roomName, toNum(buyIn), toNum(maxChips), toNum(cashOut), playedAt, toStr(buyIn), toStr(maxChips), toStr(cashOut)]
   );
 };
 

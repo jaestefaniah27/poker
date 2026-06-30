@@ -36,8 +36,8 @@ export const dealCards = (room: Room) => {
     p.cards = [room.deck.pop()!, room.deck.pop()!];
     p.hasFolded = false;
     p.hasActed = false;
-    p.currentBet = 0;
-    p.totalContribution = 0;
+    p.currentBet = '0';
+    p.totalContribution = '0';
   });
 };
 

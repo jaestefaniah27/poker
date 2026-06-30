@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips, vibrate, STAKE_TIERS, lt, add, type Money } from '../utils';
+import { socket, fmtChips, vibrate, STAKE_TIERS, lt, gte, add, m, type Money } from '../utils';
 import { DecoratedName } from './Decorations';
 import PlayingCard from './PlayingCard';
 import Slider from './Slider';
@@ -504,7 +504,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const openRebuyModal = () => {
     // Preseleccionar tier más cercano al lastBuyIn anterior
     const last = myPlayer?.lastBuyIn || 0;
-    const idx = last > 0 ? Math.max(0, STAKE_TIERS.findIndex(t => t >= last)) : 1;
+    const idx = m(last).gt(0) ? Math.max(0, STAKE_TIERS.findIndex(t => gte(t, last))) : 1;
     setRebuyTierIndex(idx === -1 ? STAKE_TIERS.length - 1 : idx);
     setShowRebuyModal(true);
     vibrate(20);

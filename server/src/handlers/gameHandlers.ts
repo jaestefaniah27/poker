@@ -5,7 +5,7 @@ import {
 } from '../roomManager';
 import { broadcastRoom, armTurnTimer, clearTurnTimer, processAction, io, SHOWDOWN_LOCK_MS } from '../socketHelpers';
 import { applyBalanceDelta, getUser, getPokerStats, getAllStats } from '../db';
-import { lt } from '../../../shared/types';
+import { lt, isZero } from '../../../shared/types';
 
 // Emotes permitidos en mesa (lista cerrada: el server no reenvía texto libre).
 const ALLOWED_EMOTES = ['😂', '😭', '🔥', '💀', '🐔', '😡', '🤑', '👏'];
@@ -119,7 +119,7 @@ export const gameHandlers = (socket: Socket) => {
 
     const deltas = restartTournament(roomId);
     for (const d of deltas) {
-      if (d.delta !== 0) {
+      if (!isZero(d.delta)) {
         const newBalance = await applyBalanceDelta(d.userId, d.delta);
         io.to(d.socketId).emit('balanceUpdated', { balance: newBalance });
       }
