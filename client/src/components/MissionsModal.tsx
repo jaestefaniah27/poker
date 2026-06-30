@@ -55,7 +55,7 @@ interface AchievementView {
   rewardXp: number;
 }
 
-const MissionsModal = ({ user, token, onClose, onUpdateUser }: MissionsModalProps) => {
+const MissionsModal = ({ token, onClose, onUpdateUser }: MissionsModalProps) => {
   const [tab, setTab] = useState<'daily' | 'achievements'>('daily');
   const [loading, setLoading] = useState(true);
   const [missions, setMissions] = useState<DailyMissionView[]>([]);

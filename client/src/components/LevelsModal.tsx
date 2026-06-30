@@ -187,7 +187,6 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
             </div>
             {(() => {
               const cur = misionTrackValuesFor(misionLevel);
-              const next = misionTrackValuesFor(misionLevel + 1);
               const upgradesToday = user.misionUpgradesToday ?? 0;
               const atDailyLimit = upgradesToday >= MISION_UPGRADES_PER_DAY;
               return (

@@ -6,7 +6,7 @@
 // Sin dependencias de DB — eso vive en server/src/db.ts.
 // ============================================================
 
-import { m, Money, Decimal, add, mul, toStr, gte } from './money';
+import { m, type Money, Decimal, mul, toStr } from './money';
 
 // ============================================================
 // 1. PLANTILLAS DE MISIONES DIARIAS
