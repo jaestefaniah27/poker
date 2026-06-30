@@ -106,6 +106,14 @@ Suite Playwright headless en modo texto (sin screenshots, lectura directa del DO
 
 Ejecutar la suite después de cualquier cambio significativo para verificar que todo sigue verde.
 
+## Tests de Misiones (lógica pura)
+
+Suite exhaustiva de la lógica de misiones (sin DB), en `tests/missions.test.ts`.
+
+- **Ejecutar**: `cd server && npx ts-node --transpile-only --compiler-options '{"module":"commonjs","moduleResolution":"node"}' ../tests/missions.test.ts`
+- **3.174 aserciones** cubriendo: plantillas diarias, generación determinista del set diario, reset 6AM España (con casos DST), track de Misiones (valores exactos + monotonía + extrapolación), recompensas de diarias, broches Bronce/Plata/Oro, catálogo de logros (178 tiers: cadenas consecutivas, premios crecientes, statKeys válidos).
+- Ejecutar tras cualquier cambio a `shared/missions.ts` o `shared/achievements.ts`.
+
 ## Flujo de deploy — CRÍTICO
 
 El flujo correcto es **siempre**:
