@@ -70,6 +70,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showRoulette, setShowRoulette] = useState(false);
   const [showShop, setShowShop] = useState(false);
   const [showMissions, setShowMissions] = useState(false);
+  const [hasMissionsClaimable, setHasMissionsClaimable] = useState(false);
   const [hasNewShopItems, setHasNewShopItems] = useState(() => getStorage().getItem('seenArtilugio') !== 'true');
 
   useEffect(() => {
@@ -243,6 +244,18 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
     });
   };
 
+  const refreshMissionsClaimable = () => {
+    socket.emit('getMissions', { token }, (res: any) => {
+      if (!res?.ok) return;
+      const dailyClaimable = (res.missions || []).some((m: any) => m.completed && !m.claimed);
+      const brocheClaimable = res.broches
+        ? [res.broches.bronze, res.broches.silver, res.broches.gold].some((b: any) => b.eligible && !b.claimed)
+        : false;
+      const achievementClaimable = (res.achievements || []).some((a: any) => a.completed && !a.claimed);
+      setHasMissionsClaimable(dailyClaimable || brocheClaimable || achievementClaimable);
+    });
+  };
+
   useEffect(() => {
     const fetchLeaderboard = () => {
       socket.emit('getLeaderboard', {}, (data: LeaderboardEntry[]) => {
@@ -288,6 +301,8 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
 
     const handleHaciendaUpdate = (data: { total: number | string }) => setHaciendaTotal(String(data.total));
     socket.on('haciendaUpdated', handleHaciendaUpdate);
+
+    refreshMissionsClaimable();
 
     return () => {
       socket.off('leaderboardUpdated', fetchLeaderboard);
@@ -371,7 +386,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
         <ShopModal user={user as any} onClose={() => setShowShop(false)} onUpdateUser={onUpdateUser} onError={(msg) => alert(msg)} />
       )}
       {showMissions && (
-        <MissionsModal user={user} token={token} onClose={() => setShowMissions(false)} onUpdateUser={onUpdateUser} />
+        <MissionsModal user={user} token={token} onClose={() => { setShowMissions(false); refreshMissionsClaimable(); }} onUpdateUser={onUpdateUser} />
       )}
         {showProfile && (
           <ProfileModal
@@ -501,6 +516,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
+              {hasMissionsClaimable && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-black animate-pulse" />
+              )}
             </button>
           </div>
         </div>

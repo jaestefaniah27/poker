@@ -176,7 +176,7 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
             </div>
           ))}
 
-          {/* Misiones — track infinito, máx 5 mejoras/día */}
+          {/* Misiones — track infinito, máx 5 mejoras/día. Rota 1 de 5 categorías cada nivel. */}
           <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="flex items-center gap-2 font-bold text-sm text-cyan-300">
@@ -187,15 +187,34 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
             </div>
             {(() => {
               const cur = misionTrackValuesFor(misionLevel);
+              const next = misionTrackValuesFor(misionLevel + 1);
               const upgradesToday = user.misionUpgradesToday ?? 0;
               const atDailyLimit = upgradesToday >= MISION_UPGRADES_PER_DAY;
+              // Offset de la categoría que mejora en (misionLevel + 1): 1=dinero, 2=tiradas, 3=xp, 4=valor, 0(=5)=broches
+              const nextOffset = (misionLevel + 1) % 5;
+              const rows: { emoji: string; name: string; curVal: string; nextVal: string; willUpgrade: boolean }[] = [
+                { emoji: '💰', name: 'Diaria', curVal: `$${fmtChips(cur.dailyChipsMultiplier.toString())}`, nextVal: `$${fmtChips(next.dailyChipsMultiplier.toString())}`, willUpgrade: nextOffset === 1 },
+                { emoji: '🎡', name: 'Tiradas broche', curVal: `${cur.brocheSpinsCount}`, nextVal: `${next.brocheSpinsCount}`, willUpgrade: nextOffset === 2 },
+                { emoji: '⭐', name: 'XP diaria', curVal: `${fmtChips(cur.dailyXpMultiplier.toString())}`, nextVal: `${fmtChips(next.dailyXpMultiplier.toString())}`, willUpgrade: nextOffset === 3 },
+                { emoji: '💎', name: 'Valor tirada', curVal: `$${fmtChips(cur.spinValue.toString())}`, nextVal: `$${fmtChips(next.spinValue.toString())}`, willUpgrade: nextOffset === 4 },
+                { emoji: '🏅', name: 'Broches', curVal: `🥉${fmtChips(cur.bronceXp.toString())}XP 🥈${cur.plataSpins} 🥇$${fmtChips(cur.oroChips.toString())}`, nextVal: `🥉${fmtChips(next.bronceXp.toString())}XP 🥈${next.plataSpins} 🥇$${fmtChips(next.oroChips.toString())}`, willUpgrade: nextOffset === 0 },
+              ];
               return (
                 <>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-300 mb-3">
-                    <span>💰 Diaria: ${fmtChips(cur.dailyChipsMultiplier.toString())}</span>
-                    <span>🎡 Tiradas: {cur.brocheSpinsCount}</span>
-                    <span>⭐ XP: {fmtChips(cur.dailyXpMultiplier.toString())}</span>
-                    <span>💎 Valor: ${fmtChips(cur.spinValue.toString())}</span>
+                  <div className="space-y-1.5 text-[11px] mb-3">
+                    {rows.map(r => (
+                      <div key={r.name} className={`flex items-center gap-1.5 ${r.willUpgrade ? 'text-cyan-200' : 'text-gray-400'}`}>
+                        <span>{r.emoji}</span>
+                        <span className="w-24 shrink-0">{r.name}:</span>
+                        <span>{r.curVal}</span>
+                        {!atDailyLimit && points > 0 && r.willUpgrade && (
+                          <>
+                            <span className="text-gray-600">→</span>
+                            <span className="font-bold text-cyan-300">{r.nextVal}</span>
+                          </>
+                        )}
+                      </div>
+                    ))}
                   </div>
                   <button
                     onClick={upgradeMision}
