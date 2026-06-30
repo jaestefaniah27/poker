@@ -218,7 +218,17 @@ const MIGRATIONS = [
   { name: '046_has_artilugio', sql: 'ALTER TABLE users ADD COLUMN has_artilugio INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
   { name: '047_unlocked_cooldown_boosts', sql: "ALTER TABLE users ADD COLUMN unlocked_cooldown_boosts TEXT DEFAULT '{}'", ignoreError: 'duplicate column' },
   { name: '048_last_paguita_claim_ts', sql: 'ALTER TABLE users ADD COLUMN last_paguita_claim_ts INTEGER', ignoreError: 'duplicate column' },
-  { name: '049_user_stats_value_t', sql: 'ALTER TABLE user_stats ADD COLUMN value_t TEXT', ignoreError: 'duplicate column' }
+  { name: '049_user_stats_value_t', sql: 'ALTER TABLE user_stats ADD COLUMN value_t TEXT', ignoreError: 'duplicate column' },
+  // Israel y Hacienda: precisión arbitraria vía columnas TEXT (mismo patrón que balance_t).
+  // Las INTEGER se corrompen a REAL al escribir >2^63; las _t son la fuente de verdad.
+  { name: '050_israel_debt_t', sql: 'ALTER TABLE users ADD COLUMN israel_debt_t TEXT', ignoreError: 'duplicate column' },
+  { name: '051_israel_debt_t_fill', sql: "UPDATE users SET israel_debt_t = CAST(israel_debt AS TEXT) WHERE israel_debt_t IS NULL OR israel_debt_t = ''" },
+  { name: '052_israel_donation_t', sql: 'ALTER TABLE users ADD COLUMN israel_donation_t TEXT', ignoreError: 'duplicate column' },
+  { name: '053_israel_donation_t_fill', sql: "UPDATE users SET israel_donation_t = CAST(israel_donation AS TEXT) WHERE israel_donation_t IS NULL OR israel_donation_t = ''" },
+  { name: '054_israel_pool_t', sql: 'ALTER TABLE users ADD COLUMN israel_pool_t TEXT', ignoreError: 'duplicate column' },
+  { name: '055_israel_pool_t_fill', sql: "UPDATE users SET israel_pool_t = CAST(israel_pool AS TEXT) WHERE israel_pool_t IS NULL OR israel_pool_t = ''" },
+  { name: '056_hacienda_total_t', sql: 'ALTER TABLE hacienda_state ADD COLUMN total_t TEXT', ignoreError: 'duplicate column' },
+  { name: '057_hacienda_total_t_fill', sql: "UPDATE hacienda_state SET total_t = CAST(total AS TEXT) WHERE total_t IS NULL OR total_t = ''" }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -335,9 +345,9 @@ import { PublicUser, levelFromXp, availableLevelPoints, dailyAmountFor, hourlyAm
 // se castean a TEXT para no perder precisión al leerlos como number.
 const USER_COLS =
   "*, COALESCE(balance_t, CAST(balance AS TEXT), '0') AS balance, " +
-  "CAST(COALESCE(israel_debt,0) AS TEXT) AS israel_debt, " +
-  "CAST(COALESCE(israel_donation,0) AS TEXT) AS israel_donation, " +
-  "CAST(COALESCE(israel_pool,0) AS TEXT) AS israel_pool";
+  "COALESCE(israel_debt_t, CAST(israel_debt AS TEXT), '0') AS israel_debt, " +
+  "COALESCE(israel_donation_t, CAST(israel_donation AS TEXT), '0') AS israel_donation, " +
+  "COALESCE(israel_pool_t, CAST(israel_pool AS TEXT), '0') AS israel_pool";
 
 // Mutex por usuario para que el read-modify-write del saldo (BigInt en JS, no
 // se puede hacer atómico en SQL con TEXT) no sufra carreras entre operaciones
@@ -836,7 +846,7 @@ export const addOneFreeSpin = async (id: string, value: number, count = 1): Prom
 };
 
 export const getHaciendaTotal = async (): Promise<string> => {
-  const row = await dbGet<{ total: string }>('SELECT CAST(total AS TEXT) AS total FROM hacienda_state WHERE id = 1');
+  const row = await dbGet<{ total: string }>("SELECT COALESCE(total_t, CAST(total AS TEXT), '0') AS total FROM hacienda_state WHERE id = 1");
   return row?.total ?? '0';
 };
 
@@ -889,10 +899,11 @@ export const saveShopCatalog = async (catalog: ShopItem[]): Promise<void> => {
 };
 
 export const addHaciendaTotal = async (amount: bigint | number | string | Money): Promise<string> => {
-  const amtStr = toStr(amount as any);
-  await dbRun('INSERT OR IGNORE INTO hacienda_state (id, total) VALUES (1, 0)');
-  // Bind as string so SQLite keeps INTEGER arithmetic (float binding causes REAL coercion on large values).
-  await dbRun('UPDATE hacienda_state SET total = CAST(total AS INTEGER) + CAST(? AS INTEGER) WHERE id = 1', [amtStr]);
+  await dbRun('INSERT OR IGNORE INTO hacienda_state (id, total, total_t) VALUES (1, 0, \'0\')');
+  const cur = await getHaciendaTotal();
+  const next = toStr(add(cur, amount as any));
+  // total_t (TEXT) es la fuente de verdad; precisión arbitraria vía Decimal.
+  await dbRun('UPDATE hacienda_state SET total_t = ? WHERE id = 1', [next]);
   return await getHaciendaTotal();
 };
 
@@ -901,7 +912,7 @@ export const payIsrael = async (id: string): Promise<string> => {
   const debt = m(user?.israel_debt ?? 0);
   if (debt.lte(0)) return '0';
 
-  await dbRun('UPDATE users SET israel_debt = 0, paid_israel = 1 WHERE id = ?', [id]);
+  await dbRun("UPDATE users SET israel_debt = 0, israel_debt_t = '0', paid_israel = 1 WHERE id = ?", [id]);
   const balanceBefore = m(user?.balance ?? 0);
   await applyBalanceDelta(id, debt.negated());
   return toStr(balanceBefore.lt(debt) ? balanceBefore : debt); // lo que realmente se pudo cobrar
@@ -946,9 +957,12 @@ export const addIsraelDonation = async (donorId: string, amount: number | bigint
   // Descontar del donante.
   await applyBalanceDelta(donorId, amt.negated());
 
-  // Stats del donante (donación acumulada + pool 1.5×).
-  const poolAddition = toStr(amt.times(3).div(2).floor());
-  await dbRun('UPDATE users SET israel_donation = israel_donation + ?, israel_pool = israel_pool + ? WHERE id = ?', [toStr(amt), poolAddition, donorId]);
+  // Stats del donante (donación acumulada + pool 1.5×). _t TEXT = fuente de verdad.
+  const donor = await getUser(donorId);
+  const newDonation = toStr(add(donor?.israel_donation ?? 0, amt));
+  const poolAddition = amt.times(3).div(2).floor();
+  const newPool = toStr(add(donor?.israel_pool ?? 0, poolAddition));
+  await dbRun('UPDATE users SET israel_donation_t = ?, israel_pool_t = ? WHERE id = ?', [newDonation, newPool, donorId]);
 };
 
 export const deductIsraelPool = async (id: string, amount: number): Promise<number> => {
@@ -957,7 +971,8 @@ export const deductIsraelPool = async (id: string, amount: number): Promise<numb
   if (pool.lte(0)) return 0;
   const amt = m(amount);
   const deducted = amt.lt(pool) ? amt : pool;
-  await dbRun('UPDATE users SET israel_pool = israel_pool - ? WHERE id = ?', [toStr(deducted), id]);
+  const newPool = toStr(pool.minus(deducted));
+  await dbRun('UPDATE users SET israel_pool_t = ? WHERE id = ?', [newPool, id]);
   return deducted.toNumber();
 };
 

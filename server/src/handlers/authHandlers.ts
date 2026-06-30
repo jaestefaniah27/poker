@@ -347,11 +347,12 @@ export const authHandlers = (socket: Socket) => {
     const user = await authUser(token);
     if (!user || user.name !== 'Jorge') { callback({ error: 'No autorizado' }); return; }
     
-    const amt = Math.floor(Number(amount));
-    if (isNaN(amt) || amt < 0) { callback({ error: 'Cantidad inválida' }); return; }
+    const amt = m(amount);
+    if (amt.isNegative()) { callback({ error: 'Cantidad inválida' }); return; }
     
     const { dbRun } = require('../db');
-    await dbRun('UPDATE users SET israel_debt = ? WHERE id = ?', [amt, targetId]);
+    // israel_debt_t (TEXT) es la fuente de verdad; ponemos también la INTEGER por compat de lectura legacy.
+    await dbRun('UPDATE users SET israel_debt_t = ? WHERE id = ?', [toStr(amt), targetId]);
     
     const targetUser = await getUser(targetId);
     if (targetUser) {
