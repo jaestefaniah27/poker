@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips, vibrate, STAKE_TIERS, lt, gte, add, m, type Money } from '../utils';
+import { socket, fmtChips, vibrate, STAKE_TIERS, lt, gt, gte, isZero, add, m, toNum, type Money } from '../utils';
 import { DecoratedName } from './Decorations';
 import PlayingCard from './PlayingCard';
 import Slider from './Slider';
@@ -190,7 +190,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const canAct = phase === 'playerAction' && myPlayer?.bjStatus === 'playing';
 
   const minBet = room.minBet || 1;
-  const myChips = myPlayer?.chips || 0;
+  // myChips en number: display/cálculos de UI están acotados al buy-in de la mesa (seguro en number).
+  // El bug real estaba en el SERVIDOR (chips en number ahí también); aquí solo se muestra el valor.
+  const myChips = toNum(myPlayer?.chips || 0);
   // Sin tope de mesa: puedes apostar todas tus fichas. Las que no puedas pagar salen transparentes.
   const maxBet = myChips;
   // Patrimonio en mesa = saldo fuera de mesa + fichas (las dos bolsas son disjuntas en BJ).
@@ -205,7 +207,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     setChipMult(chipMultiplierFor(add(user.balance, myPlayer.chips || 0).toNumber()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myPlayer]);
-  const myBet = myPlayer?.bet || 0;
+  const myBet = toNum(myPlayer?.bet || 0);
   const canBet = phase === 'betting' && myPlayer && !myPlayer.isSpectating && myChips > 0 && myBet === 0;
 
   // Chips dropped into the betting circle (pre-deal)
@@ -287,7 +289,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       if (myPlayer?.bjSidebets) {
         const sb: Partial<Record<SidebetType, number>> = {};
         for (const k of SIDEBET_ORDER) {
-          if (myPlayer.bjSidebets[k]) sb[k] = myPlayer.bjSidebets[k]!;
+          if (myPlayer.bjSidebets[k]) sb[k] = toNum(myPlayer.bjSidebets[k]!);
         }
         setLastSidebets(sb);
       } else {
@@ -411,7 +413,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const activeHandIndex = Math.min(myPlayer?.bjActiveHandIndex ?? 0, Math.max(0, myHands.length - 1));
 
   const originalBetAmount = (myHands.length > 0 && myHands[0])
-    ? ((myHands[0] as any).doubled ? myHands[0].bet / 2 : myHands[0].bet)
+    ? ((myHands[0] as any).doubled ? toNum(myHands[0].bet) / 2 : toNum(myHands[0].bet))
     : (myPlayer?.bjDoubled ? myBet / 2 : myBet);
 
   const basePlacedChips = placedComposition.length > 0
@@ -435,10 +437,10 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   }
 
   let finalCircleChips = _circleChips;
-  if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && (myPlayer?.bjDelta || 0) > 0) {
+  if (showResult && prizeArrived && (myPlayer?.bjResult === 'win' || myPlayer?.bjResult === 'blackjack') && myBet > 0 && toNum(myPlayer?.bjDelta || 0) > 0) {
     // Cuando el dealer paga, compactamos la apuesta original + el premio en las fichas más grandes
     // para evitar que la suma de dos montones pequeños sature y desborde el área visual.
-    finalCircleChips = chipsFromAmount(myBet + (myPlayer?.bjDelta || 0), chipMult);
+    finalCircleChips = chipsFromAmount(myBet + toNum(myPlayer?.bjDelta || 0), chipMult);
   }
 
   const circleChips = hideLostChips ? [] : finalCircleChips;
@@ -449,7 +451,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     const fromState = phase === 'betting' && myBet === 0;
     const keys: SidebetType[] = [...SIDEBET_ORDER, 'insurance'];
     return keys.map(k => {
-      const amount = fromState ? sumChips(sidebetChips[k as Sidebet] || []) : (myPlayer?.bjSidebets?.[k] || 0);
+      const amount = fromState ? sumChips(sidebetChips[k as Sidebet] || []) : toNum(myPlayer?.bjSidebets?.[k] || 0);
       if (amount <= 0) return null;
       // Siempre compactado a la mejor composición → la ficha mostrada es la de mayor denominación.
       const top = [...chipsFromAmount(amount, chipMult)].sort((a, b) => b.v - a.v)[0];
@@ -529,13 +531,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
     : (dealDone ? dealer.cards : dealer.cards.slice(0, revealedDealer));
   const displayDealerTotals = handTotalDisplay(displayDealerCards);
 
-  const totalBet = myHands.reduce((acc: number, h: any) => acc + h.bet, 0);
-  const activeHandBet = myHands.length > 0 ? (myHands[activeHandIndex]?.bet ?? myBet) : myBet;
+  const totalBet = myHands.reduce((acc: number, h: any) => acc + toNum(h.bet), 0);
+  const activeHandBet = myHands.length > 0 ? toNum(myHands[activeHandIndex]?.bet ?? myBet) : myBet;
   const canDoubleHand = canAct && myCards.length === 2 && myChips >= totalBet + activeHandBet;
 
   const isPair = myCards.length === 2 && cardPoints(myCards[0].rank as string) === cardPoints(myCards[1].rank as string);
   const canSplit = canAct && isPair && myHands.length < 4 && myChips >= totalBet + activeHandBet;
-  const currentSidebetsTotal = [...SIDEBET_ORDER, 'insurance' as SidebetType].reduce((s, k) => s + (myPlayer?.bjSidebets?.[k] || 0), 0);
+  const currentSidebetsTotal = [...SIDEBET_ORDER, 'insurance' as SidebetType].reduce((s, k) => s + toNum(myPlayer?.bjSidebets?.[k] || 0), 0);
   const insuranceBetAmount = Math.floor(activeHandBet / 2);
   const canInsurance = canAct && myHands.length === 1 && myCards.length === 2 && dealerCards[0]?.rank === 'A' && !myPlayer?.bjSidebets?.insurance && myChips >= totalBet + currentSidebetsTotal + insuranceBetAmount;
 
@@ -627,9 +629,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
       const ids = spawned.map(s => s.id);
       setTimeout(() => setFlyChips(fc => fc.filter(c => !ids.includes(c.id))), ttl);
       setTimeout(() => setFrozenChips(null), ttl + 100);
-    } else if ((result === 'win' || result === 'blackjack') && (myPlayer.bjDelta || 0) > 0) {
+    } else if ((result === 'win' || result === 'blackjack') && toNum(myPlayer.bjDelta || 0) > 0) {
       // Dealer empuja fichas de premio hacia el círculo
-      const prizeAmount = Math.abs(myPlayer.bjDelta || 0);
+      const prizeAmount = Math.abs(toNum(myPlayer.bjDelta || 0));
       const glyphs = chipsFromAmount(prizeAmount, chipMult);
       const spawned = glyphs.map((d, i) => ({
         id: ++flyIdRef.current,
@@ -819,7 +821,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
               const result = showResult ? p.bjResult : undefined;
               const opacity = p.isOnline === false ? 0.5 : 1;
               const oppHands = p.bjHands && p.bjHands.length > 0 ? p.bjHands : ((p.cards?.length || 0) > 0 ? [{ cards: p.cards, status: p.bjStatus }] : []);
-              const totalOppBet = oppHands.reduce((acc: number, h: any) => acc + (h.bet || 0), 0) || p.bet || 0;
+              const totalOppBet = oppHands.reduce((acc: number, h: any) => acc + toNum(h.bet || 0), 0) || toNum(p.bet || 0);
               return (
                 <motion.div
                   key={p.userId}
@@ -862,7 +864,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                       )
                     ) : (
                       <div className="text-[9px] text-white/35 uppercase tracking-wider">
-                        {(p.bet || 0) > 0 ? '· apostado ·' : '· esperando ·'}
+                        {toNum(p.bet || 0) > 0 ? '· apostado ·' : '· esperando ·'}
                       </div>
                     )}
                   </div>
@@ -881,9 +883,9 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                         {result === 'blackjack' ? 'BJ' : result === 'win' ? 'GANA' : result === 'push' ? '=' : 'PIERDE'}
                       </span>
                     )}
-                    {p.bjDelta != null && p.bjDelta !== 0 && showResult && (
-                      <span className={`text-[8px] font-mono font-bold ${p.bjDelta > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                        {p.bjDelta > 0 ? '+' : ''}{fmtChips(p.bjDelta)}
+                    {p.bjDelta != null && !isZero(p.bjDelta) && showResult && (
+                      <span className={`text-[8px] font-mono font-bold ${gt(p.bjDelta, 0) ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        {gt(p.bjDelta, 0) ? '+' : ''}{fmtChips(p.bjDelta)}
                       </span>
                     )}
                   </div>
@@ -1007,13 +1009,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                         {sv.top && <Chip d={sv.top} size={12} forceSize />}
                       </div>
                       <div className="flex flex-col leading-none min-w-0">
-                        <span className={`text-[8px] font-black ${sv.res ? (sv.res.won ? 'text-emerald-300' : sv.res.delta < 0 ? 'text-rose-300' : 'text-white/50') : 'text-amber-200/80'}`}>
+                        <span className={`text-[8px] font-black ${sv.res ? (sv.res.won ? 'text-emerald-300' : lt(sv.res.delta, 0) ? 'text-rose-300' : 'text-white/50') : 'text-amber-200/80'}`}>
                           {SIDEBET_SHORT[sv.type]}
                         </span>
                         <span className="text-[7px] text-white/40 font-mono truncate">{fmtChips(sv.amount)}</span>
                         {sv.res && (
-                          <span className={`text-[7px] font-mono font-bold ${sv.res.delta > 0 ? 'text-emerald-300' : sv.res.delta < 0 ? 'text-rose-300' : 'text-white/40'}`}>
-                            {sv.res.delta > 0 ? `+${fmtChips(sv.res.delta)}` : sv.res.delta < 0 ? fmtChips(sv.res.delta) : '↩'}
+                          <span className={`text-[7px] font-mono font-bold ${gt(sv.res.delta, 0) ? 'text-emerald-300' : lt(sv.res.delta, 0) ? 'text-rose-300' : 'text-white/40'}`}>
+                            {gt(sv.res.delta, 0) ? `+${fmtChips(sv.res.delta)}` : lt(sv.res.delta, 0) ? fmtChips(sv.res.delta) : '↩'}
                           </span>
                         )}
                       </div>
@@ -1085,7 +1087,7 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
                 const totalBetPill = phase === 'betting' && (pendingTotal > 0 || pendingSidebetTotal > 0) 
                   ? pendingTotal + pendingSidebetTotal 
                   : myBet + placedSidebetTotal;
-                const totalDeltaPill = (myPlayer?.bjDelta || 0) + (myPlayer?.bjSidebetDelta || 0);
+                const totalDeltaPill = toNum(myPlayer?.bjDelta || 0) + toNum(myPlayer?.bjSidebetDelta || 0);
                 const hasDelta = showResult && (myPlayer?.bjDelta != null || myPlayer?.bjSidebetDelta != null);
                 
                 if (totalBetPill <= 0 && !hasDelta) return null;

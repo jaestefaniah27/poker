@@ -106,7 +106,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   }
 
   const numSteps = 10;
-  let rawSliderTiers: number[] = [];
+  let rawSliderTiers: string[] = [];
   if (maxTierIdx <= numSteps - 1) {
     for (let i = 0; i <= maxTierIdx; i++) rawSliderTiers.push(STAKE_TIERS[i]);
   } else {
@@ -951,7 +951,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       {/* Stake + blind-speed modal (poker) */}
       {showStakeSlider && (() => {
         const buyIn = sliderTiers[createTierIndex] || sliderTiers[0];
-        const { smallBlind, bigBlind } = blindsFor(buyIn, createBlindDivisor);
+        const { smallBlind, bigBlind } = blindsFor(Number(buyIn), createBlindDivisor);
         return (
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setShowStakeSlider(false)}>
             <div className="w-full max-w-md bg-surface rounded-3xl p-6 border border-surfaceLight max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>

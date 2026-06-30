@@ -18,7 +18,7 @@ import Slider from './components/Slider';
 import BlackjackTable from './components/BlackjackTable';
 import { AvatarAdjuster } from './components/AvatarAdjuster';
 import AdminShop from './components/AdminShop';
-import { type Room, type Player, type PublicUser, type RouletteHistoryEntry, lt, gt, add } from '../../shared/types';
+import { type Room, type Player, type PublicUser, type RouletteHistoryEntry, lt, gt, gte, sub, mul, add, toNum, toStr } from '../../shared/types';
 
 const AppSkeleton = ({ hasToken }: { hasToken: boolean }) => (
   <div className="min-h-screen bg-background font-sans">
@@ -230,7 +230,7 @@ function App() {
     let chipsToPotMaxDelay = 0;
     const CHIP_FLIGHT_MS = 850;
     if (potGrew) {
-      const potDiff = curr.pot - prev.pot;
+      const potDiff = curr.pot - prev.pot; // room.pot sigue number (acotado, no migrado a Decimal)
       const potAnimMs = Math.min(2000, potDiff * (1000 / 60));
       // Reserva el final del periodo "pot animándose" para futuros eventos (revelado de cartas)
       // Asumimos el peor caso de stagger ahora; se refinará abajo si hay vuelo real
@@ -240,7 +240,7 @@ function App() {
       const potRect = potEl.getBoundingClientRect();
       let staggerIdx = 0;
       prev.players.forEach((prevP: any) => {
-        if (prevP.currentBet > 0) {
+        if (gt(prevP.currentBet, 0)) {
           const isMe = prevP.userId === user?.id;
           const storedPos = isMe
             ? lastBetPositionsRef.current.get('myPlayer')
@@ -261,7 +261,7 @@ function App() {
             y: storedPos.y,
             tx: potRect.left + potRect.width / 2,
             ty: potRect.top + potRect.height / 2,
-            amount: prevP.currentBet,
+            amount: toNum(prevP.currentBet),
             delay,
           }]);
           timeoutIds.push(setTimeout(() => setFlyingChips(fc => fc.filter(c => c.id !== id)), CHIP_FLIGHT_MS + delay));
@@ -271,7 +271,7 @@ function App() {
 
     const prevMyPlayer = prev.players?.find((p: any) => p.userId === user?.id);
     const currMyPlayer = curr.players?.find((p: any) => p.userId === user?.id);
-    if (prevMyPlayer && currMyPlayer && currMyPlayer.currentBet > prevMyPlayer.currentBet) {
+    if (prevMyPlayer && currMyPlayer && gt(currMyPlayer.currentBet, prevMyPlayer.currentBet)) {
       setAnimateBetIn(true);
       timeoutIds.push(setTimeout(() => setAnimateBetIn(false), 400));
     }
@@ -299,7 +299,7 @@ function App() {
         vibrate([100, 50, 100, 50, 300]); // long happy vibration
         const myWin = curr.winners?.find((w: any) => w.id === myId)?.amount ?? 0;
         const myChips = curr.players.find((p: any) => p.id === myId)?.chips ?? 0;
-        if (myWin > 0 && myWin >= myChips) sfx.bigWin(); else sfx.win();
+        if (myWin > 0 && gte(myWin, myChips)) sfx.bigWin(); else sfx.win();
         sfx.chips();
       } else {
         vibrate([100]); // short end hand vibration
@@ -671,7 +671,7 @@ function App() {
   const amSpectating = myPlayer?.isSpectating === true;
   const inBettingPhase = ['preflop', 'flop', 'turn', 'river'].includes(currentRoom.phase);
   const isAllInLive = inBettingPhase && !amSpectating && !myPlayer?.hasFolded;
-  const amBusted = myPlayer?.chips === 0 && !isAllInLive;
+  const amBusted = myPlayer && toNum(myPlayer.chips) === 0 && !isAllInLive;
   const isTournament = !!currentRoom.isTournament;
   const tournamentEnded = !!currentRoom.tournamentEnded;
   const isAdmin = currentRoom.players[0]?.userId === user?.id;
@@ -679,8 +679,12 @@ function App() {
     ? currentRoom.blindLevelStartedAt + currentRoom.blindLevelDuration
     : null;
   const currentTurnPlayer = currentRoom.players[currentRoom.currentTurnIndex];
-  const toCallAmount = currentRoom.highestBet - (myPlayer?.currentBet || 0);
+  const toCallAmount = toNum(sub(currentRoom.highestBet, myPlayer?.currentBet || 0));
   const minRaise = currentRoom.highestBet > 0 ? currentRoom.highestBet * 2 : (currentRoom.bigBlind || 2);
+  // Stack total en number: chips + apuesta actual de la mano (acotado al buy-in de la mesa, seguro en number).
+  const myStackTotal = toNum(add(myPlayer?.chips || 0, myPlayer?.currentBet || 0));
+  const myChipsNum = toNum(myPlayer?.chips || 0);
+  const myCurrentBetNum = toNum(myPlayer?.currentBet || 0);
 
   const turnTimer = (() => {
     if (!inBettingPhase || currentRoom.currentTurnIndex < 0) return null;
@@ -747,19 +751,20 @@ function App() {
               <p className="text-white text-center font-semibold text-base">¿Salir de la mesa?</p>
               <p className="text-gray-400 text-center text-sm">Perderás tu apuesta si hay una mano en curso.</p>
               {myPlayer && (() => {
-                const totalEnMesa = myPlayer.chips + myPlayer.currentBet;
-                let diff = totalEnMesa - currentRoom.buyIn;
-                let startAmount = currentRoom.buyIn;
-                let endAmount = totalEnMesa;
+                const totalEnMesa = add(myPlayer.chips, myPlayer.currentBet);
+                let diff = sub(totalEnMesa, currentRoom.buyIn);
+                let startAmount: string | number = currentRoom.buyIn;
+                let endAmount: string | number = toStr(totalEnMesa);
                 if (currentRoom.isProportional) {
                   const sessionBuyIn = myPlayer.sessionBuyIn || 1000;
                   startAmount = sessionBuyIn;
-                  endAmount = Math.floor((totalEnMesa / 1000) * sessionBuyIn);
-                  diff = endAmount - startAmount;
+                  endAmount = toStr(mul(totalEnMesa, sessionBuyIn).div(1000).floor());
+                  diff = sub(endAmount, startAmount);
                 }
+                const diffNum = toNum(diff);
                 return (
-                  <p className={`text-center text-sm font-bold ${diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                    {diff > 0 ? '+' : ''}{fmtChips(diff)} ({fmtChips(startAmount)} → {fmtChips(endAmount)})
+                  <p className={`text-center text-sm font-bold ${diffNum > 0 ? 'text-emerald-400' : diffNum < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                    {diffNum > 0 ? '+' : ''}{fmtChips(toStr(diff))} ({fmtChips(startAmount)} → {fmtChips(endAmount)})
                   </p>
                 );
               })()}
@@ -949,7 +954,7 @@ function App() {
                   <AnimatedNumber value={p.chips} />
                   {currentRoom.isProportional && p.sessionBuyIn != null && (
                     <span className="text-[9px] text-purple-400 opacity-70 mt-0.5">
-                      (Real: {fmtChips(Math.floor((p.chips / 1000) * p.sessionBuyIn))})
+                      (Real: {fmtChips(mul(p.chips, p.sessionBuyIn).div(1000).floor().toString())})
                     </span>
                   )}
                 </span>
@@ -1042,9 +1047,9 @@ function App() {
             </div>
           )}
 
-          {(myPlayer?.currentBet || 0) > 0 && (
+          {myCurrentBetNum > 0 && (
              <div className="absolute -top-12 left-4 z-20" ref={myBetRef}>
-               <BetChip amount={(myPlayer?.currentBet || 0)} animateIn={animateBetIn} />
+               <BetChip amount={myCurrentBetNum} animateIn={animateBetIn} />
              </div>
           )}
 
@@ -1054,7 +1059,7 @@ function App() {
               <div>
                 <Slider
                   min={minRaise}
-                  max={Math.max(minRaise, (myPlayer?.chips || 0) + (myPlayer?.currentBet || 0))}
+                  max={Math.max(minRaise, myStackTotal)}
                   step={currentRoom.bigBlind || 2}
                   value={betAmount}
                   onChange={setBetAmount}
@@ -1062,10 +1067,10 @@ function App() {
                   formatLabel={fmtChips}
                 />
                 <div className="flex gap-1.5 mt-1">
-                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0), prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">+1 BB</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0), Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">1/2 Pot</button>
-                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0), currentRoom.pot)))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">Pot</button>
-                  <button onClick={() => setBetAmount((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">All-in</button>
+                  <button onClick={() => setBetAmount(prev => Math.max(minRaise, Math.min(myStackTotal, prev + (currentRoom.bigBlind || 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">+1 BB</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myStackTotal, Math.floor(currentRoom.pot / 2))))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">1/2 Pot</button>
+                  <button onClick={() => setBetAmount(Math.max(minRaise, Math.min(myStackTotal, currentRoom.pot)))} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">Pot</button>
+                  <button onClick={() => setBetAmount(myStackTotal)} className="flex-1 bg-surfaceLight text-gray-200 py-1.5 rounded-full text-xs font-semibold">All-in</button>
                 </div>
                 <div className="flex rounded-2xl overflow-hidden bg-surfaceLight shadow-sm mt-2">
                   <button className="text-gray-300 px-4 py-2 font-semibold text-base flex-1" onClick={() => handleAction('Raise', betAmount)}>
@@ -1135,12 +1140,12 @@ function App() {
                         Fold
                       </button>
 
-                      {((myPlayer?.chips || 0) <= toCallAmount) ? (
+                      {(myChipsNum <= toCallAmount) ? (
                         <button
                           onClick={() => handleAction('Call')}
                           className="bg-surfaceLight hover:bg-gray-700 text-gray-200 px-4 rounded-full text-sm font-semibold flex-1"
                         >
-                          All-in {fmtChips((myPlayer?.chips || 0))}
+                          All-in {fmtChips(myChipsNum)}
                         </button>
                       ) : (
                         <>
@@ -1151,8 +1156,8 @@ function App() {
                             {toCallAmount === 0 ? 'Check' : `Call ${fmtChips(toCallAmount)}`}
                           </button>
 
-                          {((myPlayer?.chips || 0) + (myPlayer?.currentBet || 0)) > currentRoom.highestBet && (() => {
-                            const quickRaise = Math.min(minRaise, (myPlayer?.chips || 0) + (myPlayer?.currentBet || 0));
+                          {(myStackTotal) > currentRoom.highestBet && (() => {
+                            const quickRaise = Math.min(minRaise, myStackTotal);
                             return (
                               <>
                                 <button
@@ -1164,7 +1169,7 @@ function App() {
 
                                 <button
                                   onClick={() => {
-                                    setBetAmount(Math.min(minRaise, (myPlayer?.chips || 0) + (myPlayer?.currentBet || 0)));
+                                    setBetAmount(Math.min(minRaise, myStackTotal));
                                     setShowBetMenu(true);
                                   }}
                                   className="bg-surfaceLight hover:bg-gray-700 text-gray-200 w-10 rounded-full text-base font-semibold flex items-center justify-center"
@@ -1306,7 +1311,7 @@ function App() {
                 <AnimatedNumber value={myPlayer ? (myPlayer?.chips || 0) : user.balance} />
                 {currentRoom.isProportional && myPlayer?.sessionBuyIn != null && (
                   <span className="text-[10px] text-purple-400 opacity-70 mt-1">
-                    (Real: {fmtChips(Math.floor(((myPlayer?.chips || 0) / 1000) * myPlayer.sessionBuyIn))})
+                    (Real: {fmtChips(mul(myPlayer?.chips || 0, myPlayer.sessionBuyIn).div(1000).floor().toString())})
                   </span>
                 )}
               </div>

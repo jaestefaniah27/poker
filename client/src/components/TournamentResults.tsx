@@ -1,6 +1,7 @@
 import Avatar from './Avatar';
 import { fmtChips } from '../utils';
 import type { Room, Player } from '../../../shared/types';
+import { gt } from '../../../shared/types';
 
 interface Props {
   room: Room;
@@ -16,8 +17,8 @@ const TournamentResults = ({ room, currentUserId, isAdmin, onRestart, onExit }: 
   const players = room.players.filter(p => p.isActive);
   // Clasificación: ganador (con fichas) primero; resto por orden inverso de eliminación.
   const ranked = [...players].sort((a, b) => {
-    const aAlive = a.chips > 0 ? 1 : 0;
-    const bAlive = b.chips > 0 ? 1 : 0;
+    const aAlive = gt(a.chips, 0) ? 1 : 0;
+    const bAlive = gt(b.chips, 0) ? 1 : 0;
     if (aAlive !== bAlive) return bAlive - aAlive;
     return (b.bustedSeq || 0) - (a.bustedSeq || 0); // último eliminado = mejor puesto
   });
@@ -54,7 +55,7 @@ const TournamentResults = ({ room, currentUserId, isAdmin, onRestart, onExit }: 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{p.name}{isMe ? ' (tú)' : ''}</p>
                 </div>
-                {p.chips > 0 && <span className="text-sm font-semibold text-emerald-300">{fmtChips(p.chips)}</span>}
+                {gt(p.chips, 0) && <span className="text-sm font-semibold text-emerald-300">{fmtChips(p.chips)}</span>}
               </div>
             );
           })}
