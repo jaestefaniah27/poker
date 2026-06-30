@@ -1,7 +1,7 @@
 import { Player, Room, STAKE_TIERS, blindsFor, HandHistory, nextBlinds, GameType, levelFromXp, SidebetType, SIDEBET_ORDER, add, sub, toStr } from '../../shared/types';
 import { createDeck, shuffleDeck, dealCards, evaluateHands, updateHandNames, DEFAULT_BLIND_DIVISOR } from './pokerEngine';
 import { dealBlackjack, dealerPlay as bjDealerPlay, resolveBlackjack, resetBlackjackHand, handValue as bjHandValue, needsReshuffle, initShoe } from './blackjackEngine';
-import { deleteRoomFromDB, recordMatchHistory, addXp, getUser, recordHandStats, bumpStat, maxStat } from './db';
+import { deleteRoomFromDB, recordMatchHistory, addXp, getUser, recordHandStats, bumpStat, maxStat, maxStatBig } from './db';
 
 // Calidad de mano de poker → rango 1..10 (pokersolver hand.name en inglés).
 const HAND_RANK: Record<string, number> = {
@@ -756,6 +756,10 @@ export const endRound = (room: Room) => {
       potWon: winnerData?.amount || 0,
       handName: showedHand ? p.handName : undefined,
     }).catch(err => console.error('Error stats poker:', err));
+    // Duplicado en user_stats (misma fuente que usan misiones/logros, ver shared/missions.ts).
+    bumpStat(p.userId, 'hands_played');
+    if (winnerData) bumpStat(p.userId, 'hands_won');
+    if (winnerData) maxStatBig(p.userId, 'biggest_pot', String(winnerData.amount));
   }
 
   // XP a todos los que jugaron esta mano: ganadores mucha, perdedores poca; escala con la mano.
@@ -1334,7 +1338,7 @@ export const finishBlackjackHand = (roomId: string) => {
       if (h.result === 'blackjack') bumpStat(p.userId, 'bj_blackjacks');
       if (h.delta > 0) {
         bumpStat(p.userId, 'bj_total_won', h.delta);
-        maxStat(p.userId, 'bj_biggest_win', h.delta);
+        maxStatBig(p.userId, 'bj_biggest_win', String(h.delta));
       }
     }
     bumpStat(p.userId, 'bj_net', p.bjDelta || 0);
@@ -1346,7 +1350,7 @@ export const finishBlackjackHand = (roomId: string) => {
         if (r.won) bumpStat(p.userId, 'bj_sidebet_wins');
         if (r.delta > 0) {
           bumpStat(p.userId, 'bj_sidebet_won', r.delta);
-          maxStat(p.userId, 'bj_sidebet_biggest', r.delta);
+          maxStatBig(p.userId, 'bj_sidebet_biggest', String(r.delta));
         }
       }
       bumpStat(p.userId, 'bj_sidebet_net', p.bjSidebetDelta || 0);

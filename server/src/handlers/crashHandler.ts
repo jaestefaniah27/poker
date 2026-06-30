@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { authUser } from '../socketHelpers';
-import { getUser, toPublicUser, applyBalanceDelta, bumpStat, maxStat } from '../db';
+import { getUser, toPublicUser, applyBalanceDelta, bumpStat, maxStat, maxStatBig } from '../db';
 import { JACKPOT_TIERS, lt } from '../../../shared/types';
 
 interface CrashGame {
@@ -88,7 +88,7 @@ export const crashHandlers = (socket: Socket) => {
     const newBalance = await applyBalanceDelta(user.id, winAmount);
     bumpStat(user.id, 'crash_cashouts');
     bumpStat(user.id, 'crash_total_won', winAmount);
-    maxStat(user.id, 'crash_biggest_win', winAmount);
+    maxStatBig(user.id, 'crash_biggest_win', String(winAmount));
     maxStat(user.id, 'crash_best_mult_x100', Math.round(m * 100));
     const dbUser = await getUser(user.id);
     callback({ ok: true, multiplier: m, winAmount, newBalance, user: dbUser ? toPublicUser(dbUser) : undefined });

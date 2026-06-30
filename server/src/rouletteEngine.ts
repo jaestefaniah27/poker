@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { applyBalanceDelta, getUser, addXp, bumpStat, maxStat } from './db';
+import { applyBalanceDelta, getUser, addXp, bumpStat, maxStat, maxStatBig } from './db';
 
 interface UserBet {
   bets: Record<string, number>;
@@ -207,7 +207,7 @@ export class RouletteEngine {
       bumpStat(userId, 'roulette_total_bet', ub.total);
       if (winnings > 0) {
         bumpStat(userId, 'roulette_total_won', winnings);
-        maxStat(userId, 'roulette_biggest_win', winnings);
+        maxStatBig(userId, 'roulette_biggest_win', String(winnings));
       }
       
       const dbUser = await getUser(userId);

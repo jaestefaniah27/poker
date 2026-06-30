@@ -6,6 +6,7 @@ import { blackjackHandlers } from './blackjackHandlers';
 import { minigameHandlers } from './minigameHandlers';
 import { triviaHandlers } from './triviaHandlers';
 import { crashHandlers } from './crashHandler';
+import { missionHandlers } from './missionHandlers';
 import { updateLastSeen, bumpStat } from '../db';
 import { broadcastPresence } from '../socketHelpers';
 import { rouletteEngine } from '../rouletteEngine';
@@ -86,4 +87,5 @@ export const registerAllHandlers = (socket: Socket) => {
   minigameHandlers(socket);
   triviaHandlers(socket);
   crashHandlers(socket);
+  missionHandlers(socket);
 };

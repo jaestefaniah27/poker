@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
-import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, getEffectivePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat, dbRun } from '../db';
+import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, getEffectivePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat, maxStatBig, dbRun } from '../db';
 import { boostMultiplier, TrackBoosts, CooldownBoosts, ruletaCooldownMs, m, lt, gt, add, sub, toStr } from '../../../shared/types';
 import { spinJackpot, getJackpotState, persistJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
@@ -268,7 +268,7 @@ export const minigameHandlers = (socket: Socket) => {
     if (!doFreeSpin) bumpStat(dbUser.id, 'jackpot_total_bet', amount);
     if (finalWinAmount > 0) {
       bumpStat(dbUser.id, 'jackpot_total_won', finalWinAmount);
-      maxStat(dbUser.id, 'jackpot_biggest_win', finalWinAmount);
+      maxStatBig(dbUser.id, 'jackpot_biggest_win', String(finalWinAmount));
     }
     maxStat(dbUser.id, 'jackpot_best_mult_x100', Math.round(multiplier * 100));
     if (taxAmount > 0) bumpStat(dbUser.id, 'jackpot_tax_paid', taxAmount);
@@ -457,7 +457,7 @@ export const minigameHandlers = (socket: Socket) => {
       await addXp(user.id, xpWin);
       bumpStat(user.id, 'mines_cashouts');
       bumpStat(user.id, 'mines_total_won', finalWinnable);
-      maxStat(user.id, 'mines_biggest_win', finalWinnable);
+      maxStatBig(user.id, 'mines_biggest_win', String(finalWinnable));
       maxStat(user.id, 'mines_best_mult_x100', Math.round(multiplier * 100));
       const updatedUser = await getUser(user.id);
       callback({ ok: true, safe: true, multiplier, winnable: finalWinnable, autoWin: true, newBalance, minePositions: Array.from(game.minePositions), user: updatedUser ? toPublicUser(updatedUser) : undefined, addedXp: xpWin });
@@ -494,7 +494,7 @@ export const minigameHandlers = (socket: Socket) => {
     await addXp(user.id, xpWin);
     bumpStat(user.id, 'mines_cashouts');
     bumpStat(user.id, 'mines_total_won', finalWinAmount);
-    maxStat(user.id, 'mines_biggest_win', finalWinAmount);
+    maxStatBig(user.id, 'mines_biggest_win', String(finalWinAmount));
     maxStat(user.id, 'mines_best_mult_x100', Math.round(multiplier * 100));
     const updatedUser = await getUser(user.id);
     callback({ ok: true, winAmount: finalWinAmount, multiplier, newBalance, minePositions: Array.from(game.minePositions), user: updatedUser ? toPublicUser(updatedUser) : undefined, addedXp: xpWin });
@@ -748,7 +748,7 @@ export const minigameHandlers = (socket: Socket) => {
     // Stats en batch
     if (statSpins > 0) bumpStat(dbUser.id, 'jackpot_spins', statSpins);
     if (gt(totalPaidCost, 0)) bumpStat(dbUser.id, 'jackpot_total_bet', totalPaidCost.toNumber());
-    if (statTotalWon > 0) { bumpStat(dbUser.id, 'jackpot_total_won', statTotalWon); maxStat(dbUser.id, 'jackpot_biggest_win', statBiggestWin); }
+    if (statTotalWon > 0) { bumpStat(dbUser.id, 'jackpot_total_won', statTotalWon); maxStatBig(dbUser.id, 'jackpot_biggest_win', String(statBiggestWin)); }
     if (statTaxPaid > 0) bumpStat(dbUser.id, 'jackpot_tax_paid', statTaxPaid);
     if (statFrauds > 0) bumpStat(dbUser.id, 'jackpot_frauds', statFrauds);
     maxStat(dbUser.id, 'jackpot_best_mult_x100', statBestMult);

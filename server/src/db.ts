@@ -228,7 +228,46 @@ const MIGRATIONS = [
   { name: '054_israel_pool_t', sql: 'ALTER TABLE users ADD COLUMN israel_pool_t TEXT', ignoreError: 'duplicate column' },
   { name: '055_israel_pool_t_fill', sql: "UPDATE users SET israel_pool_t = CAST(israel_pool AS TEXT) WHERE israel_pool_t IS NULL OR israel_pool_t = ''" },
   { name: '056_hacienda_total_t', sql: 'ALTER TABLE hacienda_state ADD COLUMN total_t TEXT', ignoreError: 'duplicate column' },
-  { name: '057_hacienda_total_t_fill', sql: "UPDATE hacienda_state SET total_t = CAST(total AS TEXT) WHERE total_t IS NULL OR total_t = ''" }
+  { name: '057_hacienda_total_t_fill', sql: "UPDATE hacienda_state SET total_t = CAST(total AS TEXT) WHERE total_t IS NULL OR total_t = ''" },
+  // --- Sistema de Misiones (Fase 1) ---
+  { name: '058_mision_level', sql: 'ALTER TABLE users ADD COLUMN mision_level INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
+  { name: '059_mision_upgrades_today', sql: 'ALTER TABLE users ADD COLUMN mision_upgrades_today INTEGER DEFAULT 0', ignoreError: 'duplicate column' },
+  { name: '060_mision_upgrades_date', sql: 'ALTER TABLE users ADD COLUMN mision_upgrades_date TEXT', ignoreError: 'duplicate column' },
+  {
+    name: '061_user_daily_missions',
+    sql: `CREATE TABLE IF NOT EXISTS user_daily_missions (
+      user_id TEXT NOT NULL,
+      mission_date TEXT NOT NULL,
+      slot INTEGER NOT NULL,
+      template_id TEXT NOT NULL,
+      tier_index INTEGER NOT NULL,
+      requirement INTEGER NOT NULL,
+      snapshot_value TEXT NOT NULL DEFAULT '0',
+      completed_at INTEGER,
+      claimed_at INTEGER,
+      PRIMARY KEY (user_id, mission_date, slot)
+    )`
+  },
+  {
+    name: '062_user_broche_claims',
+    sql: `CREATE TABLE IF NOT EXISTS user_broche_claims (
+      user_id TEXT NOT NULL,
+      mission_date TEXT NOT NULL,
+      bronze_claimed_at INTEGER,
+      silver_claimed_at INTEGER,
+      gold_claimed_at INTEGER,
+      PRIMARY KEY (user_id, mission_date)
+    )`
+  },
+  {
+    name: '063_user_achievement_claims',
+    sql: `CREATE TABLE IF NOT EXISTS user_achievement_claims (
+      user_id TEXT NOT NULL,
+      achievement_id TEXT NOT NULL,
+      claimed_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, achievement_id)
+    )`
+  }
 ];
 
 // Helper para usar Promesas en lugar de callbacks
@@ -310,6 +349,9 @@ export interface UserRow {
   dieta_level: number;
   ruleta_level: number;
   trivia_level: number;
+  mision_level?: number;
+  mision_upgrades_today?: number;
+  mision_upgrades_date?: string | null;
   last_seen?: number;
   paid_israel?: number;
   israel_debt?: string;
@@ -382,6 +424,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
   const dietaLevel = row.dieta_level ?? 0;
   const ruletaLevel = row.ruleta_level ?? 0;
   const triviaLevel = row.trivia_level ?? 0;
+  const misionLevel = row.mision_level ?? 0;
   // Merge legacy single-slot into pools for backward compat
   const pools = parsePools(row.free_spins_pools);
   const legacyLeft = row.free_spins_left ?? 0;
@@ -408,11 +451,12 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     isCursed: row.is_cursed === 1,
     xp,
     level,
-    levelPoints: availableLevelPoints(level, paguitaLevel, dietaLevel, ruletaLevel, triviaLevel, cooldownBoosts),
+    levelPoints: availableLevelPoints(level, paguitaLevel, dietaLevel, ruletaLevel, triviaLevel, cooldownBoosts, misionLevel),
     paguitaLevel,
     dietaLevel,
     ruletaLevel,
     triviaLevel,
+    misionLevel,
     lastSeen: row.last_seen ?? undefined,
     paidIsrael: !!row.paid_israel,
     israelDebt: row.israel_debt ?? '0',
@@ -805,6 +849,299 @@ export const getAllStats = async (userId: string): Promise<Record<string, number
   return out;
 };
 
+// ============================================================
+// SISTEMA DE MISIONES (Fase 1)
+// ============================================================
+import {
+  DAILY_TEMPLATES, DailyTemplate, generateDailySet, missionDateFor,
+  misionTrackValuesFor, dailyMissionReward, brocheRewardsFor, MISION_UPGRADES_PER_DAY,
+} from '../../shared/missions';
+import { ACHIEVEMENTS_CATALOG } from '../../shared/achievements';
+
+interface DailyMissionRow {
+  user_id: string;
+  mission_date: string;
+  slot: number;
+  template_id: string;
+  tier_index: number;
+  requirement: number;
+  snapshot_value: string;
+  completed_at: number | null;
+  claimed_at: number | null;
+}
+
+export interface DailyMissionView {
+  slot: number;
+  templateId: string;
+  game: string;
+  emoji: string;
+  label: string;
+  requirement: number;
+  progress: number;       // capado a requirement, derivado de stat_actual - snapshot
+  completed: boolean;
+  claimed: boolean;
+  rewardChips: string;
+  rewardXp: number;
+}
+
+// Asegura que el usuario tiene sus 5 diarias asignadas para el día de misión actual.
+// Si no existen filas para hoy, las crea con snapshot del stat correspondiente.
+const ensureDailyMissions = async (userId: string, missionDate: string): Promise<DailyMissionRow[]> => {
+  const existing = await dbAll<DailyMissionRow>(
+    'SELECT * FROM user_daily_missions WHERE user_id = ? AND mission_date = ? ORDER BY slot',
+    [userId, missionDate]
+  );
+  if (existing.length === 5) return existing;
+
+  // Generar el set determinista del día y crear snapshots de los stats actuales.
+  const slots = generateDailySet(missionDate);
+  const stats = await getAllStats(userId);
+  const rows: DailyMissionRow[] = [];
+  for (const slot of slots) {
+    const tpl = DAILY_TEMPLATES.find(t => t.id === slot.templateId)!;
+    const snapshot = String(stats[tpl.statKey] ?? 0);
+    await dbRun(
+      `INSERT OR IGNORE INTO user_daily_missions
+       (user_id, mission_date, slot, template_id, tier_index, requirement, snapshot_value)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [userId, missionDate, slot.slot, slot.templateId, slot.tierIndex, slot.requirement, snapshot]
+    );
+    rows.push({
+      user_id: userId, mission_date: missionDate, slot: slot.slot, template_id: slot.templateId,
+      tier_index: slot.tierIndex, requirement: slot.requirement, snapshot_value: snapshot,
+      completed_at: null, claimed_at: null,
+    });
+  }
+  // Releer por si ya existían parcialmente (carrera improbable, pero correcto).
+  return dbAll<DailyMissionRow>(
+    'SELECT * FROM user_daily_missions WHERE user_id = ? AND mission_date = ? ORDER BY slot',
+    [userId, missionDate]
+  );
+};
+
+// Marca como completadas (completed_at) las diarias cuyo progreso ya alcanzó el requisito,
+// sin tocar las que ya estaban completadas. Devuelve cuántas se completaron ahora mismo.
+const refreshCompletionState = async (userId: string, missionDate: string, rows: DailyMissionRow[], stats: Record<string, number>): Promise<DailyMissionRow[]> => {
+  const now = Date.now();
+  const updated: DailyMissionRow[] = [];
+  for (const row of rows) {
+    if (row.completed_at != null) { updated.push(row); continue; }
+    const tpl = DAILY_TEMPLATES.find(t => t.id === row.template_id)!;
+    const current = stats[tpl.statKey] ?? 0;
+    const progress = Math.max(0, current - Number(row.snapshot_value));
+    if (progress >= row.requirement) {
+      await dbRun('UPDATE user_daily_missions SET completed_at = ? WHERE user_id = ? AND mission_date = ? AND slot = ?', [now, userId, missionDate, row.slot]);
+      updated.push({ ...row, completed_at: now });
+    } else {
+      updated.push(row);
+    }
+  }
+  return updated;
+};
+
+// Vista completa del estado de misiones diarias de hoy para un usuario (crea/actualiza si hace falta).
+export const getDailyMissionsView = async (userId: string): Promise<{ missionDate: string; missions: DailyMissionView[]; misionLevel: number }> => {
+  const missionDate = missionDateFor();
+  let rows = await ensureDailyMissions(userId, missionDate);
+  const stats = await getAllStats(userId);
+  rows = await refreshCompletionState(userId, missionDate, rows, stats);
+
+  const user = await getUser(userId);
+  const misionLevel = user?.mision_level ?? 0;
+
+  const missions: DailyMissionView[] = rows.map(row => {
+    const tpl = DAILY_TEMPLATES.find(t => t.id === row.template_id)!;
+    const current = stats[tpl.statKey] ?? 0;
+    const progress = Math.min(row.requirement, Math.max(0, current - Number(row.snapshot_value)));
+    const reward = dailyMissionReward(misionLevel, tpl);
+    return {
+      slot: row.slot,
+      templateId: row.template_id,
+      game: tpl.game,
+      emoji: tpl.emoji,
+      label: tpl.label.replace('{n}', String(row.requirement)),
+      requirement: row.requirement,
+      progress,
+      completed: row.completed_at != null,
+      claimed: row.claimed_at != null,
+      rewardChips: reward.chips,
+      rewardXp: reward.xp,
+    };
+  });
+
+  return { missionDate, missions, misionLevel };
+};
+
+// Reclama una diaria completada. Server-authoritative: revalida estado antes de pagar.
+export const claimDailyMission = async (userId: string, slot: number): Promise<{ ok: boolean; error?: string; rewardChips?: string; rewardXp?: number }> => {
+  const missionDate = missionDateFor();
+  const rows = await ensureDailyMissions(userId, missionDate);
+  const stats = await getAllStats(userId);
+  const refreshed = await refreshCompletionState(userId, missionDate, rows, stats);
+  const row = refreshed.find(r => r.slot === slot);
+  if (!row) return { ok: false, error: 'Misión no encontrada' };
+  if (row.completed_at == null) return { ok: false, error: 'Misión no completada todavía' };
+  if (row.claimed_at != null) return { ok: false, error: 'Ya reclamada' };
+
+  const tpl = DAILY_TEMPLATES.find(t => t.id === row.template_id)!;
+  const user = await getUser(userId);
+  const misionLevel = user?.mision_level ?? 0;
+  const reward = dailyMissionReward(misionLevel, tpl);
+
+  await dbRun('UPDATE user_daily_missions SET claimed_at = ? WHERE user_id = ? AND mission_date = ? AND slot = ?', [Date.now(), userId, missionDate, slot]);
+  await applyBalanceDelta(userId, reward.chips);
+  await addXp(userId, reward.xp);
+
+  return { ok: true, rewardChips: reward.chips, rewardXp: reward.xp };
+};
+
+// Estado de los 3 broches del día (cuántas diarias completadas, qué se puede reclamar).
+export const getBrocheStateView = async (userId: string) => {
+  const { missionDate, missions, misionLevel } = await getDailyMissionsView(userId);
+  const completedCount = missions.filter(m => m.completed).length;
+  const claims = await dbGet<{ bronze_claimed_at: number | null; silver_claimed_at: number | null; gold_claimed_at: number | null }>(
+    'SELECT bronze_claimed_at, silver_claimed_at, gold_claimed_at FROM user_broche_claims WHERE user_id = ? AND mission_date = ?',
+    [userId, missionDate]
+  );
+  const rewards = brocheRewardsFor(misionLevel);
+  return {
+    missionDate,
+    completedCount,
+    bronze: { eligible: true, claimed: !!claims?.bronze_claimed_at, rewardXp: rewards.bronceXp },
+    silver: { eligible: completedCount >= 3, claimed: !!claims?.silver_claimed_at, rewardSpins: rewards.plataSpinsCount, rewardSpinValue: rewards.plataSpinValue },
+    gold: { eligible: completedCount >= 5, claimed: !!claims?.gold_claimed_at, rewardChips: rewards.oroChips },
+  };
+};
+
+// Reclama un broche concreto. Server-authoritative: revalida elegibilidad antes de pagar.
+export const claimBroche = async (userId: string, tier: 'bronze' | 'silver' | 'gold'): Promise<{ ok: boolean; error?: string }> => {
+  const state = await getBrocheStateView(userId);
+  const slice = state[tier];
+  if (!slice.eligible) return { ok: false, error: 'Broche no desbloqueado todavía' };
+  if (slice.claimed) return { ok: false, error: 'Ya reclamado' };
+
+  await dbRun(
+    `INSERT INTO user_broche_claims (user_id, mission_date, ${tier === 'bronze' ? 'bronze_claimed_at' : tier === 'silver' ? 'silver_claimed_at' : 'gold_claimed_at'})
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id, mission_date) DO UPDATE SET ${tier === 'bronze' ? 'bronze_claimed_at' : tier === 'silver' ? 'silver_claimed_at' : 'gold_claimed_at'} = excluded.${tier === 'bronze' ? 'bronze_claimed_at' : tier === 'silver' ? 'silver_claimed_at' : 'gold_claimed_at'}`,
+    [userId, state.missionDate, Date.now()]
+  );
+
+  if (tier === 'bronze') {
+    const rewards = brocheRewardsFor((await getUser(userId))?.mision_level ?? 0);
+    await addXp(userId, rewards.bronceXp);
+  } else if (tier === 'silver') {
+    const rewards = brocheRewardsFor((await getUser(userId))?.mision_level ?? 0);
+    await addOneFreeSpin(userId, rewards.plataSpinValue, rewards.plataSpinsCount);
+  } else if (tier === 'gold') {
+    const rewards = brocheRewardsFor((await getUser(userId))?.mision_level ?? 0);
+    await applyBalanceDelta(userId, rewards.oroChips);
+  }
+
+  return { ok: true };
+};
+
+// Gasta 1 punto de nivel en el track de Misiones (infinito, máx 5 mejoras/día).
+export const spendMisionLevelPoint = async (userId: string): Promise<{ ok: boolean; error?: string }> => {
+  const row = await dbGet<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = ?`, [userId]);
+  if (!row) return { ok: false, error: 'Usuario no encontrado' };
+
+  const level = levelFromXp(row.xp ?? 0);
+  const paguita = row.paguita_level ?? 0;
+  const dieta = row.dieta_level ?? 0;
+  const ruleta = row.ruleta_level ?? 0;
+  const trivia = row.trivia_level ?? 0;
+  const misionLevel = row.mision_level ?? 0;
+  const points = availableLevelPoints(level, paguita, dieta, ruleta, trivia, undefined, misionLevel);
+  if (points <= 0) return { ok: false, error: 'No tienes puntos disponibles' };
+
+  const today = missionDateFor();
+  const upgradesToday = row.mision_upgrades_date === today ? (row.mision_upgrades_today ?? 0) : 0;
+  if (upgradesToday >= MISION_UPGRADES_PER_DAY) return { ok: false, error: 'Límite de mejoras diarias alcanzado' };
+
+  await dbRun(
+    'UPDATE users SET mision_level = mision_level + 1, mision_upgrades_today = ?, mision_upgrades_date = ? WHERE id = ?',
+    [upgradesToday + 1, today, userId]
+  );
+  return { ok: true };
+};
+
+// --- Logros permanentes ---
+export interface AchievementView {
+  id: string;
+  chainId: string;
+  tier: number;
+  game: string;
+  emoji: string;
+  label: string;
+  requirement: string;
+  progress: string;
+  completed: boolean;
+  claimed: boolean;
+  rewardChips: string;
+  rewardXp: number;
+}
+
+// Devuelve, por cada cadena, solo el tier actual (primero no reclamado) y el siguiente,
+// tal como se diseñó ("solo tier actual + siguiente visible").
+export const getAchievementsView = async (userId: string): Promise<AchievementView[]> => {
+  const claimedRows = await dbAll<{ achievement_id: string }>('SELECT achievement_id FROM user_achievement_claims WHERE user_id = ?', [userId]);
+  const claimedSet = new Set(claimedRows.map(r => r.achievement_id));
+  const stats = await getAllStats(userId);
+  const statsBig: Record<string, string> = {};
+  // Para stats que pueden ser grandes (max_balance, *_biggest_win), usar getStatBig si hace falta.
+  const bigStatKeys = new Set(['max_balance', 'biggest_pot', 'bj_biggest_win', 'roulette_biggest_win', 'jackpot_biggest_win', 'mines_biggest_win']);
+
+  const byChain = new Map<string, typeof ACHIEVEMENTS_CATALOG>();
+  for (const a of ACHIEVEMENTS_CATALOG) {
+    if (!byChain.has(a.chainId)) byChain.set(a.chainId, []);
+    byChain.get(a.chainId)!.push(a);
+  }
+
+  const out: AchievementView[] = [];
+  for (const [, tiers] of byChain) {
+    const sorted = [...tiers].sort((a, b) => a.tier - b.tier);
+    // Primer tier no reclamado todavía.
+    const firstUnclaimedIdx = sorted.findIndex(t => !claimedSet.has(t.id));
+    const visible = firstUnclaimedIdx === -1
+      ? [sorted[sorted.length - 1]] // todo reclamado: mostramos el último como referencia
+      : sorted.slice(firstUnclaimedIdx, firstUnclaimedIdx + 2); // actual + siguiente
+
+    for (const a of visible) {
+      const rawStat = bigStatKeys.has(a.statKey) ? await getStatBig(userId, a.statKey) : String(stats[a.statKey] ?? 0);
+      const progress = gte(rawStat, a.requirement) ? a.requirement : rawStat;
+      out.push({
+        id: a.id, chainId: a.chainId, tier: a.tier, game: a.game, emoji: a.emoji, label: a.label,
+        requirement: a.requirement, progress,
+        completed: gte(rawStat, a.requirement),
+        claimed: claimedSet.has(a.id),
+        rewardChips: a.rewardChips, rewardXp: a.rewardXp,
+      });
+    }
+  }
+  return out;
+};
+
+// Reclama un logro. Server-authoritative: revalida el stat real contra el requisito.
+export const claimAchievement = async (userId: string, achievementId: string): Promise<{ ok: boolean; error?: string; rewardChips?: string; rewardXp?: number }> => {
+  const def = ACHIEVEMENTS_CATALOG.find(a => a.id === achievementId);
+  if (!def) return { ok: false, error: 'Logro no encontrado' };
+
+  const already = await dbGet('SELECT 1 FROM user_achievement_claims WHERE user_id = ? AND achievement_id = ?', [userId, achievementId]);
+  if (already) return { ok: false, error: 'Ya reclamado' };
+
+  const bigStatKeys = new Set(['max_balance', 'biggest_pot', 'bj_biggest_win', 'roulette_biggest_win', 'jackpot_biggest_win', 'mines_biggest_win']);
+  const stats = await getAllStats(userId);
+  const rawStat = bigStatKeys.has(def.statKey) ? await getStatBig(userId, def.statKey) : String(stats[def.statKey] ?? 0);
+  if (!gte(rawStat, def.requirement)) return { ok: false, error: 'Requisito no alcanzado' };
+
+  await dbRun('INSERT INTO user_achievement_claims (user_id, achievement_id, claimed_at) VALUES (?, ?, ?)', [userId, achievementId, Date.now()]);
+  await applyBalanceDelta(userId, def.rewardChips);
+  await addXp(userId, def.rewardXp);
+
+  return { ok: true, rewardChips: def.rewardChips, rewardXp: def.rewardXp };
+};
+
 export const claimFreeSpins = async (id: string, value: number, amount: number = 10): Promise<void> => {
   const user = await getUser(id);
   const pools = parsePools(user?.free_spins_pools ?? null);
@@ -838,10 +1175,11 @@ export const setUserIsCursed = async (id: string, isCursed: boolean): Promise<vo
   await dbRun('UPDATE users SET is_cursed = ? WHERE id = ?', [isCursed ? 1 : 0, id]);
 };
 
-export const addOneFreeSpin = async (id: string, value: number, count = 1): Promise<void> => {
+export const addOneFreeSpin = async (id: string, value: number | string | Money, count = 1): Promise<void> => {
   const user = await getUser(id);
   const pools = parsePools(user?.free_spins_pools ?? null);
-  pools[String(value)] = (pools[String(value)] || 0) + count;
+  const key = toStr(value as any);
+  pools[key] = (pools[key] || 0) + count;
   await dbRun('UPDATE users SET free_spins_pools = ? WHERE id = ?', [JSON.stringify(pools), id]);
 };
 

@@ -259,6 +259,7 @@ export interface PublicUser {
   dietaLevel?: number;    // 0 = base 1k, cada nivel x2
   ruletaLevel?: number;   // 0 = base, índice en RULETA_LEVELS
   triviaLevel?: number;   // 0 = base, nº de recompensas malas eliminadas
+  misionLevel?: number;   // 0 = base, track infinito de Misiones
   lastSeen?: number;
   paidIsrael?: boolean;
   israelDebt?: string;
@@ -397,18 +398,20 @@ export const levelFromXp = (xp: number): number => {
 };
 
 // Puntos de mejora disponibles = (nivel - 1) - puntos ya gastados en tracks.
+// misionLevel: track infinito de Misiones, también consume puntos de nivel.
 export const availableLevelPoints = (
   level: number,
   paguitaLevel: number,
   dietaLevel: number,
   ruletaLevel: number,
   triviaLevel: number,
-  cooldownBoosts?: CooldownBoosts
+  cooldownBoosts?: CooldownBoosts,
+  misionLevel: number = 0
 ): number => {
   const cdPointsSpent = (cooldownBoosts?.paguita ?? 0) * COOLDOWN_BOOST_LP_COST
                       + (cooldownBoosts?.dieta ?? 0) * COOLDOWN_BOOST_LP_COST
                       + (cooldownBoosts?.ruleta ?? 0) * COOLDOWN_BOOST_LP_COST;
-  return Math.max(0, (level - 1) - (paguitaLevel + dietaLevel + ruletaLevel + triviaLevel) - cdPointsSpent);
+  return Math.max(0, (level - 1) - (paguitaLevel + dietaLevel + ruletaLevel + triviaLevel + misionLevel) - cdPointsSpent);
 };
 
 // --- Paguita (bono diario): nv.0 base 10k → nv.10 máx 10M.
