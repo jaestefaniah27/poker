@@ -260,6 +260,7 @@ export interface PublicUser {
   ruletaLevel?: number;   // 0 = base, índice en RULETA_LEVELS
   triviaLevel?: number;   // 0 = base, nº de recompensas malas eliminadas
   misionLevel?: number;   // 0 = base, track infinito de Misiones
+  misionUpgradesToday?: number; // mejoras ya gastadas hoy (máx MISION_UPGRADES_PER_DAY)
   lastSeen?: number;
   paidIsrael?: boolean;
   israelDebt?: string;

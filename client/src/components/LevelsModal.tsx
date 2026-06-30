@@ -6,6 +6,7 @@ import {
   triviaCooldownMs, triviaSpinCount, boostMultiplier,
 } from '../../../shared/types';
 import type { LevelTrack } from '../../../shared/types';
+import { misionTrackValuesFor, MISION_UPGRADES_PER_DAY } from '../../../shared/missions';
 
 interface LevelsModalProps {
   user: any;
@@ -22,6 +23,7 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
   const dietaLevel = user.dietaLevel ?? 0;
   const ruletaLevel = user.ruletaLevel ?? 0;
   const triviaLevel = user.triviaLevel ?? 0;
+  const misionLevel = user.misionLevel ?? 0;
 
   const xpThis = xpForLevel(level);
   const xpNext = xpForLevel(level + 1);
@@ -30,6 +32,13 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
   const upgrade = (track: LevelTrack) => {
     if (points <= 0) return;
     socket.emit('spendLevelPoint', { token, track }, (res: any) => {
+      if (res?.ok && res.user) onUpdateUser(res.user);
+    });
+  };
+
+  const upgradeMision = () => {
+    if (points <= 0) return;
+    socket.emit('upgradeMisionTrack', { token }, (res: any) => {
       if (res?.ok && res.user) onUpdateUser(res.user);
     });
   };
@@ -166,6 +175,45 @@ const LevelsModal = ({ user, token, onClose, onUpdateUser }: LevelsModalProps) =
               </button>
             </div>
           ))}
+
+          {/* Misiones — track infinito, máx 5 mejoras/día */}
+          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center gap-2 font-bold text-sm text-cyan-300">
+                <span className="text-lg">🎯</span>
+                Misiones
+              </span>
+              <span className="text-[10px] text-gray-500 font-mono">Nv. {misionLevel}</span>
+            </div>
+            {(() => {
+              const cur = misionTrackValuesFor(misionLevel);
+              const next = misionTrackValuesFor(misionLevel + 1);
+              const upgradesToday = user.misionUpgradesToday ?? 0;
+              const atDailyLimit = upgradesToday >= MISION_UPGRADES_PER_DAY;
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-300 mb-3">
+                    <span>💰 Diaria: ${fmtChips(cur.dailyChipsMultiplier.toString())}</span>
+                    <span>🎡 Tiradas: {cur.brocheSpinsCount}</span>
+                    <span>⭐ XP: {fmtChips(cur.dailyXpMultiplier.toString())}</span>
+                    <span>💎 Valor: ${fmtChips(cur.spinValue.toString())}</span>
+                  </div>
+                  <button
+                    onClick={upgradeMision}
+                    disabled={points <= 0 || atDailyLimit}
+                    className="w-full py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-30 disabled:active:scale-100 disabled:cursor-not-allowed"
+                    style={{
+                      background: points > 0 && !atDailyLimit ? '#22d3ee22' : 'transparent',
+                      border: `1px solid ${points > 0 && !atDailyLimit ? '#22d3ee' : '#374151'}`,
+                      color: points > 0 && !atDailyLimit ? '#67e8f9' : '#6b7280',
+                    }}
+                  >
+                    {atDailyLimit ? `Límite diario alcanzado (${MISION_UPGRADES_PER_DAY}/día)` : 'Mejorar (1 punto)'}
+                  </button>
+                </>
+              );
+            })()}
+          </div>
 
           {user.name === 'Jorge' && (
             <button

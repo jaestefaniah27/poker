@@ -457,6 +457,7 @@ export const toPublicUser = (row: UserRow): PublicUser => {
     ruletaLevel,
     triviaLevel,
     misionLevel,
+    misionUpgradesToday: (row.mision_upgrades_date === missionDateFor()) ? (row.mision_upgrades_today ?? 0) : 0,
     lastSeen: row.last_seen ?? undefined,
     paidIsrael: !!row.paid_israel,
     israelDebt: row.israel_debt ?? '0',

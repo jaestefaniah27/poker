@@ -17,6 +17,7 @@ import WordleModal from './WordleModal';
 import RouletteModal from './RouletteModal';
 import OnlinePlayersModal from './OnlinePlayersModal';
 import LevelsModal from './LevelsModal';
+import MissionsModal from './MissionsModal';
 import GiftModal from './GiftModal';
 import { ShopModal } from './ShopModal';
 import { DecoratedName } from './Decorations';
@@ -68,6 +69,7 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
   const [showLevels, setShowLevels] = useState(false);
   const [showRoulette, setShowRoulette] = useState(false);
   const [showShop, setShowShop] = useState(false);
+  const [showMissions, setShowMissions] = useState(false);
   const [hasNewShopItems, setHasNewShopItems] = useState(() => getStorage().getItem('seenArtilugio') !== 'true');
 
   useEffect(() => {
@@ -368,6 +370,9 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
       {showShop && (
         <ShopModal user={user as any} onClose={() => setShowShop(false)} onUpdateUser={onUpdateUser} onError={(msg) => alert(msg)} />
       )}
+      {showMissions && (
+        <MissionsModal user={user} token={token} onClose={() => setShowMissions(false)} onUpdateUser={onUpdateUser} />
+      )}
         {showProfile && (
           <ProfileModal
             user={user as any}
@@ -491,6 +496,11 @@ const Lobby = ({ user, token, rooms, onJoinRoom, onLogout, onUpdateUser, onlineC
               {hasNewShopItems && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-black animate-pulse" />
               )}
+            </button>
+            <button onClick={() => setShowMissions(true)} title="Misiones" className="relative text-cyan-400 hover:text-cyan-300 transition-colors drop-shadow-[0_0_5px_rgba(34,211,238,0.5)] active:scale-95">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </button>
           </div>
         </div>
