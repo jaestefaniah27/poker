@@ -1083,8 +1083,7 @@ export interface AchievementView {
   rewardXp: number;
 }
 
-// Devuelve, por cada cadena, solo el tier actual (primero no reclamado) y el siguiente,
-// tal como se diseñó ("solo tier actual + siguiente visible").
+// Devuelve, por cada cadena, solo el tier actual (primero no reclamado).
 export const getAchievementsView = async (userId: string): Promise<AchievementView[]> => {
   const claimedRows = await dbAll<{ achievement_id: string }>('SELECT achievement_id FROM user_achievement_claims WHERE user_id = ?', [userId]);
   const claimedSet = new Set(claimedRows.map(r => r.achievement_id));
@@ -1106,7 +1105,7 @@ export const getAchievementsView = async (userId: string): Promise<AchievementVi
     const firstUnclaimedIdx = sorted.findIndex(t => !claimedSet.has(t.id));
     const visible = firstUnclaimedIdx === -1
       ? [sorted[sorted.length - 1]] // todo reclamado: mostramos el último como referencia
-      : sorted.slice(firstUnclaimedIdx, firstUnclaimedIdx + 2); // actual + siguiente
+      : [sorted[firstUnclaimedIdx]]; // solo el tier actual
 
     for (const a of visible) {
       const rawStat = bigStatKeys.has(a.statKey) ? await getStatBig(userId, a.statKey) : String(stats[a.statKey] ?? 0);
