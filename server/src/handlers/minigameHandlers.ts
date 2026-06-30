@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import { io, authUser } from '../socketHelpers';
 import { claimDailyBonus, claimHourlyBonus, getUser, toPublicUser, applyBalanceDelta, recordJackpotSpin, claimFreeSpins, useFreeSpin as consumeFreeSpin, setJackpotUnlockLevel, spendLevelPoint, addXp, parsePools, getEffectivePools, addHaciendaTotal, deductIsraelPool, bumpStat, maxStat, maxStatBig, dbRun } from '../db';
-import { boostMultiplier, TrackBoosts, CooldownBoosts, ruletaCooldownMs, m, lt, gt, add, sub, toStr } from '../../../shared/types';
+import { boostMultiplier, TrackBoosts, CooldownBoosts, ruletaCooldownMs, m, lt, gt, add, sub, mul, toStr } from '../../../shared/types';
 import { spinJackpot, getJackpotState, persistJackpotState } from '../jackpotEngine';
 import { rouletteEngine } from '../rouletteEngine';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS, ruletaOptionsFor, ruletaSpinsFor, ruletaBoostedOptions, LevelTrack, XP_PER_JACKPOT_SPIN, XP_PER_JACKPOT_WIN, XP_PER_MINES_PLAY, XP_PER_MINES_WIN } from '../../../shared/types';
@@ -782,14 +782,14 @@ export const minigameHandlers = (socket: Socket) => {
     }
 
     const pools = getEffectivePools(dbUser);
-    let combinedValue = 0;
+    let combinedValueBig = m(0);
     let consumedLegacy = false;
 
     for (const tier of selectedTiers) {
       const tierKey = String(tier);
       const count = pools[tierKey] || 0;
       if (count === 0) { callback({ error: `No tienes tiradas de ${tier}` }); return; }
-      combinedValue += Number(tier) * count;
+      combinedValueBig = add(combinedValueBig, mul(tierKey, count));
       // Si era tirada legacy (no estaba en free_spins_pools JSON), marcar para limpiar legacy
       const rawPools = parsePools(dbUser.free_spins_pools ?? null);
       if (!rawPools[tierKey] && (dbUser.free_spins_left ?? 0) > 0 && String(dbUser.free_spin_value) === tierKey) {
@@ -798,10 +798,11 @@ export const minigameHandlers = (socket: Socket) => {
       delete pools[tierKey];
     }
 
-    if (combinedValue <= 0) { callback({ error: 'Valor combinado inválido' }); return; }
+    if (!gt(combinedValueBig, 0)) { callback({ error: 'Valor combinado inválido' }); return; }
+    const combinedValueStr = toStr(combinedValueBig);
 
     // Añadir la tirada conjurada al pool (acumular si ya existe)
-    pools[String(combinedValue)] = (pools[String(combinedValue)] || 0) + 1;
+    pools[combinedValueStr] = (pools[combinedValueStr] || 0) + 1;
 
     if (consumedLegacy) {
       await dbRun('UPDATE users SET free_spins_pools = ?, free_spins_left = 0, free_spin_value = 0 WHERE id = ?', [JSON.stringify(pools), dbUser.id]);
@@ -810,6 +811,6 @@ export const minigameHandlers = (socket: Socket) => {
     }
 
     const updatedUser = await getUser(dbUser.id);
-    callback({ ok: true, combinedValue, newPools: pools, user: updatedUser ? toPublicUser(updatedUser) : undefined });
+    callback({ ok: true, combinedValue: combinedValueStr, newPools: pools, user: updatedUser ? toPublicUser(updatedUser) : undefined });
   });
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips, m } from '../utils';
+import { socket, fmtChips, m, mul, add } from '../utils';
 import { JACKPOT_TIERS } from '../../../shared/types';
 
 interface SpinResult {
@@ -44,8 +44,8 @@ export default function ArtilugioModal({ pools, token, unlockLevel, balance, onC
     .sort(([a], [b]) => Number(a) - Number(b));
 
   const conjuredValue = [...selectedTiers].reduce((acc, tier) => {
-    return acc + Number(tier) * (localPools[tier] || 0);
-  }, 0);
+    return add(acc, mul(tier, localPools[tier] || 0));
+  }, m(0)).toString();
 
   const isConjured = (tierKey: string) => !JACKPOT_TIERS.includes(Number(tierKey));
   const unlockedTiers = JACKPOT_TIERS.slice(0, Math.max(unlockLevel, 0));
@@ -355,10 +355,10 @@ export default function ArtilugioModal({ pools, token, unlockLevel, balance, onC
                               <div className={`w-4 h-4 rounded border-2 flex items-center justify-center text-xs ${selected ? 'border-purple-400 bg-purple-500' : 'border-gray-600'}`}>
                                 {selected && '✓'}
                               </div>
-                              <span className="font-bold">{count} × {fmtChips(Number(tier))}</span>
+                              <span className="font-bold">{count} × {fmtChips(tier)}</span>
                               {isConjured(tier) && <span className="text-[10px] text-purple-400">conjurada</span>}
                             </div>
-                            <span className="text-xs text-gray-500">{fmtChips(Number(tier) * count)}</span>
+                            <span className="text-xs text-gray-500">{fmtChips(mul(tier, count).toString())}</span>
                           </button>
                         );
                       })}
