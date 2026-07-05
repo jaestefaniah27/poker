@@ -197,14 +197,13 @@ const BlackjackTable = ({ room, user, onLeave }: Props) => {
   const maxBet = myChips;
   // Patrimonio en mesa = saldo fuera de mesa + fichas (las dos bolsas son disjuntas en BJ).
   const myNetWorth = add(user.balance, myChips);
-  // Multiplicador automático de fichas, fijado por el patrimonio al entrar a la mesa.
-  // Usa patrimonio (no solo saldo) porque el buy-in mueve dinero a fichas y dejaría el saldo bajo el umbral.
+  // Multiplicador automático de fichas, fijado por lo comprado en la mesa (no por el saldo fuera de mesa).
   const [chipMult, setChipMult] = useState(1);
   const chipMultLockedRef = useRef(false);
   useEffect(() => {
     if (chipMultLockedRef.current || !myPlayer) return;
     chipMultLockedRef.current = true;
-    setChipMult(chipMultiplierFor(add(user.balance, myPlayer.chips || 0).toNumber()));
+    setChipMult(chipMultiplierFor(toNum(myPlayer.chips || 0)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myPlayer]);
   const myBet = toNum(myPlayer?.bet || 0);
