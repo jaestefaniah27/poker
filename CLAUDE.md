@@ -140,6 +140,15 @@ cd server && npx tsc --noEmit
 cd client && npm run lint
 ```
 
+## Verificación — NUNCA usar screenshots
+
+El tool `screenshot` (Playwright + captura de imagen) consume muchísimos tokens y NO debe usarse, bajo ningún concepto, para verificar cambios. En su lugar:
+
+1. `tsc --noEmit` en server y client (tipos).
+2. `deploy_staging` y comprobar consola/logs del servidor (`run_command: pm2 logs poker-staging --lines 50 --nostream`) en busca de errores.
+3. Suite E2E (`tests/e2e.mjs`) o tests de misiones cuando aplique.
+4. Si hace falta confirmación visual, pedírsela a Jorge (que verifica él mismo en `/staging/` desde el móvil) en vez de generar capturas.
+
 ## Optimización de tokens — OBLIGATORIO
 
 Este proyecto usa **caveman mode** activo por defecto (hook en settings). Reglas adicionales:
