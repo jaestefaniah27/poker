@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { socket, fmtChips, vibrate } from '../utils';
+import { socket, fmtChips, vibrate, lt } from '../utils';
 import { sfx } from '../sounds';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 import BettingCarousel from './BettingCarousel';
@@ -164,7 +164,7 @@ export default function MinesModal({ user, token, onClose, onUpdateUser }: Mines
                 unlockLevel={unlockLevel}
                 renderItem={(t, i) => (
                   <button onClick={() => setBetIndex(i)}
-                    disabled={balance < t || i >= unlockLevel}
+                    disabled={lt(balance, t) || i >= unlockLevel}
                     className={`w-full px-3 py-1.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-30 disabled:pointer-events-none ${clampedBetIndex === i ? 'bg-amber-500 text-black' : 'bg-white/8 text-gray-400 hover:bg-white/15'}`}>
                     {fmtChips(t)}
                   </button>
