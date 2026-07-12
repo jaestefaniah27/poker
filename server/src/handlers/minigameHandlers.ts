@@ -43,14 +43,14 @@ const broadcastJackpotViewers = () => {
 // la animación) y se rechaza un nuevo spin mientras haya un pendiente sin
 // cobrar (mata el farmeo en paralelo / acelerado).
 const JACKPOT_ANIM_MS = 800;
-interface PendingJackpot { readyAt: number; finalWinAmount: number; }
+interface PendingJackpot { readyAt: number; finalWinAmount: string; }
 const pendingJackpots = new Map<string, PendingJackpot>(); // userId -> pendiente
 
 const settlePendingJackpot = async (userId: string): Promise<{ balance: string; user: any } | null> => {
   const p = pendingJackpots.get(userId);
   if (!p) return null;
   pendingJackpots.delete(userId);
-  if (p.finalWinAmount > 0) await applyBalanceDelta(userId, p.finalWinAmount);
+  if (gt(p.finalWinAmount, 0)) await applyBalanceDelta(userId, p.finalWinAmount);
   const u = await getUser(userId);
   return { balance: u?.balance ?? '0', user: u ? toPublicUser(u) : undefined };
 };
@@ -179,18 +179,27 @@ export const minigameHandlers = (socket: Socket) => {
     }
 
     const pools = parsePools(dbUser.free_spins_pools ?? null);
-    const amount = Math.floor(Number(bet) || 0);
-    const doFreeSpin = Boolean(useFreeSpin) && amount > 0 && (pools[String(amount)] || 0) > 0;
+    // amountM/amountKey se derivan SIEMPRE con Decimal — nunca Number(bet).
+    // Las tiradas gratis del track de Misiones pueden superar 2^53 y Number()
+    // las redondea, así que la key ya no encaja con el pool: la tirada se ve
+    // "en blanco" en el cliente y girar no hace nada (bug reportado por Jorge).
+    const amountM = m(bet);
+    const amountKey = toStr(amountM);
+    const doFreeSpin = Boolean(useFreeSpin) && gt(amountM, 0) && (pools[amountKey] || 0) > 0;
     const unlockLevel = dbUser.jackpot_unlock_level ?? 0;
 
     if (!doFreeSpin && unlockLevel === 0) {
       callback({ error: 'Jackpot bloqueado. Desbloquéalo primero.' });
       return;
     }
-    if (amount <= 0) { callback({ error: 'Apuesta inválida' }); return; }
+    if (!gt(amountM, 0)) { callback({ error: 'Apuesta inválida' }); return; }
 
-    // Validate bet tier is within unlock level (paid spins only)
+    // Las apuestas pagadas siempre son un tier estándar de JACKPOT_TIERS
+    // (números pequeños, seguros como number). Solo las tiradas gratis
+    // pueden ser gigantes, y esas nunca pasan por aquí.
+    let amount = 0;
     if (!doFreeSpin) {
+      amount = amountM.toNumber();
       const tierIndex = JACKPOT_TIERS.indexOf(amount);
       if (tierIndex === -1 || tierIndex >= unlockLevel) {
         callback({ error: 'Nivel de apuesta no desbloqueado' });
@@ -210,11 +219,16 @@ export const minigameHandlers = (socket: Socket) => {
     // A los gafados les metemos una mala suerte "sutil": 60% de las veces que iban a ganar, forzamos a perder.
     const forceLoss = (isBot && Math.random() < 0.90) || (isCursed && Math.random() < 0.60);
 
-    let { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amount, forceLoss);
+    // spinJackpot solo usa `amount` para el pity timer (independiente del bet)
+    // y para el texto cosmético del ticker "recentWins" — un toNumber() con
+    // imprecisión ahí es inofensivo. El dinero real se calcula abajo con Decimal.
+    let { symbols, multiplier, state } = spinJackpot(dbUser.name, doFreeSpin, amountM.toNumber(), forceLoss);
 
-    let winAmount = Math.floor(amount * multiplier);
-    let finalWinAmount = winAmount;
-    let taxAmount = 0;
+    // Decimal de aquí en adelante: winAmount puede ser un múltiplo de una
+    // tirada gratis gigante (>2^53) y esto SÍ afecta al saldo real.
+    let winAmountM = mul(amountM, multiplier);
+    let finalWinAmountM = winAmountM;
+    let taxAmountM = m(0);
     let eventType: 'none' | 'tax' | 'fraud' = 'none';
 
     if (multiplier >= 10) {
@@ -231,47 +245,53 @@ export const minigameHandlers = (socket: Socket) => {
       const r = Math.random();
       if (r < probFraud) {
         eventType = 'fraud';
-        taxAmount = winAmount;
-        finalWinAmount = 0;
+        taxAmountM = winAmountM;
+        finalWinAmountM = m(0);
       } else if (r < probFraud + probTax) {
         eventType = 'tax';
-        taxAmount = Math.floor(winAmount * 0.1);
-        finalWinAmount = winAmount - taxAmount;
+        taxAmountM = mul(winAmountM, '0.1');
+        finalWinAmountM = sub(winAmountM, taxAmountM);
       }
     }
 
+    // deductIsraelPool sigue en number: el pool de Israel es siempre pequeño
+    // (se nutre de impuestos), así que el redondeo de un finalWinAmount
+    // gigante aquí no afecta a qué se acredita realmente (eso usa finalWinAmountM).
     let israelBonus = 0;
-    if (finalWinAmount > 0 && gt(dbUser.israel_pool, 0)) {
-      israelBonus = await deductIsraelPool(dbUser.id, finalWinAmount);
-      finalWinAmount += israelBonus;
+    if (gt(finalWinAmountM, 0) && gt(dbUser.israel_pool, 0)) {
+      israelBonus = await deductIsraelPool(dbUser.id, finalWinAmountM.toNumber());
+      finalWinAmountM = add(finalWinAmountM, israelBonus);
     }
 
-    // Solo descontamos la apuesta ahora; el premio (finalWinAmount) se acredita
+    // Solo descontamos la apuesta ahora; el premio (finalWinAmountM) se acredita
     // al cobrar (claimJackpot) cuando termina la animación en el cliente.
-    let delta = 0;
+    let deltaM = m(0);
     if (doFreeSpin) {
-      await consumeFreeSpin(dbUser.id, amount);
+      await consumeFreeSpin(dbUser.id, amountKey);
     } else {
-      delta = -amount;
+      deltaM = amountM.negated();
     }
 
-    if (taxAmount > 0) {
-      const newTotal = await addHaciendaTotal(taxAmount);
+    if (gt(taxAmountM, 0)) {
+      const newTotal = await addHaciendaTotal(taxAmountM);
       if (io) io.emit('haciendaUpdated', { total: newTotal });
     }
 
-    const newBalance = await applyBalanceDelta(dbUser.id, delta);
+    const newBalance = await applyBalanceDelta(dbUser.id, deltaM);
+    const finalWinAmount = toStr(finalWinAmountM);
+    const winAmount = toStr(winAmountM);
+    const taxAmount = toStr(taxAmountM);
     pendingJackpots.set(dbUser.id, { readyAt: Date.now() + JACKPOT_ANIM_MS, finalWinAmount });
-    await recordJackpotSpin(dbUser.id, amount, symbols, multiplier, winAmount);
+    await recordJackpotSpin(dbUser.id, amountM.toNumber(), symbols, multiplier, winAmountM.toNumber());
 
     bumpStat(dbUser.id, 'jackpot_spins');
     if (!doFreeSpin) bumpStat(dbUser.id, 'jackpot_total_bet', amount);
-    if (finalWinAmount > 0) {
-      bumpStat(dbUser.id, 'jackpot_total_won', finalWinAmount);
-      maxStatBig(dbUser.id, 'jackpot_biggest_win', String(finalWinAmount));
+    if (gt(finalWinAmountM, 0)) {
+      bumpStat(dbUser.id, 'jackpot_total_won', finalWinAmountM.toNumber());
+      maxStatBig(dbUser.id, 'jackpot_biggest_win', finalWinAmount);
     }
     maxStat(dbUser.id, 'jackpot_best_mult_x100', Math.round(multiplier * 100));
-    if (taxAmount > 0) bumpStat(dbUser.id, 'jackpot_tax_paid', taxAmount);
+    if (gt(taxAmountM, 0)) bumpStat(dbUser.id, 'jackpot_tax_paid', taxAmountM.toNumber());
     if (eventType === 'fraud') bumpStat(dbUser.id, 'jackpot_frauds');
 
     let addedXp = 0;

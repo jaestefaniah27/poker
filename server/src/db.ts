@@ -1221,10 +1221,12 @@ export const claimFreeSpins = async (id: string, value: number, amount: number =
   );
 };
 
-export const useFreeSpin = async (id: string, value?: number): Promise<void> => {
+export const useFreeSpin = async (id: string, value?: number | string | Money): Promise<void> => {
   const user = await getUser(id);
   const pools = parsePools(user?.free_spins_pools ?? null);
-  const key = String(value ?? user?.free_spin_value ?? 0);
+  // toStr (no String()) — value puede ser una tirada gigante del track de
+  // Misiones (>2^53) y String(Number) redondearía, rompiendo la key del pool.
+  const key = value != null ? toStr(value as any) : String(user?.free_spin_value ?? 0);
   if (pools[key] > 0) {
     pools[key]--;
     if (pools[key] === 0) delete pools[key];

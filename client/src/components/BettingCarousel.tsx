@@ -3,8 +3,10 @@ import React from 'react';
 interface Props {
   tiers: number[];
   unlockLevel: number;
-  renderItem: (value: number, index: number) => React.ReactNode;
-  extraTiers?: number[]; // siempre visibles, sin check de unlock (ej: tiradas conjuradas)
+  // value siempre como string: los extraTiers (tiradas gratis/conjuradas) pueden
+  // exceder 2^53 y perder precisión si se manejan como number.
+  renderItem: (value: string, index: number) => React.ReactNode;
+  extraTiers?: string[]; // siempre visibles, sin check de unlock (ej: tiradas conjuradas)
 }
 
 export default function BettingCarousel({ tiers, unlockLevel, renderItem, extraTiers = [] }: Props) {
@@ -13,7 +15,7 @@ export default function BettingCarousel({ tiers, unlockLevel, renderItem, extraT
 
   // Fila superior: tiers estándar asc + extras al final
   const topRow = [
-    ...availableTiers.map((t, i) => ({ value: t, originalIndex: i })),
+    ...availableTiers.map((t, i) => ({ value: String(t), originalIndex: i })),
     ...extraTiers.map(t => ({ value: t, originalIndex: -1 })),
   ];
   // Fila inferior: de mayor a menor
@@ -27,7 +29,7 @@ export default function BettingCarousel({ tiers, unlockLevel, renderItem, extraT
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {topRow.map((item) => (
-          <div key={item.originalIndex} className="shrink-0 snap-center">
+          <div key={`${item.originalIndex}-${item.value}`} className="shrink-0 snap-center">
             {renderItem(item.value, item.originalIndex)}
           </div>
         ))}
@@ -39,7 +41,7 @@ export default function BettingCarousel({ tiers, unlockLevel, renderItem, extraT
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {bottomRow.map((item) => (
-          <div key={item.originalIndex} className="shrink-0 snap-center">
+          <div key={`${item.originalIndex}-${item.value}`} className="shrink-0 snap-center">
             {renderItem(item.value, item.originalIndex)}
           </div>
         ))}

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { socket, fmtChips, vibrate } from '../utils';
+import { socket, fmtChips, vibrate, lt } from '../utils';
 import { sfx } from '../sounds';
 import { JACKPOT_TIERS, JACKPOT_UNLOCK_COSTS } from '../../../shared/types';
 import SlotIcon from './SlotIcon';
@@ -32,8 +32,9 @@ interface Props {
 export default function JackpotModal({ user, token, onClose, onUpdateUser }: Props) {
   const [balance, setBalance] = useState(user.balance);
   const [betIndex, setBetIndex] = useState(0);
-  // null = paying; number = using free spin of this value
-  const [freeSpinSelected, setFreeSpinSelected] = useState<number | null>(null);
+  // null = paying; string = usando tirada gratis de ese valor (string: puede
+  // exceder 2^53, p.ej. tiradas grandes del track de Misiones — NUNCA Number()).
+  const [freeSpinSelected, setFreeSpinSelected] = useState<string | null>(null);
   const [reels, setReels] = useState<{ symbol: string; tick: number }[]>([
     { symbol: 'spin', tick: 0 },
     { symbol: 'spin', tick: 0 },
@@ -65,14 +66,23 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   const clampedBetIndex = Math.min(betIndex, maxBetIndex);
   const bet = JACKPOT_TIERS[clampedBetIndex];
 
-  // Tiradas conjuradas: valores de pools que no son tiers estándar
+  // Tiradas conjuradas/de misiones: valores de pools que no son tiers estándar.
+  // Se mantienen como STRING (no Number) — pueden superar 2^53 y perder
+  // precisión, que es justo el bug que rompía estos botones (blanco en vez
+  // de rosa, y girar no hacía nada porque la key ya no encajaba con el pool).
+  const standardTierStrs = new Set(JACKPOT_TIERS.map(String));
   const conjuredTiers = Object.entries(pools)
-    .filter(([k, count]) => count > 0 && !JACKPOT_TIERS.includes(Number(k)))
-    .sort(([a], [b]) => Number(a) - Number(b));
+    .filter(([k, count]) => count > 0 && !standardTierStrs.has(k))
+    .sort(([a], [b]) => {
+      // Orden por longitud y luego lexicográfico: seguro para enteros positivos
+      // de cualquier tamaño sin pasar por Number.
+      if (a.length !== b.length) return a.length - b.length;
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
 
   // Reset free spin selection if that pool runs out
   useEffect(() => {
-    if (freeSpinSelected !== null && !(pools[String(freeSpinSelected)] > 0)) {
+    if (freeSpinSelected !== null && !(pools[freeSpinSelected] > 0)) {
       setFreeSpinSelected(null);
     }
   }, [pools, freeSpinSelected]);
@@ -103,6 +113,8 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
     );
     intervalsRef.current = intervals;
 
+    // spinBet se manda como string cuando es tirada gratis (puede ser un
+    // valor gigante) para que el servidor no tenga que pasar por Number().
     const spinBet = freeSpinSelected ?? bet;
     socket.emit('playJackpot', { token, bet: spinBet, useFreeSpin: freeSpinSelected !== null }, (res: any) => {
       if (res?.error) {
@@ -164,8 +176,8 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
   const isWin = result && result.multiplier > 0;
   const isBig = result && result.multiplier >= 10;
   const spinDisabled = spinning || (freeSpinSelected !== null
-    ? !(pools[String(freeSpinSelected)] > 0)
-    : (isLocked || balance < bet));
+    ? !(pools[freeSpinSelected] > 0)
+    : (isLocked || lt(balance, bet)));
 
   return (
     <>
@@ -287,14 +299,14 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
               <BettingCarousel
                 tiers={JACKPOT_TIERS}
                 unlockLevel={unlockLevel}
-                extraTiers={conjuredTiers.map(([k]) => Number(k))}
+                extraTiers={conjuredTiers.map(([k]) => k)}
                 renderItem={(t, i) => {
-                  const poolCount = pools[String(t)] || 0;
+                  const poolCount = pools[t] || 0;
                   const isFreeSpinTier = poolCount > 0;
                   const isSelected = isFreeSpinTier
                     ? freeSpinSelected === t
                     : (freeSpinSelected === null && clampedBetIndex === i);
-                  const isDisabled = spinning || (i >= unlockLevel && !isFreeSpinTier) || (!isFreeSpinTier && balance < t);
+                  const isDisabled = spinning || (i >= unlockLevel && !isFreeSpinTier) || (!isFreeSpinTier && lt(balance, t));
                   return (
                     <button
                       onClick={() => {
@@ -328,7 +340,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
                     <p className="text-[10px] text-gray-400 uppercase tracking-widest">Nivel {unlockLevel + 1}</p>
                     <p className="text-sm font-bold text-gray-200">{fmtChips(JACKPOT_TIERS[unlockLevel])}</p>
                   </div>
-                  <button onClick={handleUnlock} disabled={unlocking || spinning || balance < JACKPOT_UNLOCK_COSTS[unlockLevel]}
+                  <button onClick={handleUnlock} disabled={unlocking || spinning || lt(balance, JACKPOT_UNLOCK_COSTS[unlockLevel])}
                     className="px-4 py-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/50 rounded-lg text-xs font-bold active:scale-95 transition-all disabled:opacity-30">
                     {unlocking ? '...' : fmtChips(JACKPOT_UNLOCK_COSTS[unlockLevel])}
                   </button>
@@ -376,7 +388,7 @@ export default function JackpotModal({ user, token, onClose, onUpdateUser }: Pro
             {spinning
               ? 'Girando…'
               : freeSpinSelected !== null
-                ? `GIRAR GRATIS — quedan ${pools[String(freeSpinSelected)] ?? 0}`
+                ? `GIRAR GRATIS — quedan ${pools[freeSpinSelected] ?? 0}`
                 : `GIRAR — ${fmtChips(bet)}`}
           </button>
         )}
