@@ -26,7 +26,7 @@ export const chipMultiplierFor = (balance: number): number => {
 // nº de escalones de 1000 que representa el multiplicador (1->0, 1000->1, 1e6->2...).
 const multSteps = (mult: number): number => Math.round(Math.log(mult) / Math.log(1000));
 
-const SUFFIXES = ['', 'k', 'M', 'B', 'T', 'Q', 'Qi', 'Sx', 'Sp'];
+const SUFFIXES = ['', 'k', 'M', 'B', 'T', 'Q', 'Qi', 'Sx', 'Sp', 'Oc', 'No'];
 const shiftSuffix = (label: string, steps: number): string => {
   const m = label.match(/^([\d.]+)([a-zA-Z]?)$/);
   if (!m) return label;
@@ -229,10 +229,10 @@ const KeypadModal = ({ initialValue, maxBet, mult = 1, onSave, onClose }: { init
   const [scale, setScale] = useState<number>(minScale); // Default M (o B/T... con multiplicador)
 
   useEffect(() => {
-    if (initialValue >= 1_000_000_000_000_000) { setScale(1_000_000_000_000_000); setNumStr(Math.floor(initialValue / 1_000_000_000_000_000).toString()); }
-    else if (initialValue >= 1_000_000_000_000) { setScale(1_000_000_000_000); setNumStr(Math.floor(initialValue / 1_000_000_000_000).toString()); }
-    else if (initialValue >= 1_000_000_000) { setScale(1_000_000_000); setNumStr(Math.floor(initialValue / 1_000_000_000).toString()); }
-    else { setScale(1_000_000); setNumStr(Math.floor(initialValue / 1_000_000).toString()); }
+    const tiers = [1e30, 1e27, 1e24, 1e21, 1e18, 1_000_000_000_000_000, 1_000_000_000_000, 1_000_000_000];
+    const t = tiers.find(tier => initialValue >= tier) ?? 1_000_000;
+    setScale(t);
+    setNumStr(Math.floor(initialValue / t).toString());
   }, [initialValue]);
 
   const handleKey = (k: string) => {
@@ -254,7 +254,7 @@ const KeypadModal = ({ initialValue, maxBet, mult = 1, onSave, onClose }: { init
     onSave(finalNum);
   };
 
-  const scaleLabel = scale === 1e24 ? 'Sp' : scale === 1e21 ? 'Sx' : scale === 1e18 ? 'Qi' : scale === 1_000_000_000_000_000 ? 'Q' : scale === 1_000_000_000_000 ? 'T' : scale === 1_000_000_000 ? 'B' : 'M';
+  const scaleLabel = scale === 1e30 ? 'No' : scale === 1e27 ? 'Oc' : scale === 1e24 ? 'Sp' : scale === 1e21 ? 'Sx' : scale === 1e18 ? 'Qi' : scale === 1_000_000_000_000_000 ? 'Q' : scale === 1_000_000_000_000 ? 'T' : scale === 1_000_000_000 ? 'B' : 'M';
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -279,7 +279,7 @@ const KeypadModal = ({ initialValue, maxBet, mult = 1, onSave, onClose }: { init
         </div>
 
         <div className="grid grid-cols-4 gap-2">
-          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Q', v:1_000_000_000_000_000}, {l:'Qi', v:1e18}, {l:'Sx', v:1e21}, {l:'Sp', v:1e24}].filter(s => s.v >= minScale).map(s => (
+          {[{l:'M', v:1_000_000}, {l:'B', v:1_000_000_000}, {l:'T', v:1_000_000_000_000}, {l:'Q', v:1_000_000_000_000_000}, {l:'Qi', v:1e18}, {l:'Sx', v:1e21}, {l:'Sp', v:1e24}, {l:'Oc', v:1e27}, {l:'No', v:1e30}].filter(s => s.v >= minScale).map(s => (
             <button 
               key={s.l} 
               onClick={() => setScale(s.v)}
